@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101b21">
+  <title>Apron — Airport Operations</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="renderer.js"></script>
+  <script defer src="airport.js"></script>
+  <script defer src="game.js"></script>
+</head>
+<body>
+  <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="plane" viewBox="0 0 24 24"><path d="M17 21v-2l-5-3V9l9 5v-2l-9-7V3a1 1 0 0 0-2 0v2l-8 7v2l8-5v7l-5 3v2l6-2z"/></symbol>
+    <symbol id="users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.9M15 3.1a4 4 0 0 1 0 7.8"/><circle cx="9" cy="7" r="4"/></symbol>
+    <symbol id="wallet" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M21 10h-5a2 2 0 0 0 0 4h5m-5-2h.01"/></symbol>
+    <symbol id="heart" viewBox="0 0 24 24"><path d="M20.8 5.8a5.2 5.2 0 0 0-7.4 0L12 7.2l-1.4-1.4a5.2 5.2 0 0 0-7.4 7.4l1.4 1.4L12 22l7.4-7.4 1.4-1.4a5.2 5.2 0 0 0 0-7.4Z"/></symbol>
+    <symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="focus" viewBox="0 0 24 24"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/><circle cx="12" cy="12" r="2"/></symbol>
+    <symbol id="pause" viewBox="0 0 24 24"><path d="M9 5v14m6-14v14" stroke-width="3"/></symbol>
+    <symbol id="play" viewBox="0 0 24 24"><path d="m9 5 11 7-11 7z" fill="currentColor"/></symbol>
+    <symbol id="tower" viewBox="0 0 24 24"><path d="M9 22h6m-3-1v-8M7 7h10l-2 6H9zm-2 0h14m-7 0V3m-3 1h6"/></symbol>
+    <symbol id="target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/></symbol>
+    <symbol id="terminal" viewBox="0 0 24 24"><path d="M4 21V8l8-5 8 5v13M2 21h20M8 21v-6h8v6M8 10h.01m4 0h.01m4 0h.01"/></symbol>
+    <symbol id="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></symbol>
+  </svg>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark"><svg class="icon"><use href="#plane"/></svg></div>
+      <div><div class="wordmark">APRON<span>.</span></div><div class="brand-caption">Airport operations</div></div>
+    </div>
+    <div class="airport-id"><strong>Northpoint Regional</strong><span><b>NPT</b> Terminal 1</span></div>
+    <div class="metrics" aria-label="Airport metrics">
+      <div class="metric"><svg class="icon"><use href="#wallet"/></svg><div><span>Treasury</span><strong id="cash">$124,500</strong></div></div>
+      <div class="metric"><svg class="icon"><use href="#users"/></svg><div><span>In terminal</span><strong id="passengers">216</strong></div></div>
+      <div class="metric"><svg class="icon"><use href="#heart"/></svg><div><span>Satisfaction</span><strong id="satisfaction">84%</strong></div></div>
+    </div>
+    <div class="weather"><svg class="icon"><use href="#sun"/></svg><span>19°C</span></div>
+  </header>
+  <main class="game">
+    <section id="map" class="map" aria-label="Interactive isometric view of Northpoint Airport">
+      <canvas id="scene" aria-label="3D airport map"></canvas>
+      <div class="map-heading"><span>Northpoint Regional</span><strong>Airport view</strong><small><i></i> TERMINAL 1 · NPT</small></div>
+      <div id="map-labels" class="map-labels"></div>
+      <div class="map-controls">
+        <div class="zoom-group">
+          <button id="zoom-in" title="Zoom in" aria-label="Zoom in"><svg class="icon"><use href="#plus"/></svg></button>
+          <button id="zoom-out" title="Zoom out" aria-label="Zoom out"><svg class="icon"><use href="#minus"/></svg></button>
+          <button id="reset-view" title="Fit airport in view" aria-label="Fit airport in view"><svg class="icon"><use href="#focus"/></svg></button>
+        </div>
+        <div class="map-hint">Drag to pan <b>·</b> Scroll to zoom</div>
+      </div>
+      <div id="map-error" class="map-error" hidden>The airport view needs WebGL. Open the game in a browser with hardware acceleration enabled.</div>
+    </section>
+    <aside class="operations" aria-label="Airport operations">
+      <div class="panel-head"><div class="panel-icon"><svg class="icon"><use href="#tower"/></svg></div><div><p>Control tower</p><h1>Operations</h1></div></div>
+      <nav class="tabs" aria-label="Operations views">
+        <button type="button" id="flights-tab" aria-pressed="true"><svg class="icon"><use href="#plane"/></svg>Flights</button>
+        <button type="button" id="terminal-tab" aria-pressed="false"><svg class="icon"><use href="#terminal"/></svg>Terminal</button>
+      </nav>
+      <div class="panel-body">
+        <section id="flight-view" aria-labelledby="schedule-title">
+          <div class="section-head"><h2 id="schedule-title">Flight board</h2><span id="gate-count">2 / 3 gates in use</span></div>
+          <div id="flight-list" class="flight-list"></div>
+          <div id="flight-detail" class="flight-detail">
+            <div class="detail-head"><div><p id="detail-kicker"></p><h3 id="detail-title"></h3></div><svg class="icon"><use href="#plane"/></svg></div>
+            <div id="detail-content"></div>
+            <button type="button" id="flight-action" class="primary"></button>
+          </div>
+        </section>
+        <section id="terminal-view" aria-labelledby="terminal-title" hidden>
+          <div class="section-head"><h2 id="terminal-title">Passenger flow</h2></div>
+          <div id="terminal-stats"></div>
+          <button type="button" id="upgrade" class="primary">Open a lane <span>$12,500</span></button>
+        </section>
+        <div class="objective">
+          <svg class="icon"><use href="#target"/></svg>
+          <div><p>Shift objective</p><strong id="objective-title">Dispatch 2 aircraft</strong><div class="objective-progress"><div id="goal-bar"></div></div></div>
+          <span id="goal-count">0 / 2</span>
+        </div>
+      </div>
+    </aside>
+  </main>
+  <footer class="bottom-bar">
+    <div class="clock"><span class="clock-day">DAY 01</span><time id="clock">08:42</time><span id="run-label" class="run-label">Running</span></div>
+    <div class="time-controls" aria-label="Simulation speed">
+      <button type="button" id="pause-toggle" aria-label="Pause simulation" title="Pause or resume (Space)"><svg class="icon"><use id="pause-icon" href="#pause"/></svg></button>
+      <button type="button" data-speed="1" aria-pressed="true">1×</button>
+      <button type="button" data-speed="2" aria-pressed="false">2×</button>
+      <button type="button" data-speed="4" aria-pressed="false">4×</button>
+    </div>
+    <div class="event"><svg class="icon"><use href="#info"/></svg><span id="event" role="status">Boarding underway at A01.</span></div>
+  </footer>
+</body>
+</html>
