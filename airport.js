@@ -11,6 +11,8 @@ const airport = (() => {
   const {grass, asphalt, apron, concrete, warm, frame, glass, pale, white, paint, ink, teal} = colors;
   const floor = .78;
   const road = -36.5;
+  const checkInQueue = {centers: [18, 25.2, 32.5], z: 24, width: 4.95, depth: 1.87};
+  const securityQueue = {centers: [-7.2, -.7, 5.8], z: 24.65, width: 4.3, depth: 1.65};
   let seed = 561;
   function random() {
     seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
@@ -219,7 +221,7 @@ const airport = (() => {
     planter(mesh, -15.8, floor, 26.1, 1.3);
     mesh.rect(-.8, floor + .022, 23.18, 22.4, 8.15, "#c1cec8");
     mesh.rect(-.8, floor + .025, 19.26, 22.3, .19, teal);
-    for (const x of [-7.2, -.7, 5.8]) {
+    for (const x of securityQueue.centers) {
       mesh.box(x, floor, 20.3, 3.05, 1.43, .24, "#e3e8dc");
       mesh.box(x - 1.2, floor, 21, .95, .56, 3.75, "#596d70");
       mesh.box(x - 1.2, floor + .56, 21, .76, .055, 3.7, "#364951");
@@ -227,14 +229,14 @@ const airport = (() => {
       mesh.box(x + .55, floor, 20.7, .14, 1.36, .34, teal);
       mesh.box(x + 1.56, floor, 20.7, .14, 1.36, .34, teal);
       mesh.box(x + 1.05, floor + 1.32, 20.7, 1.15, .17, .34, teal);
-      queue(mesh, x, 24.65, 4.3, 1.65);
+      queue(mesh, x, securityQueue.z, securityQueue.width, securityQueue.depth);
     }
 
     mesh.rect(24.75, floor + .024, 22.9, 21.7, 7.7, "#d4d9ce");
     mesh.box(24.75, floor, 19.45, 21.9, 1.25, .22, "#93b6ae");
     mesh.box(24.75, floor + 1.24, 19.45, 21.93, .15, .32, "#e8e8d2");
     for (let n = 0; n < 6; n++) desk(mesh, 15.8 + n * 3.43, 20.8, n % 2 ? "#87a5a2" : "#6c9b91");
-    for (const x of [18, 25.2, 32.5]) queue(mesh, x, 24, 4.95, 1.87);
+    for (const x of checkInQueue.centers) queue(mesh, x, checkInQueue.z, checkInQueue.width, checkInQueue.depth);
     for (const x of [-34.5, -12.8, 12.4, 35.6]) planter(mesh, x, floor, 26.95, 1.3);
 
     for (const x of [-8.3, -3.6, 3.6, 8.3]) {
@@ -399,6 +401,55 @@ const airport = (() => {
     return mesh;
   }
 
+  function passengerActors(outfits, occupancy, now, lanes, walkTime) {
+    const actors = [];
+    function place({person, flight}, x, z, angle) {
+      const style = person.index * 5 + flight.airline * 3;
+      const offset = ((style % 11) - 5) * .013;
+      actors.push({mesh: outfits[style % outfits.length], x: x + offset, y: floor,
+        z: z - offset, angle, castShadow: false});
+    }
+
+    function placeQueue(people, queueLayout, activeLanes) {
+      const columns = 10;
+      const lanesFilled = Array(activeLanes).fill(0);
+      people.forEach(entry => {
+        const lane = entry.person.index % activeLanes;
+        const slot = lanesFilled[lane]++;
+        const row = Math.floor(slot / columns);
+        const column = row % 2 ? columns - 1 - slot % columns : slot % columns;
+        const x = queueLayout.centers[lane] + (column / (columns - 1) - .5) * (queueLayout.width - .44);
+        const z = queueLayout.z - queueLayout.depth / 4 + row * queueLayout.depth / 2;
+        place(entry, x, z, Math.PI);
+      });
+    }
+    placeQueue(occupancy.checkIn, checkInQueue, checkInQueue.centers.length);
+    placeQueue(occupancy.security, securityQueue, lanes);
+
+    for (const entry of occupancy.concourse) {
+      const {person, flight} = entry;
+      const progress = (now - person.walkStarted) / walkTime;
+      const start = -.7 + (person.index % 5 - 2) * .8;
+      const end = gates[flight.gate].x + (person.index % 9 - 4) * .65;
+      const x = start + (end - start) * progress;
+      const z = 18.65 - progress * (2.75 + person.index % 5 * .11);
+      place(entry, x, z, Math.atan2(end - start, -3));
+    }
+
+    const loungeRows = [9.28, 9.72, 10.79, 11.32, 11.86, 13.47, 14.05];
+    const loungeColumns = 18;
+    occupancy.gates.forEach((people, index) => {
+      people.forEach(entry => {
+        // Spread each manifest across the lounge without moving people when someone boards.
+        const slot = entry.person.index * 37 % (loungeColumns * loungeRows.length);
+        const x = gates[index].x + ((loungeColumns - 1) / 2 - slot % loungeColumns) * .82;
+        const z = loungeRows[Math.floor(slot / loungeColumns)];
+        place(entry, x, z, Math.PI);
+      });
+    });
+    return actors;
+  }
+
   function scene() {
     const fixed = [
       {mesh: ground(), castShadow: false},
@@ -422,14 +473,10 @@ const airport = (() => {
     }));
     const outfits = ["#b66e5e", "#4b807e", "#c9a354", "#ece1ce", "#556e89", "#81936c", "#906d81"]
       .map((tint, i) => traveler(tint, ["#e5b896", "#bb8462", "#d19d7c", "#99684f"][i % 4]));
-    const people = Array.from({length: 117}, (_, i) => ({
-      mesh: outfits[i % outfits.length], offset: random(), sway: random(), castShadow: false,
-      zone: i < 52 ? "hall" : i < 88 ? "gates" : i < 110 ? "queue" : "curb"
-    }));
     const highlight = new Mesh().path([[-10.7, 5.45], [-10.7, -11.3], [-8.8, -15],
       [8.8, -15], [10.7, -11.3], [10.7, 5.45]], .23, .05, "#b6e0b3");
-    return {fixed: [...fixed, ...fleet], traffic, people, highlight};
+    return {fixed: [...fixed, ...fleet], traffic, outfits, highlight};
   }
 
-  return {gates, aircraft, scene, floor, road};
+  return {gates, aircraft, scene, passengerActors, floor, road};
 })();

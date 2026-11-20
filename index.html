@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="styles.css">
   <script defer src="renderer.js"></script>
   <script defer src="airport.js"></script>
+  <script defer src="passengers.js"></script>
   <script defer src="game.js"></script>
 </head>
 <body>
@@ -35,7 +36,7 @@
     <div class="airport-id"><strong>Northpoint Regional</strong><span><b>NPT</b> Terminal 1</span></div>
     <div class="metrics" aria-label="Airport metrics">
       <div class="metric"><svg class="icon"><use href="#wallet"/></svg><div><span>Treasury</span><strong id="cash">$124,500</strong></div></div>
-      <div class="metric"><svg class="icon"><use href="#users"/></svg><div><span>In terminal</span><strong id="passengers">216</strong></div></div>
+      <div class="metric"><svg class="icon"><use href="#users"/></svg><div><span>In terminal</span><strong id="passengers">—</strong></div></div>
       <div class="metric"><svg class="icon"><use href="#heart"/></svg><div><span>Satisfaction</span><strong id="satisfaction">84%</strong></div></div>
     </div>
     <div class="weather"><svg class="icon"><use href="#sun"/></svg><span>19°C</span></div>
@@ -73,7 +74,18 @@
         </section>
         <section id="terminal-view" aria-labelledby="terminal-title" hidden>
           <div class="section-head"><h2 id="terminal-title">Passenger flow</h2></div>
-          <div id="terminal-stats"></div>
+          <div class="terminal-stat flow-stats">
+            <div class="detail-stat"><span>Check-in queue</span><b id="check-in-count"></b></div>
+            <div class="detail-stat"><span>Security queue</span><b id="security-count"></b></div>
+            <div class="detail-stat"><span>Concourse</span><b id="concourse-count"></b></div>
+          </div>
+          <div class="terminal-stat">
+            <h3>Gate lounges</h3>
+            <div id="lounge-counts" class="flow-stats"></div>
+          </div>
+          <div class="terminal-stat">
+            <div class="detail-stat"><span>Active security lanes</span><b id="lanes-count"></b></div>
+          </div>
           <button type="button" id="upgrade" class="primary">Open a lane <span>$12,500</span></button>
         </section>
         <div class="objective">
