@@ -101,6 +101,12 @@ button, h1, h2, h3, p { margin: 0; }
 .flight-name { display: grid; gap: 4px; min-width: 0; }
 .flight-name strong { font-size: .91rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flight-name small { font: .72rem var(--mono); color: var(--muted); }
+.flight-state { display: grid; justify-items: end; gap: 4px; }
+.flight-takeoff { font-size: .78rem; color: var(--takeoff-text, var(--muted)); white-space: nowrap; }
+.flight-takeoff time { font: 650 .88rem var(--mono); color: var(--takeoff-text, var(--light)); }
+[data-takeoff="due"] { --takeoff-text: var(--amber); --takeoff-background: #493c30; }
+[data-takeoff="late"] { --takeoff-text: #ffb1a9; --takeoff-background: #502d31; }
+.takeoff-alert { border-radius: 4px; padding: 4px 6px; font: 700 .73rem var(--mono); color: var(--takeoff-text); background: var(--takeoff-background); white-space: nowrap; }
 .flight-status { font: 600 .68rem var(--mono); border-radius: 4px; padding: 5px 6px; background: #2a3d44; color: #c9dbde; }
 .flight-status[data-stage="boarding"], .flight-status[data-stage="ready"] { color: var(--mint); background: #1f4840; }
 .flight-status[data-stage="reserved"] { color: var(--amber); background: #493c30; }
@@ -113,6 +119,8 @@ button, h1, h2, h3, p { margin: 0; }
 .detail-head h3 { font-size: 1.26rem; line-height: 1.2; letter-spacing: -.03em; margin-top: 4px; }
 .detail-boarding { padding: 6px 9px; border: 1px solid #67523c; border-radius: 6px; background: #302e27; }
 .detail-boarding time { font: 750 1.65rem/1 var(--mono); }
+.detail-takeoff { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 8px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--takeoff-text, var(--muted)); font-size: .82rem; }
+.detail-takeoff time { margin-left: 4px; font: 700 1.05rem var(--mono); color: var(--takeoff-text, var(--light)); }
 .detail-stat { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); font-size: .83rem; }
 .detail-stat b { color: var(--light); white-space: nowrap; font: 600 .81rem var(--mono); }
 .gate-picker { border: 0; padding: 0; margin: 12px 0 0; min-width: 0; }

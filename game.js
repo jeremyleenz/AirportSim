@@ -7,8 +7,11 @@
   const laneCost = 12500;
   const startMinutes = 8 * 60 + 42;
   const secondsPerMinute = 3.4;
+  const minutesFromBoardingToTakeoff = 30;
+  const takeoffWarningMinutes = 10;
   const pushbackEnd = .25;
   const runwayEntry = .62;
+  const liftoff = .90;
   const holdingPosition = {x: 44, z: taxiwayZ, angle: -Math.PI / 2};
   const planeIcon = '<svg class="icon" aria-hidden="true"><use href="#plane"/></svg>';
   const airlines = [
@@ -21,18 +24,21 @@
     ["Melbourne", 214, 96], ["Brisbane", 507, 90], ["Auckland", 318, 110],
     ["Hobart", 126, 86], ["Adelaide", 435, 102], ["Wellington", 201, 94]
   ];
-  function makeFlight(route, airline, stage, gate, initialPassengers, boardingAt = 0) {
+  function makeFlight(route, airline, stage, gate, initialPassengers, boardingMinute = null,
+    takeoffMinute = boardingMinute === null ? null : boardingMinute + minutesFromBoardingToTakeoff) {
     const [destination, number, passengers] = routes[route];
     const manifest = initialPassengers ? passengerFlow.manifest(passengers, initialPassengers, "checkIn") : [];
-    return {destination, id: airlines[airline].code + number, airline, passengers, stage, gate, manifest, boardingAt};
+    const boardingAt = (boardingMinute ?? 0) * secondsPerMinute;
+    const takeoffAt = takeoffMinute === null ? null : takeoffMinute * secondsPerMinute;
+    return {destination, id: airlines[airline].code + number, airline, passengers, stage, gate, manifest, boardingAt, takeoffAt};
   }
 
   const state = {
     cash: 124500, now: 0, speed: 1, paused: false, dispatched: 0, lanes: 2,
     nextArrival: 0, nextRoute: 3,
     flights: [
-      makeFlight(0, 0, "boarding", 0, {boarded: 68, gateQueue: 8, gate: 20}),
-      makeFlight(1, 1, "parked", 1, {gate: 19, cafe: 5, concourse: 12, security: 38}, 16 * secondsPerMinute),
+      makeFlight(0, 0, "boarding", 0, {boarded: 68, gateQueue: 8, gate: 20}, 0, 13),
+      makeFlight(1, 1, "parked", 1, {gate: 19, cafe: 5, concourse: 12, security: 38}, 16),
       makeFlight(2, 2, "holding", null)
     ],
     selected: "SA507", view: "flights", taxiIn: null, departure: null
@@ -193,6 +199,31 @@
     time.textContent = time.dateTime;
   }
 
+  function takeoffSchedule(flight) {
+    if (flight?.takeoffAt == null) return null;
+    if (state.departure?.flight === flight && movementProgress(state.departure) >= liftoff) return null;
+
+    const scheduledMinute = clockMinutes(flight.takeoffAt);
+    const remaining = scheduledMinute - clockMinutes(state.now);
+    const time = formatTime(scheduledMinute);
+    if (remaining < 0) return {time, urgency: "late", message: -remaining + " min late"};
+    if (remaining === 0) return {time, urgency: "due", message: "Due now"};
+    if (remaining <= takeoffWarningMinutes) return {time, urgency: "due", message: remaining + " min to go"};
+    return {time, urgency: "", message: ""};
+  }
+
+  function paintTakeoffTime(container, alert, flight, card) {
+    const schedule = takeoffSchedule(flight);
+    container.hidden = !schedule;
+    alert.hidden = !schedule?.message;
+    card.dataset.takeoff = schedule?.urgency || "";
+    if (!schedule) return;
+    const time = container.querySelector("time");
+    time.dateTime = schedule.time;
+    time.textContent = schedule.time;
+    alert.textContent = schedule.message;
+  }
+
   function paintFlights() {
     const active = new Set(state.flights.map(flight => flight.id));
     for (const [id, button] of flightElements) {
@@ -209,9 +240,12 @@
         button.className = "flight";
         button.style.setProperty("--livery", airlines[flight.airline].ui);
         button.innerHTML = '<span class="airline-mark">' + planeIcon + '</span>' +
-          '<span class="flight-name"><strong></strong><small></small></span>' +
+          '<span class="flight-name"><strong></strong><small></small>' +
+          '<span class="flight-takeoff" hidden>Takeoff <time></time></span></span>' +
+          '<span class="flight-state">' +
           '<span class="flight-status"></span>' +
-          '<span class="flight-boarding" hidden><span class="boarding-label"></span><time></time></span>';
+          '<span class="flight-boarding" hidden><span class="boarding-label"></span><time></time></span>' +
+          '<span class="takeoff-alert" hidden></span></span>';
         button.querySelector("strong").textContent = flight.destination;
         button.addEventListener("click", () => select(flight.id));
         $("#flight-list").append(button);
@@ -222,6 +256,7 @@
       const badge = button.querySelector(".flight-status");
       const boarding = button.querySelector(".flight-boarding");
       paintBoardingTime(boarding, flight);
+      paintTakeoffTime(button.querySelector(".flight-takeoff"), button.querySelector(".takeoff-alert"), flight, button);
       badge.hidden = !boarding.hidden;
       badge.dataset.stage = flight.stage;
       badge.textContent = flight.stage === "outbound" && departureOnRunway()
@@ -259,6 +294,8 @@
     const gate = selectedGate();
     const panel = $("#flight-detail");
     const action = $("#flight-action");
+    const takeoff = $("#detail-takeoff");
+    paintTakeoffTime(takeoff, takeoff.querySelector(".takeoff-alert"), flight, takeoff);
     paintBoardingTime($("#detail-boarding"), flight);
     paintGatePicker(flight, gate);
     panel.hidden = !flight && gate < 0;
@@ -383,7 +420,7 @@
       [.39, -39.7, taxiwayZ, -halfTurn], [.445, -45, taxiwayZ - 2.3, -2.3],
       [.545, -45, runwayZ + 3.8, Math.PI], [runwayEntry, -40.4, runwayZ, halfTurn],
       [.735, -17.4, runwayZ, halfTurn], [.82, 12, runwayZ, halfTurn],
-      [.90, 42, runwayZ, halfTurn], [1, 86, runwayZ, halfTurn, 16, .23]
+      [liftoff, 42, runwayZ, halfTurn], [1, 86, runwayZ, halfTurn, 16, .23]
     ];
   }
 
@@ -447,6 +484,7 @@
       occupancyDirty = true;
       flight.stage = "parked";
       flight.boardingAt = (Math.ceil(state.now / secondsPerMinute) + 28) * secondsPerMinute;
+      flight.takeoffAt = flight.boardingAt + minutesFromBoardingToTakeoff * secondsPerMinute;
       flight.manifest = passengerFlow.manifest(flight.passengers);
       announce(flight.id + " parked at " + gates[flight.gate].name + ".");
       state.nextArrival = state.now + 18;
