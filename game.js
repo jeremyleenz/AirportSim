@@ -18,6 +18,7 @@
   const takeoffWarningMinutes = 10;
   const taxiSpeed = 4;
   const pushbackSpeed = 2.5;
+  const taxiSeparation = 24;
   const holdingPosition = {x: 44, z: taxiwayZ, angle: -Math.PI / 2};
   const planeIcon = '<svg class="icon" aria-hidden="true"><use href="#plane"/></svg>';
   const airlines = [
@@ -61,7 +62,7 @@
   function createShift() {
     return {cash: startingCash, now: 0, speed: 1, paused: false, lanes: 2, missedPassengers: 0, delayMinutes: 0,
       flights: timetable.map(makeFlight), results: [], selected: "SA507", view: "flights",
-      taxiIn: null, taxiQueue: [], departure: null, nextDeparture: null};
+      movements: new Map(), taxiQueue: [], nextDeparture: null};
   }
 
   let state = createShift();
@@ -185,9 +186,12 @@
   }
 
   function flightAtGate(gate) {
-    const departure = state.departure;
-    const pushedBack = departure && movementElapsed(departure) >= departure.pushbackEnd ? departure.flight : null;
-    return state.flights.find(flight => flight.gate === gate && flight !== pushedBack);
+    return state.flights.find(flight => {
+      if (flight.gate !== gate) return false;
+      if (flight.stage !== "outbound") return true;
+      const movement = state.movements.get(flight);
+      return movementElapsed(movement) < movement.pushbackEnd;
+    });
   }
 
   function isArriving({stage}) {
@@ -199,7 +203,12 @@
   }
 
   function flightAtHoldingPoint(waiting = holdingFlights()) {
-    if (state.taxiIn && movementElapsed(state.taxiIn) < 4.5) return null;
+    if (!waiting.length) return null;
+    for (const movement of state.movements.values()) {
+      if (movement.flight.stage !== "inbound") continue;
+      const {x, z} = positionAlongPath(movement);
+      if (Math.hypot(x - holdingPosition.x, z - holdingPosition.z) < taxiSeparation) return null;
+    }
     return waiting.find(flight => flight.id === state.selected) || waiting[0];
   }
 
@@ -207,17 +216,9 @@
     return Math.min(duration, state.now - start);
   }
 
-  function departureOnRunway() {
-    const departure = state.departure;
-    return departure && movementElapsed(departure) >= departure.runwayEntry;
-  }
-
-  function taxiwayBusy() {
-    return Boolean(state.taxiIn || (state.departure && !departureOnRunway()));
-  }
-
-  function departureBlocked() {
-    return Boolean(state.departure || state.taxiIn);
+  function departureOnRunway(flight) {
+    const movement = state.movements.get(flight);
+    return movement && movementElapsed(movement) >= movement.runwayEntry;
   }
 
   function shiftComplete() {
@@ -284,8 +285,8 @@
 
   function takeoffSchedule(flight) {
     if (!flight) return null;
-    const departure = state.departure;
-    if (departure?.flight === flight && movementElapsed(departure) >= departure.liftoff) return null;
+    const movement = state.movements.get(flight);
+    if (movement && movementElapsed(movement) >= movement.liftoff) return null;
 
     const scheduledMinute = clockMinutes(flight.takeoffAt);
     const remaining = scheduledMinute - clockMinutes(state.now);
@@ -310,7 +311,7 @@
 
   function flightStatus(flight) {
     if (flight === state.nextDeparture) return "Takeoff queued";
-    if (flight.stage === "outbound" && departureOnRunway()) return "Taking off";
+    if (flight.stage === "outbound" && departureOnRunway(flight)) return "Taking off";
     return statusText[flight.stage];
   }
 
@@ -444,10 +445,13 @@
     $("#flight-view").querySelector(".empty-board").hidden = shiftComplete() || upcoming.length !== state.flights.length;
     const occupied = gates.filter((_, index) => flightAtGate(index)).length;
     $("#gate-count").textContent = occupied + " / " + gates.length + " gates in use";
-    const {departure, taxiIn, nextDeparture} = state;
-    $("#airfield-label").textContent = !departureOnRunway() && (departure || taxiIn) ? "Taxiway" : "Runway 09 / 27";
-    $("#airfield-status").textContent = departure ? departure.flight.id + (departureOnRunway() ? " taking off" : " taxiing out")
-      : taxiIn ? taxiIn.flight.id + " taxiing in" : "Available";
+    const moving = [...state.movements.keys()];
+    const onRunway = moving.find(departureOnRunway);
+    $("#airfield-label").textContent = onRunway || !moving.length ? "Runway 09 / 27" : "Taxiway";
+    $("#airfield-status").textContent = onRunway ? onRunway.id + " taking off"
+      : moving.length > 1 ? moving.length + " aircraft taxiing"
+      : moving.length ? moving[0].id + (moving[0].stage === "inbound" ? " taxiing in" : " taxiing out") : "Available";
+    const {nextDeparture} = state;
     $("#next-slot").textContent = nextDeparture?.id ?? "Open";
     $("#next-slot").classList.toggle("reserved-slot", Boolean(nextDeparture));
   }
@@ -495,7 +499,7 @@
     } else if (stage === "inbound") {
       $("#detail-content").innerHTML = '<p class="detail-copy">Taxiing to gate ' + gates[flight.gate].name + '.</p>';
     } else if (stage === "outbound") {
-      $("#detail-content").innerHTML = departureOnRunway()
+      $("#detail-content").innerHTML = departureOnRunway(flight)
         ? '<p class="detail-copy">Taking off from runway 09.</p>'
         : '<p class="detail-copy">Aircraft cleared for runway 09.</p>';
     } else {
@@ -514,7 +518,8 @@
     const waiting = passengers - counts.boarded - counts.boarding - counts.missed;
     const nextDeparture = state.nextDeparture;
     const readyAction = flight === nextDeparture ? "Release next takeoff slot"
-      : departureBlocked() ? (nextDeparture ? "Take " + nextDeparture.id + "’s runway slot" : "Reserve next takeoff slot")
+      : nextDeparture ? "Take " + nextDeparture.id + "’s runway slot"
+      : stage === "ready" && !canStartTaxi(outboundMovement(flight)) ? "Reserve next takeoff slot"
       : "Clear for departure";
     const labels = {
       parked: "Start boarding",
@@ -634,8 +639,7 @@
     });
   }
 
-  function makeDeparture(flight) {
-    const {x} = gates[flight.gate];
+  const outboundRoutes = gates.map(({x}) => {
     const halfTurn = Math.PI / 2;
     const path = timedTaxiPath([
       [x, -4.75, 0], [x, -15, 0, pushbackSpeed], [x - 2.1, -22, -halfTurn, pushbackSpeed],
@@ -650,15 +654,24 @@
       [runwayEntry + 2.76, -17.4, runwayZ, halfTurn], [runwayEntry + 4.8, 12, runwayZ, halfTurn],
       [liftoff, 42, runwayZ, halfTurn], [duration, 86, runwayZ, halfTurn, 16, .23]
     );
-    return {flight, start: state.now, duration, path, pushbackEnd, runwayEntry, liftoff};
+    return {duration, path, pushbackEnd, runwayEntry, liftoff};
+  });
+
+  const inboundRoutes = gates.map(({x}) => {
+    const path = timedTaxiPath([
+      [holdingPosition.x, holdingPosition.z, holdingPosition.angle],
+      [x + 6, taxiwayZ, holdingPosition.angle], [x + 1.8, -21.2, -.77],
+      [x, -17, 0], [x, -4.75, 0]
+    ]);
+    return {duration: path.at(-1)[0], path};
+  });
+
+  function outboundMovement(flight) {
+    return {flight, start: state.now, ...outboundRoutes[flight.gate]};
   }
 
-  function aircraftPosition(flight) {
-    if (flight.stage === "holding" || flight.stage === "reserved") return holdingPosition;
-    const movement = flight.stage === "inbound" ? state.taxiIn : state.departure;
-    if (movement?.flight !== flight) return {x: gates[flight.gate].x, z: -4.75};
+  function positionAlongPath(movement, elapsed = movementElapsed(movement)) {
     const {path} = movement;
-    const elapsed = movementElapsed(movement);
     const end = path.findIndex((point, i) => i > 0 && point[0] >= elapsed);
     const a = path[end - 1], b = path[end];
     const t = (elapsed - a[0]) / (b[0] - a[0]);
@@ -667,16 +680,78 @@
     return {x: mix(1), z: mix(2), angle: a[3] + arc * t, y: mix(4), pitch: mix(5)};
   }
 
-  function startTaxiIn(flight) {
-    const {x, name} = gates[flight.gate];
-    const path = timedTaxiPath([
-      [holdingPosition.x, holdingPosition.z, holdingPosition.angle],
-      [x + 6, taxiwayZ, holdingPosition.angle], [x + 1.8, -21.2, -.77],
-      [x, -17, 0], [x, -4.75, 0]
-    ]);
-    flight.stage = "inbound";
-    state.taxiIn = {flight, start: state.now, duration: path.at(-1)[0], path};
-    announce(flight.id + " taxiing to " + name + ".");
+  function pathsConflict(candidate, active) {
+    const start = candidate.start - active.start;
+    const duration = Math.min(candidate.duration, active.duration - start);
+    if (duration <= 0) return false;
+
+    const times = [duration];
+    for (const [elapsed] of candidate.path) {
+      if (elapsed > 0 && elapsed < duration) times.push(elapsed);
+    }
+    for (const [elapsed] of active.path) {
+      const relative = elapsed - start;
+      if (relative > 0 && relative < duration) times.push(relative);
+    }
+    times.sort((a, b) => a - b);
+
+    // Between waypoints both aircraft move in straight lines, so check their closest approach in each interval.
+    const first = positionAlongPath(candidate, 0);
+    let other = positionAlongPath(active, start);
+    let x = first.x - other.x;
+    let z = first.z - other.z;
+    for (const time of times) {
+      const point = positionAlongPath(candidate, time);
+      other = positionAlongPath(active, Math.min(active.duration, start + time));
+      const nextX = point.x - other.x;
+      const nextZ = point.z - other.z;
+      const dx = nextX - x;
+      const dz = nextZ - z;
+      const distanceSquared = dx * dx + dz * dz;
+      const closest = distanceSquared ? Math.max(0, Math.min(1, -(x * dx + z * dz) / distanceSquared)) : 0;
+      if (Math.hypot(x + dx * closest, z + dz * closest) < taxiSeparation) return true;
+      x = nextX;
+      z = nextZ;
+    }
+    return false;
+  }
+
+  function canStartTaxi(candidate) {
+    for (const active of state.movements.values()) {
+      if (candidate.runwayEntry !== undefined && active.runwayEntry !== undefined &&
+        candidate.start + candidate.runwayEntry < active.start + active.duration) return false;
+      if (pathsConflict(candidate, active)) return false;
+    }
+    return true;
+  }
+
+  function aircraftPosition(flight) {
+    if (flight.stage === "holding" || flight.stage === "reserved") return holdingPosition;
+    const movement = state.movements.get(flight);
+    return movement ? positionAlongPath(movement) : {x: gates[flight.gate].x, z: -4.75};
+  }
+
+  function startTaxi(movement) {
+    const {flight, runwayEntry} = movement;
+    state.movements.set(flight, movement);
+    if (runwayEntry !== undefined) {
+      state.nextDeparture = null;
+      flight.stage = "outbound";
+      announce(flight.id + " cleared for departure.");
+    } else {
+      flight.stage = "inbound";
+      announce(flight.id + " taxiing to " + gates[flight.gate].name + ".");
+    }
+  }
+
+  function releaseTaxiIn() {
+    for (const [index, flight] of state.taxiQueue.entries()) {
+      const movement = {flight, start: state.now, ...inboundRoutes[flight.gate]};
+      if (!canStartTaxi(movement)) continue;
+      state.taxiQueue.splice(index, 1);
+      startTaxi(movement);
+      return;
+    }
   }
 
   function command() {
@@ -689,32 +764,27 @@
       if (state.nextDeparture === flight) {
         state.nextDeparture = null;
         announce(flight.id + " released the next takeoff slot.");
-      } else if (departureBlocked()) {
-        state.nextDeparture = flight;
-        announce(flight.id + " has the next takeoff slot.");
       } else {
-        clearForDeparture(flight);
+        const movement = outboundMovement(flight);
+        if (canStartTaxi(movement)) {
+          startTaxi(movement);
+        } else {
+          state.nextDeparture = flight;
+          announce(flight.id + " has the next takeoff slot.");
+        }
       }
     } else if (flight.stage === "holding") {
       const gate = selectedGate();
       if (gate < 0) return;
       flight.gate = gate;
-      if (taxiwayBusy()) {
-        flight.stage = "reserved";
-        state.taxiQueue.push(flight);
+      flight.stage = "reserved";
+      state.taxiQueue.push(flight);
+      releaseTaxiIn();
+      if (flight.stage === "reserved") {
         announce(gates[gate].name + " reserved for " + flight.id + ".");
-      } else {
-        startTaxiIn(flight);
       }
     }
     paint();
-  }
-
-  function clearForDeparture(flight) {
-    state.nextDeparture = null;
-    flight.stage = "outbound";
-    state.departure = makeDeparture(flight);
-    announce(flight.id + " cleared for departure.");
   }
 
   function closeSelectedBoarding() {
@@ -728,6 +798,27 @@
     paint();
   }
 
+  function finishDeparture({flight, start, liftoff}) {
+    const boarded = flight.manifest.filter(person => person.zone === "boarded").length;
+    const revenue = 3800 + boarded * passengerFare;
+    const liftoffMinute = clockMinutes(start + liftoff);
+    const due = clockMinutes(flight.takeoffAt);
+    state.delayMinutes += Math.max(0, liftoffMinute - due);
+    state.cash += revenue - handlingCost;
+    state.results.push({id: flight.id, destination: flight.destination, due, takeoff: liftoffMinute,
+      missed: flight.passengers - boarded, revenue});
+    state.flights = state.flights.filter(item => item !== flight);
+    if (state.selected === flight.id) state.selected = state.flights[0]?.id || "gate-" + flight.gate;
+    if (shiftComplete()) {
+      state.paused = true;
+      announce("Operating day complete. Your shift report is ready.");
+      paint();
+      showShiftReport();
+    } else {
+      announce(flight.id + " airborne with " + boarded + " passengers. " + currency.format(revenue - handlingCost) + " net.");
+    }
+  }
+
   function advanceShift(simDelta) {
     state.now += simDelta;
     const changed = passengerFlow.advance(state.flights, flow, state.now, simDelta, state.lanes,
@@ -736,38 +827,23 @@
         announce(flight.id + " is ready for departure.");
       });
     occupancyDirty ||= changed;
-    if (state.taxiIn && movementElapsed(state.taxiIn) === state.taxiIn.duration) {
-      const {flight} = state.taxiIn;
-      state.taxiIn = null;
+    for (const [flight, movement] of state.movements) {
+      if (movementElapsed(movement) < movement.duration) continue;
+      state.movements.delete(flight);
       occupancyDirty = true;
-      flight.stage = "parked";
-      announce(flight.id + " parked at " + gates[flight.gate].name + ".");
-    }
-    if (state.departure && movementElapsed(state.departure) === state.departure.duration) {
-      const {flight, start, liftoff} = state.departure;
-      state.departure = null;
-      occupancyDirty = true;
-      const boarded = flight.manifest.filter(person => person.zone === "boarded").length;
-      const revenue = 3800 + boarded * passengerFare;
-      const liftoffMinute = clockMinutes(start + liftoff);
-      const due = clockMinutes(flight.takeoffAt);
-      state.delayMinutes += Math.max(0, liftoffMinute - due);
-      state.cash += revenue - handlingCost;
-      state.results.push({id: flight.id, destination: flight.destination, due, takeoff: liftoffMinute,
-        missed: flight.passengers - boarded, revenue});
-      state.flights = state.flights.filter(item => item !== flight);
-      if (state.selected === flight.id) state.selected = state.flights[0]?.id || "gate-" + flight.gate;
-      if (shiftComplete()) {
-        state.paused = true;
-        announce("Operating day complete. Your shift report is ready.");
-        paint();
-        showShiftReport();
-        return;
+      if (flight.stage === "inbound") {
+        flight.stage = "parked";
+        announce(flight.id + " parked at " + gates[flight.gate].name + ".");
+      } else {
+        finishDeparture(movement);
+        if (shiftComplete()) return;
       }
-      announce(flight.id + " airborne with " + boarded + " passengers. " + currency.format(revenue - handlingCost) + " net.");
     }
-    if (state.nextDeparture && !departureBlocked()) clearForDeparture(state.nextDeparture);
-    if (state.taxiQueue.length && !taxiwayBusy()) startTaxiIn(state.taxiQueue.shift());
+    if (state.nextDeparture) {
+      const movement = outboundMovement(state.nextDeparture);
+      if (canStartTaxi(movement)) startTaxi(movement);
+    }
+    releaseTaxiIn();
     for (const flight of state.flights) {
       if (flight.stage === "scheduled" && state.now >= flight.arrivalAt) {
         flight.stage = "holding";
