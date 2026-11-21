@@ -134,6 +134,14 @@
     return [Math.floor(minutes / 60) % 24, minutes % 60].map(num => String(num).padStart(2, "0")).join(":");
   }
 
+  function paintBoardingTime(container, flight) {
+    container.hidden = flight?.stage !== "parked";
+    if (container.hidden) return;
+    const time = container.querySelector("time");
+    time.dateTime = formatTime(clockMinutes(flight.boardingAt));
+    time.textContent = time.dateTime;
+  }
+
   function paintFlights() {
     const active = new Set(state.flights.map(flight => flight.id));
     for (const [id, button] of flightElements) {
@@ -149,7 +157,10 @@
         button.type = "button";
         button.className = "flight";
         button.style.setProperty("--livery", airlines[flight.airline].ui);
-        button.innerHTML = '<span class="airline-mark">' + planeIcon + '</span><span class="flight-name"><strong></strong><small></small></span><span class="flight-status"></span>';
+        button.innerHTML = '<span class="airline-mark">' + planeIcon + '</span>' +
+          '<span class="flight-name"><strong></strong><small></small></span>' +
+          '<span class="flight-status"></span>' +
+          '<span class="flight-boarding" hidden><span class="boarding-label"></span><time></time></span>';
         button.querySelector("strong").textContent = flight.destination;
         button.addEventListener("click", () => select(flight.id));
         $("#flight-list").append(button);
@@ -158,9 +169,15 @@
       button.setAttribute("aria-pressed", String(flight.id === state.selected));
       button.querySelector("small").textContent = flight.id + " · " + (gates[flight.gate]?.name || "Arrival");
       const badge = button.querySelector(".flight-status");
+      const boarding = button.querySelector(".flight-boarding");
+      paintBoardingTime(boarding, flight);
+      badge.hidden = !boarding.hidden;
       badge.dataset.stage = flight.stage;
-      badge.textContent = flight.stage === "parked" && state.now >= flight.boardingAt
-        ? "Boarding due" : statusText[flight.stage];
+      badge.textContent = statusText[flight.stage];
+      if (!boarding.hidden) {
+        boarding.querySelector(".boarding-label").textContent = state.now >= flight.boardingAt
+          ? "Boarding due" : "Boarding time";
+      }
     }
     if (!state.flights.length) {
       if (!$("#empty-board")) {
@@ -190,6 +207,7 @@
     const gate = selectedGate();
     const panel = $("#flight-detail");
     const action = $("#flight-action");
+    paintBoardingTime($("#detail-boarding"), flight);
     panel.hidden = !flight && gate < 0;
     if (panel.hidden) return;
     action.hidden = !flight;
@@ -201,8 +219,7 @@
     }
     const {stage, passengers, id, destination} = flight;
     const counts = occupancy.byFlight.get(id);
-    const schedule = stage === "parked" ? " · BOARD " + formatTime(clockMinutes(flight.boardingAt)) : "";
-    $("#detail-kicker").textContent = (gates[flight.gate]?.name || "Inbound") + " / " + id + schedule;
+    $("#detail-kicker").textContent = (gates[flight.gate]?.name || "Inbound") + " / " + id;
     $("#detail-title").textContent = destination;
     if (stage === "holding") {
       $("#detail-content").innerHTML = '<p class="detail-copy">Aircraft holding short. Assign an open stand to bring it to the terminal.</p>';

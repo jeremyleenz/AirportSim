@@ -94,12 +94,15 @@ button, h1, h2, h3, p { margin: 0; }
 .flight-name small { font: .72rem var(--mono); color: var(--muted); }
 .flight-status { font: 600 .68rem var(--mono); border-radius: 4px; padding: 5px 6px; background: #2a3d44; color: #c9dbde; }
 .flight-status[data-stage="boarding"], .flight-status[data-stage="ready"] { color: var(--mint); background: #1f4840; }
-.flight-status[data-stage="parked"] { color: var(--amber); background: #493c30; }
+.flight-boarding, .detail-boarding { display: grid; justify-items: end; gap: 3px; white-space: nowrap; color: var(--amber); }
+.boarding-label { font-size: .76rem; font-weight: 650; color: inherit; }
+.flight-boarding time { font: 700 1.25rem/1 var(--mono); }
 .flight-detail { background: #1a2b32; border: 1px solid #33484d; border-radius: 10px; margin-top: 14px; padding: 13px; }
-.detail-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; }
+.detail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
 .detail-head p { color: var(--dim); }
 .detail-head h3 { font-size: 1.26rem; line-height: 1.2; letter-spacing: -.03em; margin-top: 4px; }
-.detail-head .icon { color: #739c91; transform: rotate(32deg); width: 21px; height: 21px; }
+.detail-boarding { padding: 6px 9px; border: 1px solid #67523c; border-radius: 6px; background: #302e27; }
+.detail-boarding time { font: 750 1.65rem/1 var(--mono); }
 .detail-stat { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); font-size: .83rem; }
 .detail-stat b { color: var(--light); white-space: nowrap; font: 600 .81rem var(--mono); }
 .flow-stats { display: grid; gap: 6px; }

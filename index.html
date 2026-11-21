@@ -67,7 +67,13 @@
           <div class="section-head"><h2 id="schedule-title">Flight board</h2><span id="gate-count">2 / 3 gates in use</span></div>
           <div id="flight-list" class="flight-list"></div>
           <div id="flight-detail" class="flight-detail">
-            <div class="detail-head"><div><p id="detail-kicker"></p><h3 id="detail-title"></h3></div><svg class="icon"><use href="#plane"/></svg></div>
+            <div class="detail-head">
+              <div><p id="detail-kicker"></p><h3 id="detail-title"></h3></div>
+              <div id="detail-boarding" class="detail-boarding" hidden>
+                <span class="boarding-label">Boarding time</span>
+                <time></time>
+              </div>
+            </div>
             <div id="detail-content"></div>
             <button type="button" id="flight-action" class="primary"></button>
           </div>
