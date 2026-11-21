@@ -35,7 +35,7 @@
       makeFlight(1, 1, "parked", 1, {gate: 19, cafe: 5, concourse: 12, security: 38}, 16 * secondsPerMinute),
       makeFlight(2, 2, "holding", null)
     ],
-    selected: "SA507", stand: null, view: "flights", taxiIn: null, departure: null
+    selected: "SA507", view: "flights", taxiIn: null, departure: null
   };
   const statusText = {
     parked: "At gate", boarding: "Boarding", ready: "Ready", holding: "Holding",
@@ -102,8 +102,12 @@
   }
 
   function select(id, stand = null) {
+    const arrival = state.flights.find(flight => flight.id === id && flight.stage === "holding");
+    if (arrival) {
+      const choice = stand ?? arrival.preferredGate ?? availableGate();
+      if (choice >= 0 && !flightAtGate(choice)) arrival.preferredGate = choice;
+    }
     state.selected = id;
-    state.stand = stand;
     state.view = "flights";
     paint();
     requestDraw = true;
@@ -141,13 +145,37 @@
     if (flight?.stage === "outbound" && flightAtGate(flight.gate) !== flight) return -1;
     if (flight?.gate != null) return flight.gate;
     if (flight?.stage === "holding") {
-      return state.stand !== null && !flightAtGate(state.stand)
-        ? state.stand : availableGate();
+      if (flight.preferredGate === undefined) return availableGate();
+      return flightAtGate(flight.preferredGate) ? -1 : flight.preferredGate;
     }
     return state.selected?.startsWith("gate-") ? Number(state.selected.slice(5)) : -1;
   }
 
   const flightElements = new Map();
+  const gatePicker = $("#gate-picker");
+  const gateOptions = gates.map(({name}, index) => {
+    const label = document.createElement("label");
+    label.className = "gate-option";
+    label.innerHTML = '<input type="radio" name="arrival-gate">' +
+      '<span class="gate-choice"><strong>' + name + '</strong><small></small></span>';
+    const input = label.querySelector("input");
+    input.value = index;
+    input.addEventListener("change", () => select(state.selected, index));
+    $("#gate-options").append(label);
+    return {input, status: label.querySelector("small")};
+  });
+
+  function paintGatePicker(flight, gate) {
+    gatePicker.hidden = flight?.stage !== "holding";
+    if (gatePicker.hidden) return;
+    gateOptions.forEach(({input, status}, index) => {
+      const occupant = flightAtGate(index);
+      input.disabled = Boolean(occupant);
+      input.checked = index === gate;
+      status.textContent = !occupant ? "Open"
+        : occupant.stage === "reserved" || occupant.stage === "inbound" ? "Reserved" : "Occupied";
+    });
+  }
 
   function clockMinutes(seconds) {
     return startMinutes + Math.floor(seconds / secondsPerMinute + 1e-9);
@@ -232,6 +260,7 @@
     const panel = $("#flight-detail");
     const action = $("#flight-action");
     paintBoardingTime($("#detail-boarding"), flight);
+    paintGatePicker(flight, gate);
     panel.hidden = !flight && gate < 0;
     if (panel.hidden) return;
     action.hidden = !flight;
@@ -246,7 +275,7 @@
     $("#detail-kicker").textContent = (gates[flight.gate]?.name || "Inbound") + " / " + id;
     $("#detail-title").textContent = destination;
     if (stage === "holding") {
-      $("#detail-content").innerHTML = '<p class="detail-copy">Aircraft holding short. Assign an open stand to bring it to the terminal.</p>';
+      $("#detail-content").innerHTML = '<p class="detail-copy">Aircraft holding short.</p>';
     } else if (stage === "reserved") {
       $("#detail-content").innerHTML = '<p class="detail-copy">Gate ' + gates[flight.gate].name +
         ' is reserved. Taxi-in starts when the departing aircraft reaches the runway.</p>';
@@ -268,7 +297,8 @@
       parked: "Start boarding", boarding: counts.gate || counts.gateQueue || counts.boarding
         ? "Boarding in progress" : "Waiting for passengers",
       ready: departureBlocked ? "Airfield in use" : "Clear for departure",
-      holding: gate < 0 ? "All gates occupied" : "Assign gate " + gates[gate].name,
+      holding: gate >= 0 ? "Assign gate " + gates[gate].name
+        : availableGate() >= 0 ? "Choose an open gate" : "No open gates",
       reserved: "Waiting for taxi clearance",
       inbound: "Taxiing to gate", outbound: "Departure in progress"
     };
