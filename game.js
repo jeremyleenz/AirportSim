@@ -19,13 +19,13 @@
   ];
   function makeFlight(route, airline, stage, gate, initialPassengers) {
     const [destination, number, passengers] = routes[route];
-    const manifest = initialPassengers ? passengerFlow.manifest(passengers, initialPassengers) : [];
-    return {destination, id: airlines[airline].code + number, airline, passengers, stage, gate, manifest, boardingCredit: 0};
+    const manifest = initialPassengers ? passengerFlow.manifest(passengers, initialPassengers, "checkIn") : [];
+    return {destination, id: airlines[airline].code + number, airline, passengers, stage, gate, manifest, nextBoarding: 0};
   }
 
   const state = {
     cash: 124500, now: 0, speed: 1, paused: false, dispatched: 0, lanes: 2,
-    serviceCredit: {checkIn: 0, security: 0}, nextArrival: 0, nextRoute: 3,
+    nextArrival: 0, nextRoute: 3,
     flights: [
       makeFlight(0, 0, "boarding", 0, {boarded: 68, gate: 28}),
       makeFlight(1, 1, "parked", 1, {gate: 24, concourse: 12, security: 38}),
@@ -37,7 +37,8 @@
     parked: "At gate", boarding: "Boarding", ready: "Ready", holding: "Holding",
     inbound: "Taxiing in", outbound: "Departing"
   };
-  let occupancy = passengerFlow.snapshot(state.flights, gates.length);
+  const flow = passengerFlow.create(state.flights, state.lanes);
+  let occupancy = passengerFlow.snapshot(state.flights);
   let occupancyDirty = false;
 
   let renderer, scene;
@@ -87,7 +88,7 @@
     createLabel("CAFÉ", -26, 2.53, 19.05),
     createLabel("SECURITY", -.7, 2.45, 20.2, "security"),
     createLabel("CHECK-IN", 25, 2.17, 19.45, "checkIn"),
-    createLabel("CONCOURSE", 13.3, 1.65, 16.9, "concourse"),
+    createLabel("WALKWAYS", 13.3, 1.65, 16.9, "concourse"),
     createLabel("RWY 09 / 27", -22, .05, -45.9)
   ] : [];
   $("#lounge-counts").innerHTML = gates.map(({name}) => stat(name, 0)).join("");
@@ -198,14 +199,15 @@
     } else if (stage === "outbound") {
       $("#detail-content").innerHTML = '<p class="detail-copy">Aircraft cleared for runway 09.</p>';
     } else {
-      const {boarded, gate: waiting, checkIn, security, concourse} = counts;
+      const {boarded, boarding, gate: waiting} = counts;
       $("#detail-content").innerHTML = progress("Passengers boarded", boarded + " / " + passengers, boarded / passengers * 100) +
         '<div class="flow-stats">' + stat("Waiting at gate", waiting) +
-        stat("On the way to the gate", checkIn + security + concourse) + '</div>';
+        stat("On the way to the gate", passengers - waiting - boarding - boarded) +
+        stat("Walking to aircraft", boarding) + '</div>';
     }
     const runwayBusy = Boolean(state.moving);
     const labels = {
-      parked: "Start boarding", boarding: counts.gate ? "Boarding in progress" : "Waiting for passengers",
+      parked: "Start boarding", boarding: counts.gate || counts.boarding ? "Boarding in progress" : "Waiting for passengers",
       ready: runwayBusy ? "Airfield in use" : "Clear for departure",
       holding: gate < 0 ? "All gates occupied" : runwayBusy ? "Airfield in use" : "Assign gate " + gates[gate].name,
       inbound: "Taxiing to gate", outbound: "Departure in progress"
@@ -217,7 +219,7 @@
 
   function paint() {
     if (occupancyDirty) {
-      occupancy = passengerFlow.snapshot(state.flights, gates.length);
+      occupancy = passengerFlow.snapshot(state.flights);
       occupancyDirty = false;
       requestDraw = true;
     }
@@ -246,6 +248,7 @@
       $("#check-in-count").textContent = occupancy.checkIn.length;
       $("#security-count").textContent = occupancy.security.length;
       $("#concourse-count").textContent = occupancy.concourse.length;
+      $("#boarding-count").textContent = occupancy.boarding.length;
       $("#lanes-count").textContent = state.lanes + " / 3";
       $("#lounge-counts").querySelectorAll("b").forEach((count, index) => {
         count.textContent = occupancy.gates[index].length;
@@ -328,7 +331,7 @@
     if (state.paused) return;
     const simDelta = dt * state.speed;
     state.now += simDelta;
-    const changed = passengerFlow.advance(state.flights, state.serviceCredit, state.now, simDelta, state.lanes,
+    const changed = passengerFlow.advance(state.flights, flow, state.now, simDelta, state.lanes,
       flight => {
         flight.stage = "ready";
         announce(flight.id + " is ready for departure.");
@@ -375,7 +378,7 @@
       const x = ((vehicle.offset + carTravel) % 110 - 55) * direction;
       moving.push({...vehicle, x});
     }
-    const people = airport.passengerActors(scene.outfits, occupancy, state.now, state.lanes, passengerFlow.walkTime);
+    const people = airport.passengerActors(scene.outfits, occupancy);
     if (state.lanes === 2) moving.push({mesh: laneClosed});
     const gate = gates[selectedGate()];
     if (gate) moving.push({mesh: scene.highlight, x: gate.x, castShadow: false});

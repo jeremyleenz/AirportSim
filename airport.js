@@ -11,8 +11,15 @@ const airport = (() => {
   const {grass, asphalt, apron, concrete, warm, frame, glass, pale, white, paint, ink, teal} = colors;
   const floor = .78;
   const road = -36.5;
-  const checkInQueue = {centers: [18, 25.2, 32.5], z: 24, width: 4.95, depth: 1.87};
-  const securityQueue = {centers: [-7.2, -.7, 5.8], z: 24.65, width: 4.3, depth: 1.65};
+  const checkInQueue = {centers: [18, 25.2, 32.5], front: 22.14, width: 4.95};
+  const securityQueue = {centers: [-7.2, -.7, 5.8], front: 23.25, width: 4.3};
+  const queueRows = 9;
+  const queueSpacing = .47;
+
+  function bridgePath(x) {
+    return [[x - 4.7, floor, 8.18], [x - 4.7, floor, 7.5],
+      [x - 3.35, 1.45, 3.3], [x - 1.05, 1.45, 1.2], [x - .60, 1.45, 1.2]];
+  }
   let seed = 561;
   function random() {
     seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
@@ -152,23 +159,34 @@ const airport = (() => {
     mesh.ring(x, y + .44, z, .07, .07, .06, "#95ada8", 6);
   }
 
-  function queue(mesh, x, z, w, d) {
-    for (let row = 0; row < 3; row++) {
-      const zRow = z + (row - 1) * d / 2;
-      mesh.box(x, floor + .445, zRow, w, .049, .041, "#63817f");
-      for (const delta of [-w / 2, 0, w / 2]) bollard(mesh, x + delta, zRow);
+  function queue(mesh, x, {front, width}) {
+    const back = front + (queueRows - 1) * queueSpacing;
+    for (const edge of [-width / 2, width / 2]) {
+      mesh.box(x + edge, floor + .445, (front + back) / 2, .041, .049, back - front, "#63817f");
+      for (const z of [front, (front + back) / 2, back]) bollard(mesh, x + edge, z);
+    }
+    for (const offset of [-width * .24, 0, width * .24]) {
+      mesh.rect(x + offset, floor + .034, (front + back) / 2, .045, back - front, "#afbeb4");
     }
   }
 
   function bridge(mesh, x) {
-    const pivot = x - 4.7;
-    mesh.box(pivot, .69, 8.2, 2.52, 2.45, 2.18, "#a9bfba");
-    mesh.box(pivot, 3.13, 8.25, 2.56, .19, 2.36, white);
-    mesh.box(pivot, .10, 5.43, .45, 1.8, .51, frame);
-    mesh.box(pivot + .9, 1.51, 5.61, 1.7, 1.34, 4.65, "#86a5a9", -.39);
-    mesh.box(pivot + .9, 2.85, 5.61, 1.9, .15, 4.71, "#e2ebe1", -.39);
-    mesh.box(x - 2.2, 1.39, 3.69, 2.12, 1.27, 1.58, "#779398", -.25);
-    mesh.box(x - 2.2, 2.66, 3.69, 2.15, .135, 1.65, "#cadcd5", -.25);
+    const points = bridgePath(x).slice(0, -1);
+    for (let i = 1; i < points.length; i++) {
+      const [ax, ay, az] = points[i - 1];
+      const [bx, by, bz] = points[i];
+      const width = .57;
+      mesh.face([[ax - width, ay, az], [bx - width, by, bz], [bx + width, by, bz],
+        [ax + width, ay, az]], pale, [0, 1, 0]);
+      for (const side of [-1, 1]) {
+        const a = ax + side * width, b = bx + side * width;
+        const height = side === -1 ? .15 : .43;
+        mesh.face([[a, ay - .20, az], [b, by - .20, bz], [b, by + height, bz],
+          [a, ay + height, az]], glass, [side, 0, 0]);
+      }
+    }
+    mesh.box(x - 3.35, .04, 3.3, .39, 1.19, .54, frame);
+    mesh.box(x - 4.68, .04, 7.72, .63, .63, .75, frame);
   }
 
   function terminal() {
@@ -179,7 +197,15 @@ const airport = (() => {
     mesh.rect(0, floor + .010, 17.1, 75.8, 3.6, "#e9ece3");
     for (let x = -37.8; x < 38; x += 1.9) mesh.rect(x, floor + .013, 18.5, .032, 20.8, "#c5cec6");
     for (let z = 8.3; z < 29; z += 1.42) mesh.rect(0, floor + .015, z, 75.7, .034, "#c8cfc5");
-    wall(mesh, 0, 8.18, 75.95, true, 2.6);
+    let wallStart = -37.95;
+    for (const gate of gates) {
+      const door = bridgePath(gate.x)[0][0];
+      const wallEnd = door - .72;
+      wall(mesh, (wallStart + wallEnd) / 2, 8.18, wallEnd - wallStart, true, 2.6);
+      mesh.box(door, floor + 1.05, 8.18, 1.54, .19, .24, pale);
+      wallStart = door + .72;
+    }
+    wall(mesh, (wallStart + 37.95) / 2, 8.18, 37.95 - wallStart, true, 2.6);
     wall(mesh, 37.95, 18.5, 20.5, false, 2.52);
     wall(mesh, -37.95, 18.5, 20.5, false, 1.15);
     wall(mesh, -23, 28.91, 28, true, .72);
@@ -222,21 +248,21 @@ const airport = (() => {
     mesh.rect(-.8, floor + .022, 23.18, 22.4, 8.15, "#c1cec8");
     mesh.rect(-.8, floor + .025, 19.26, 22.3, .19, teal);
     for (const x of securityQueue.centers) {
-      mesh.box(x, floor, 20.3, 3.05, 1.43, .24, "#e3e8dc");
+      mesh.box(x - .95, floor, 20.3, 1.8, 1.43, .24, "#e3e8dc");
       mesh.box(x - 1.2, floor, 21, .95, .56, 3.75, "#596d70");
       mesh.box(x - 1.2, floor + .56, 21, .76, .055, 3.7, "#364951");
       mesh.box(x - 1.2, floor + .55, 20.7, 1.08, .69, .85, "#799a93");
       mesh.box(x + .55, floor, 20.7, .14, 1.36, .34, teal);
       mesh.box(x + 1.56, floor, 20.7, .14, 1.36, .34, teal);
       mesh.box(x + 1.05, floor + 1.32, 20.7, 1.15, .17, .34, teal);
-      queue(mesh, x, securityQueue.z, securityQueue.width, securityQueue.depth);
+      queue(mesh, x, securityQueue);
     }
 
     mesh.rect(24.75, floor + .024, 22.9, 21.7, 7.7, "#d4d9ce");
     mesh.box(24.75, floor, 19.45, 21.9, 1.25, .22, "#93b6ae");
     mesh.box(24.75, floor + 1.24, 19.45, 21.93, .15, .32, "#e8e8d2");
     for (let n = 0; n < 6; n++) desk(mesh, 15.8 + n * 3.43, 20.8, n % 2 ? "#87a5a2" : "#6c9b91");
-    for (const x of checkInQueue.centers) queue(mesh, x, checkInQueue.z, checkInQueue.width, checkInQueue.depth);
+    for (const x of checkInQueue.centers) queue(mesh, x, checkInQueue);
     for (const x of [-34.5, -12.8, 12.4, 35.6]) planter(mesh, x, floor, 26.95, 1.3);
 
     for (const x of [-8.3, -3.6, 3.6, 8.3]) {
@@ -389,11 +415,11 @@ const airport = (() => {
     return mesh;
   }
 
-  function traveler(tint, skin) {
+  function traveler(tint, skin, stride = 0) {
     const mesh = new Mesh();
     mesh.ring(0, -.014, 0, .22, .22, .019, "#a8b2a9", 6);
-    mesh.box(-.081, 0, 0, .109, .31, .137, "#475458");
-    mesh.box(.081, 0, -.01, .109, .32, .137, "#454f54");
+    mesh.box(-.081, Math.max(0, stride) * .27, stride, .109, .31, .137, "#475458");
+    mesh.box(.081, Math.max(0, -stride) * .27, -.01 - stride, .109, .32, .137, "#454f54");
     mesh.ring(0, .26, 0, .154, .205, .31, tint, 6);
     mesh.ring(0, .57, .013, .113, .111, .14, skin, 8);
     mesh.ring(0, .69, .005, .11, .08, .058, "#4d5146", 7);
@@ -401,53 +427,21 @@ const airport = (() => {
     return mesh;
   }
 
-  function passengerActors(outfits, occupancy, now, lanes, walkTime) {
-    const actors = [];
-    function place({person, flight}, x, z, angle) {
+  const terminalPaths = {
+    queueRows, queueSpacing, bridgePath,
+    checkIn: checkInQueue,
+    security: securityQueue
+  };
+
+  function passengerActors(outfits, occupancy) {
+    return occupancy.visible.map(({person, flight}) => {
       const style = person.index * 5 + flight.airline * 3;
-      const offset = ((style % 11) - 5) * .013;
-      actors.push({mesh: outfits[style % outfits.length], x: x + offset, y: floor,
-        z: z - offset, angle, castShadow: false});
-    }
-
-    function placeQueue(people, queueLayout, activeLanes) {
-      const columns = 10;
-      const lanesFilled = Array(activeLanes).fill(0);
-      people.forEach(entry => {
-        const lane = entry.person.index % activeLanes;
-        const slot = lanesFilled[lane]++;
-        const row = Math.floor(slot / columns);
-        const column = row % 2 ? columns - 1 - slot % columns : slot % columns;
-        const x = queueLayout.centers[lane] + (column / (columns - 1) - .5) * (queueLayout.width - .44);
-        const z = queueLayout.z - queueLayout.depth / 4 + row * queueLayout.depth / 2;
-        place(entry, x, z, Math.PI);
-      });
-    }
-    placeQueue(occupancy.checkIn, checkInQueue, checkInQueue.centers.length);
-    placeQueue(occupancy.security, securityQueue, lanes);
-
-    for (const entry of occupancy.concourse) {
-      const {person, flight} = entry;
-      const progress = (now - person.walkStarted) / walkTime;
-      const start = -.7 + (person.index % 5 - 2) * .8;
-      const end = gates[flight.gate].x + (person.index % 9 - 4) * .65;
-      const x = start + (end - start) * progress;
-      const z = 18.65 - progress * (2.75 + person.index % 5 * .11);
-      place(entry, x, z, Math.atan2(end - start, -3));
-    }
-
-    const loungeRows = [9.28, 9.72, 10.79, 11.32, 11.86, 13.47, 14.05];
-    const loungeColumns = 18;
-    occupancy.gates.forEach((people, index) => {
-      people.forEach(entry => {
-        // Spread each manifest across the lounge without moving people when someone boards.
-        const slot = entry.person.index * 37 % (loungeColumns * loungeRows.length);
-        const x = gates[index].x + ((loungeColumns - 1) / 2 - slot % loungeColumns) * .82;
-        const z = loungeRows[Math.floor(slot / loungeColumns)];
-        place(entry, x, z, Math.PI);
-      });
+      const outfit = outfits[style % outfits.length];
+      const phase = person.distance / .72 % 1;
+      const mesh = person.moving ? outfit.steps[Math.floor(phase * outfit.steps.length)] : outfit.idle;
+      const [x, y, z] = person.position;
+      return {mesh, x, y, z, angle: person.angle, castShadow: false};
     });
-    return actors;
   }
 
   function scene() {
@@ -472,11 +466,15 @@ const airport = (() => {
       offset: i * 22
     }));
     const outfits = ["#b66e5e", "#4b807e", "#c9a354", "#ece1ce", "#556e89", "#81936c", "#906d81"]
-      .map((tint, i) => traveler(tint, ["#e5b896", "#bb8462", "#d19d7c", "#99684f"][i % 4]));
+      .map((tint, i) => {
+        const skin = ["#e5b896", "#bb8462", "#d19d7c", "#99684f"][i % 4];
+        return {idle: traveler(tint, skin), steps: Array.from({length: 8}, (_, phase) =>
+          traveler(tint, skin, Math.sin(phase * Math.PI / 4) * .15))};
+      });
     const highlight = new Mesh().path([[-10.7, 5.45], [-10.7, -11.3], [-8.8, -15],
       [8.8, -15], [10.7, -11.3], [10.7, 5.45]], .23, .05, "#b6e0b3");
     return {fixed: [...fixed, ...fleet], traffic, outfits, highlight};
   }
 
-  return {gates, aircraft, scene, passengerActors, floor, road};
+  return {gates, aircraft, scene, passengerActors, terminalPaths, floor, road};
 })();
