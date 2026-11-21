@@ -8,7 +8,9 @@ Run `make package` from the repository to copy the game to `dist/` and create `a
 
 ## Publish and share
 
-Serve the contents of `dist/` from a static web host. For a public link using Cloudflare Pages, choose **Direct Upload**, upload `airport-sim.zip`, and deploy. Share the `pages.dev` URL that Cloudflare assigns. [Cloudflare Pages Direct Upload guide](https://developers.cloudflare.com/pages/get-started/direct-upload/)
+Push to `main` to build and publish the game automatically with GitHub Actions. [Play Airport Ops on GitHub Pages](https://jeremyleenz.github.io/AirportSim/)
+
+For manual deployments, serve the contents of `dist/` from a static web host.
 
 ## Preview locally
 
