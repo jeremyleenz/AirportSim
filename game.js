@@ -9,6 +9,7 @@
   const secondsPerMinute = 3.4;
   const minutesFromBoardingToTakeoff = 30;
   const takeoffWarningMinutes = 10;
+  const inboundTaxiSpeed = 4;
   const pushbackEnd = .25;
   const runwayEntry = .62;
   const liftoff = .90;
@@ -405,16 +406,9 @@
     }
   }
 
-  function positionPath(flight) {
-    const x = gates[flight.gate].x;
+  function departurePath(gate) {
+    const {x} = gates[gate];
     const halfTurn = Math.PI / 2;
-    if (flight.stage === "inbound") {
-      return [
-        [0, holdingPosition.x, holdingPosition.z, holdingPosition.angle], [.17, 37, taxiwayZ, -halfTurn],
-        [.48, x + 6, taxiwayZ, -halfTurn], [.61, x + 1.8, -21.2, -.77],
-        [.73, x, -17, 0], [1, x, -4.75, 0]
-      ];
-    }
     return [
       [0, x, -4.75, 0], [.17, x, -15, 0], [pushbackEnd, x - 2.1, -22, -halfTurn],
       [.39, -39.7, taxiwayZ, -halfTurn], [.445, -45, taxiwayZ - 2.3, -2.3],
@@ -439,9 +433,24 @@
   }
 
   function startTaxiIn(flight) {
+    const {x, name} = gates[flight.gate];
+    const route = [
+      [holdingPosition.x, holdingPosition.z, holdingPosition.angle],
+      [x + 6, taxiwayZ, holdingPosition.angle], [x + 1.8, -21.2, -.77],
+      [x, -17, 0], [x, -4.75, 0]
+    ];
+    let distance = 0;
+    const waypoints = route.map(([x, z, angle], index) => {
+      if (index > 0) {
+        const [previousX, previousZ] = route[index - 1];
+        distance += Math.hypot(x - previousX, z - previousZ);
+      }
+      return [distance, x, z, angle];
+    });
+    const path = waypoints.map(([travelled, x, z, angle]) => [travelled / distance, x, z, angle]);
     flight.stage = "inbound";
-    state.taxiIn = {flight, start: state.now, duration: 12, path: positionPath(flight)};
-    announce(flight.id + " taxiing to " + gates[flight.gate].name + ".");
+    state.taxiIn = {flight, start: state.now, duration: distance / inboundTaxiSpeed, path};
+    announce(flight.id + " taxiing to " + name + ".");
   }
 
   function command() {
@@ -452,7 +461,7 @@
       announce("Boarding started at " + gates[flight.gate].name + ".");
     } else if (flight.stage === "ready") {
       flight.stage = "outbound";
-      state.departure = {flight, start: state.now, duration: 24, path: positionPath(flight)};
+      state.departure = {flight, start: state.now, duration: 24, path: departurePath(flight.gate)};
       announce(flight.id + " cleared for departure.");
     } else if (flight.stage === "holding") {
       const gate = selectedGate();
