@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=5">
   <script defer src="renderer.js"></script>
   <script defer src="airport.js?v=2"></script>
-  <script defer src="passengers.js?v=2"></script>
-  <script defer src="game.js?v=4"></script>
+  <script defer src="passengers.js?v=3"></script>
+  <script defer src="game.js?v=6"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -26,6 +26,7 @@
     <symbol id="tower" viewBox="0 0 24 24"><path d="M9 22h6m-3-1v-8M7 7h10l-2 6H9zm-2 0h14m-7 0V3m-3 1h6"/></symbol>
     <symbol id="target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/></symbol>
     <symbol id="terminal" viewBox="0 0 24 24"><path d="M4 21V8l8-5 8 5v13M2 21h20M8 21v-6h8v6M8 10h.01m4 0h.01m4 0h.01"/></symbol>
+    <symbol id="timetable" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18m-12 4h1m4 0h1m-6 4h1m4 0h1"/></symbol>
     <symbol id="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></symbol>
   </svg>
   <header class="topbar">
@@ -58,6 +59,7 @@
         <button id="map-holding" class="map-gate map-holding" type="button" data-state="holding" hidden>
           <i aria-hidden="true"></i>
           <span><span class="holding-route"></span><span class="holding-time">Takeoff <time></time></span></span>
+          <span class="holding-count map-count" hidden></span>
         </button>
       </div>
       <div class="map-controls">
@@ -73,13 +75,29 @@
     <aside id="operations" class="operations" aria-label="Airport operations">
       <div class="panel-head"><div class="panel-icon"><svg class="icon"><use href="#tower"/></svg></div><div><p>Control tower</p><h1>Operations</h1></div></div>
       <nav class="tabs" aria-label="Operations views">
-        <button type="button" id="flights-tab" aria-pressed="true"><svg class="icon"><use href="#plane"/></svg>Flights</button>
-        <button type="button" id="terminal-tab" aria-pressed="false"><svg class="icon"><use href="#terminal"/></svg>Terminal</button>
+        <button type="button" id="flights-tab" aria-controls="flight-view" aria-pressed="true"><svg class="icon"><use href="#plane"/></svg>Flights</button>
+        <button type="button" id="schedule-tab" aria-controls="schedule-view" aria-pressed="false"><svg class="icon"><use href="#timetable"/></svg>Schedule</button>
+        <button type="button" id="terminal-tab" aria-controls="terminal-view" aria-pressed="false"><svg class="icon"><use href="#terminal"/></svg>Terminal</button>
       </nav>
       <div class="panel-body">
-        <section id="flight-view" aria-labelledby="schedule-title">
-          <div class="section-head"><h2 id="schedule-title">Flight board</h2><span id="gate-count">2 / 3 gates in use</span></div>
+        <div class="objective">
+          <svg class="icon"><use href="#target"/></svg>
+          <div><p>Operating day</p><strong id="objective-title">Dispatch 16 flights</strong><div class="objective-progress"><div id="goal-bar"></div></div></div>
+          <span id="goal-count">0 / 16</span>
+        </div>
+        <button type="button" id="view-report" class="primary" hidden>View shift report</button>
+        <section id="flight-view" aria-labelledby="flight-board-title">
+          <div class="section-head"><h2 id="flight-board-title">Flight board</h2><span id="gate-count">2 / 3 gates in use</span></div>
+          <div class="runway-strip" aria-label="Airfield status">
+            <div><span id="airfield-label">Runway 09 / 27</span><strong id="airfield-status">Available</strong></div>
+            <div><span>Next takeoff slot</span><strong id="next-slot">Open</strong></div>
+          </div>
+          <p class="empty-board detail-copy" hidden>Awaiting the next scheduled arrival.</p>
           <div id="flight-list" class="flight-list"></div>
+          <details id="upcoming" class="upcoming">
+            <summary><span>Upcoming flights <b id="upcoming-count"></b></span><span id="upcoming-next"></span></summary>
+            <div id="upcoming-list" class="flight-list"></div>
+          </details>
           <div id="flight-detail" class="flight-detail">
             <div class="detail-head">
               <div><p id="detail-kicker"></p><h3 id="detail-title" tabindex="-1"></h3></div>
@@ -92,6 +110,7 @@
               <span>Scheduled takeoff <time></time></span>
               <span class="takeoff-alert" hidden></span>
             </div>
+            <p id="detail-arrival" class="detail-arrival" hidden>Aircraft due <time></time></p>
             <div id="detail-content"></div>
             <fieldset id="gate-picker" class="gate-picker" hidden>
               <legend>Choose a gate</legend>
@@ -101,6 +120,13 @@
             <button type="button" id="close-boarding" class="secondary boarding-cutoff" hidden></button>
             <button type="button" id="flight-upgrade" class="secondary" hidden></button>
           </div>
+        </section>
+        <section id="schedule-view" aria-labelledby="schedule-title" hidden>
+          <div class="section-head"><h2 id="schedule-title">Day schedule</h2><span id="schedule-hours"></span></div>
+          <table class="day-schedule" aria-labelledby="schedule-title">
+            <thead><tr><th scope="col">Flight</th><th scope="col">Arrival</th><th scope="col">Boarding</th><th scope="col">Takeoff</th></tr></thead>
+            <tbody id="schedule-rows"></tbody>
+          </table>
         </section>
         <section id="terminal-view" aria-labelledby="terminal-title" hidden>
           <div class="section-head"><h2 id="terminal-title">Passenger flow</h2></div>
@@ -123,11 +149,6 @@
           </div>
           <button type="button" id="upgrade" class="primary">Open a lane <span>$12,500</span></button>
         </section>
-        <div class="objective">
-          <svg class="icon"><use href="#target"/></svg>
-          <div><p>Shift objective</p><strong id="objective-title">Dispatch 2 aircraft</strong><div class="objective-progress"><div id="goal-bar"></div></div></div>
-          <span id="goal-count">0 / 2</span>
-        </div>
       </div>
     </aside>
   </main>
@@ -141,8 +162,29 @@
       <button type="button" data-speed="1" aria-pressed="true">1×</button>
       <button type="button" data-speed="2" aria-pressed="false">2×</button>
       <button type="button" data-speed="4" aria-pressed="false">4×</button>
+      <button type="button" data-speed="12" aria-pressed="false">12×</button>
     </div>
     <div class="event"><svg class="icon"><use href="#info"/></svg><span id="event" role="status">Boarding underway at A01.</span></div>
   </footer>
+  <dialog id="shift-report" aria-labelledby="report-title">
+    <div class="report-head">
+      <div><p>Northpoint Regional</p><h2 id="report-title">Shift report</h2></div>
+      <button type="button" id="close-report" aria-label="Close shift report">×</button>
+    </div>
+    <div class="report-body">
+      <dl class="report-metrics">
+        <div><dt>On-time departures</dt><dd id="report-on-time"></dd></div>
+        <div><dt>Passengers left behind</dt><dd id="report-missed"></dd></div>
+        <div><dt>Operating profit</dt><dd id="report-profit"></dd></div>
+      </dl>
+      <div id="report-finances" class="flow-stats"></div>
+      <table class="report-flights">
+        <caption>Departure results</caption>
+        <thead><tr><th scope="col">Flight</th><th scope="col">Due</th><th scope="col">Takeoff</th><th scope="col">Left behind</th></tr></thead>
+        <tbody id="report-flights"></tbody>
+      </table>
+    </div>
+    <div class="report-actions"><button type="button" id="restart-shift" class="primary" autofocus>Play the shift again</button></div>
+  </dialog>
 </body>
 </html>

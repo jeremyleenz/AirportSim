@@ -6,11 +6,12 @@
   const mobileLayout = window.matchMedia("(max-width: 760px), (pointer: coarse) and (max-height: 500px)");
   const game = $(".game");
   const currency = new Intl.NumberFormat("en-US", {style: "currency", currency: "USD", maximumFractionDigits: 0});
+  const startingCash = 124500;
   const laneCost = 12500;
+  const handlingCost = 2000;
   const passengerFare = 41;
   const startMinutes = 8 * 60 + 42;
   const secondsPerMinute = 3.4;
-  const minutesFromHoldingToBoarding = 40;
   const minutesFromBoardingToTakeoff = 30;
   const earliestPassengerArrival = 70;
   const latestPassengerArrival = 40;
@@ -26,41 +27,50 @@
     {code: "NR", symbol: "#8b698c", ui: "#d3a9d3"}
   ];
   const routes = [
-    ["Melbourne", 214, 96], ["Brisbane", 507, 90], ["Auckland", 318, 110],
-    ["Hobart", 126, 86], ["Adelaide", 435, 102], ["Wellington", 201, 94]
+    ["Melbourne", 96], ["Brisbane", 90], ["Auckland", 110],
+    ["Hobart", 86], ["Adelaide", 102], ["Wellington", 94]
   ];
-  function makeFlight(route, airline, stage, gate, initialPassengers, boardingMinute,
-    takeoffMinute = boardingMinute + minutesFromBoardingToTakeoff) {
-    const [destination, number, passengers] = routes[route];
-    const boardingAt = boardingMinute * secondsPerMinute;
+  // Arrival and takeoff times are minutes after the shift opens at 08:42.
+  const timetable = [
+    [0, 0, 214, null, 13], [1, 1, 507, null, 46], [2, 2, 318, 0, 70],
+    [3, 3, 126, 20, 84], [4, 0, 435, 25, 97],
+    [5, 1, 201, 115, 171], [0, 2, 216, 124, 184], [1, 3, 509, 135, 196], [2, 0, 320, 150, 215],
+    [3, 1, 128, 255, 311], [4, 2, 437, 260, 323], [5, 3, 203, 270, 339],
+    [0, 0, 218, 410, 465], [1, 1, 511, 423, 482], [2, 2, 322, 480, 550], [3, 3, 130, 580, 644]
+  ].map(([route, airline, number, arrivalMinute, takeoffMinute]) => {
+    const [destination, passengers] = routes[route];
+    const arrivalAt = arrivalMinute === null ? null : arrivalMinute * secondsPerMinute;
+    const boardingAt = Math.max(0, takeoffMinute - minutesFromBoardingToTakeoff) * secondsPerMinute;
     const takeoffAt = takeoffMinute * secondsPerMinute;
+    return {id: airlines[airline].code + number, destination, airline, passengers, arrivalAt, boardingAt, takeoffAt};
+  });
+
+  function makeFlight(plan, index) {
+    const {arrivalAt, takeoffAt, passengers} = plan;
+    const gate = arrivalAt === null ? index : null;
+    const stage = arrivalAt === null ? (gate === 0 ? "boarding" : "parked")
+      : arrivalAt === 0 ? "holding" : "scheduled";
+    const initialPassengers = gate === 0 ? {boarded: 68, gateQueue: 8, gate: 20}
+      : gate === 1 ? {gate: 19, cafe: 5, concourse: 12, security: 38, checkIn: 16} : null;
     const manifest = passengerFlow.manifest(passengers, initialPassengers,
       takeoffAt - earliestPassengerArrival * secondsPerMinute,
       takeoffAt - latestPassengerArrival * secondsPerMinute);
-    return {destination, id: airlines[airline].code + number, airline, passengers, stage, gate, manifest, boardingAt, takeoffAt};
+    return {...plan, stage, gate, manifest};
   }
 
-  function makeArrival(route, airline, now) {
-    const boardingMinute = Math.ceil(now / secondsPerMinute) + minutesFromHoldingToBoarding;
-    return makeFlight(route, airline, "holding", null, null, boardingMinute);
+  function createShift() {
+    return {cash: startingCash, now: 0, speed: 1, paused: false, lanes: 2, missedPassengers: 0, delayMinutes: 0,
+      flights: timetable.map(makeFlight), results: [], selected: "SA507", view: "flights",
+      taxiIn: null, taxiQueue: [], departure: null, nextDeparture: null};
   }
 
-  const state = {
-    cash: 124500, now: 0, speed: 1, paused: false, dispatched: 0, lanes: 2,
-    missedPassengers: 0, delayMinutes: 0,
-    nextArrival: 0, nextRoute: 3,
-    flights: [
-      makeFlight(0, 0, "boarding", 0, {boarded: 68, gateQueue: 8, gate: 20}, 0, 13),
-      makeFlight(1, 1, "parked", 1, {gate: 19, cafe: 5, concourse: 12, security: 38, checkIn: 16}, 16),
-      makeArrival(2, 2, 0)
-    ],
-    selected: "SA507", view: "flights", taxiIn: null, departure: null
-  };
+  let state = createShift();
   const statusText = {
+    scheduled: "Expected",
     parked: "At gate", boarding: "Boarding", closing: "Boarding closed", ready: "Ready", holding: "Holding",
     reserved: "Gate reserved", inbound: "Taxiing in", outbound: "Departing"
   };
-  const flow = passengerFlow.create(state.flights, state.lanes);
+  let flow = passengerFlow.create(state.flights, state.lanes);
   let occupancy = passengerFlow.snapshot(state.flights, flow);
   let occupancyDirty = false;
 
@@ -104,7 +114,9 @@
     const count = addMapCount(button);
     button.addEventListener("click", () => {
       const flight = flightAtGate(gate);
-      selectFromMap(flight?.id || state.flights.find(item => item.stage === "holding")?.id || "gate-" + gate, gate);
+      const arrivals = state.flights.filter(item => item.stage === "holding");
+      const arrival = arrivals.find(item => item.id === state.selected) || arrivals[0];
+      selectFromMap(flight?.id || arrival?.id || "gate-" + gate, gate);
     });
     if (renderer) $("#map-labels").append(button);
     return {element: button, x: x + 2.9, y: 2.85, z: 7.93, count};
@@ -121,6 +133,7 @@
   const holdingPin = $("#map-holding");
   const holdingPinRoute = holdingPin.querySelector(".holding-route");
   const holdingPinTime = holdingPin.querySelector("time");
+  const holdingPinCount = holdingPin.querySelector(".holding-count");
   const holdingPinPosition = {element: holdingPin, x: holdingPosition.x, y: 6.4, z: holdingPosition.z};
   holdingPin.addEventListener("click", () => {
     const flight = flightAtHoldingPoint();
@@ -165,6 +178,7 @@
   }
 
   function notifyTab(view) {
+    if (state.view !== view) $(".panel-body").scrollTop = 0;
     state.view = view;
     paint();
   }
@@ -176,11 +190,16 @@
   }
 
   function isArriving({stage}) {
-    return stage === "holding" || stage === "reserved" || stage === "inbound";
+    return stage === "scheduled" || stage === "holding" || stage === "reserved" || stage === "inbound";
   }
 
-  function flightAtHoldingPoint() {
-    return state.flights.find(({stage}) => stage === "holding" || stage === "reserved");
+  function holdingFlights() {
+    return state.flights.filter(({stage}) => stage === "holding" || stage === "reserved");
+  }
+
+  function flightAtHoldingPoint(waiting = holdingFlights()) {
+    if (state.taxiIn && movementElapsed(state.taxiIn) < 4.5) return null;
+    return waiting.find(flight => flight.id === state.selected) || waiting[0];
   }
 
   function movementElapsed({start, duration}) {
@@ -194,6 +213,14 @@
 
   function taxiwayBusy() {
     return Boolean(state.taxiIn || (state.departure && !departureOnRunway()));
+  }
+
+  function departureBlocked() {
+    return Boolean(state.departure || state.taxiIn);
+  }
+
+  function shiftComplete() {
+    return state.results.length === timetable.length;
   }
 
   function availableGate() {
@@ -280,12 +307,58 @@
   }
 
   function flightStatus(flight) {
+    if (flight === state.nextDeparture) return "Takeoff queued";
     if (flight.stage === "outbound" && departureOnRunway()) return "Taking off";
     return statusText[flight.stage];
   }
 
+  function scheduleTime(seconds) {
+    const time = formatTime(clockMinutes(seconds));
+    return '<time datetime="' + time + '">' + time + '</time>';
+  }
+
+  const scheduleRows = timetable.map(({id, destination, arrivalAt, boardingAt, takeoffAt}) => {
+    const row = document.createElement("tr");
+    const arrival = arrivalAt === null ? '<span class="schedule-initial">At gate</span>' : scheduleTime(arrivalAt);
+    row.innerHTML = '<th scope="row"><button type="button" class="schedule-flight">' + destination +
+      '</button><span class="schedule-destination" hidden>' + destination + '</span><span class="schedule-id">' +
+      id + '<span class="schedule-gate"></span></span></th><td>' + arrival + '</td><td>' + scheduleTime(boardingAt) +
+      '</td><td>' + scheduleTime(takeoffAt) + '<span class="schedule-status"></span></td>';
+    const button = row.querySelector("button");
+    button.setAttribute("aria-label", "Open " + destination + " " + id + " on flight board");
+    button.addEventListener("click", () => {
+      const flight = state.flights.find(item => item.id === id);
+      if (!flight) return;
+      if (flight.stage === "scheduled") $("#upcoming").open = true;
+      select(id);
+      revealFlight();
+    });
+    $("#schedule-rows").append(row);
+    return {id, row, button, destinationLabel: row.querySelector(".schedule-destination"),
+      gateLabel: row.querySelector(".schedule-gate"), status: row.querySelector(".schedule-status")};
+  });
+  $("#schedule-hours").textContent = formatTime(startMinutes) + "–" + formatTime(clockMinutes(timetable.at(-1).takeoffAt));
+
+  function paintSchedule() {
+    const active = new Map(state.flights.map(flight => [flight.id, flight]));
+    const departed = new Map(state.results.map(result => [result.id, result]));
+    for (const {id, row, button, destinationLabel, gateLabel, status} of scheduleRows) {
+      const flight = active.get(id);
+      const result = departed.get(id);
+      const gate = flight && gates[flight.gate];
+      button.hidden = !flight;
+      destinationLabel.hidden = Boolean(flight);
+      gateLabel.textContent = gate ? " · " + gate.name : "";
+      row.dataset.stage = flight?.stage ?? "departed";
+      row.dataset.late = result && result.takeoff > result.due ? "true" : "false";
+      status.textContent = result ? "Left " + formatTime(result.takeoff) : flightStatus(flight);
+      status.hidden = flight?.stage === "scheduled";
+    }
+  }
+
   function paintFlightProgress(button, flight) {
     const {checkIn, security, gate, gateQueue, boarded, boarding, missed, outside} = occupancy.byFlight.get(flight.id);
+    button.querySelector(".flight-progress").hidden = flight.stage === "scheduled" && outside === flight.passengers;
     button.querySelector(".flight-load b").textContent = boarded + " / " + flight.passengers;
     button.querySelector(".flight-progress-track span").style.width = boarded / flight.passengers * 100 + "%";
     const stages = [[checkIn, "at check-in"], [security, "at security"], [gate + gateQueue, "at gate"],
@@ -295,6 +368,12 @@
   }
 
   function paintFlights() {
+    const flightList = $("#flight-list");
+    const upcomingList = $("#upcoming-list");
+    const upcoming = state.flights.filter(flight => flight.stage === "scheduled");
+    $("#upcoming").hidden = upcoming.length === 0;
+    $("#upcoming-count").textContent = upcoming.length;
+    $("#upcoming-next").textContent = upcoming.length ? "Next at " + formatTime(clockMinutes(upcoming[0].arrivalAt)) : "";
     const active = new Set(state.flights.map(flight => flight.id));
     for (const [id, button] of flightElements) {
       if (!active.has(id)) {
@@ -311,6 +390,7 @@
         button.style.setProperty("--livery", airlines[flight.airline].ui);
         button.innerHTML = '<span class="airline-mark">' + planeIcon + '</span>' +
           '<span class="flight-name"><strong></strong><small></small>' +
+          '<span class="flight-arrival" hidden>Aircraft due <time></time></span>' +
           '<span class="flight-takeoff" hidden>Takeoff <time></time></span></span>' +
           '<span class="flight-state">' +
           '<span class="flight-status"></span>' +
@@ -323,20 +403,23 @@
           select(flight.id);
           if (mobileLayout.matches) revealFlight();
         });
-        $("#flight-list").append(button);
         flightElements.set(flight.id, button);
       }
+      const expected = flight.stage === "scheduled";
+      const list = expected ? upcomingList : flightList;
+      if (button.parentNode !== list) list.append(button);
       button.setAttribute("aria-pressed", String(flight.id === state.selected));
       const arriving = isArriving(flight);
       const gate = gates[flight.gate];
       button.querySelector("strong").textContent = arriving ? "To " + flight.destination : flight.destination;
-      button.querySelector("small").textContent = flight.id + " · " + (gate?.name || "Next flight");
+      button.querySelector("small").textContent = gate ? flight.id + " · " + gate.name : flight.id;
+      paintArrivalTime(button.querySelector(".flight-arrival"), flight);
       const badge = button.querySelector(".flight-status");
       const boarding = button.querySelector(".flight-boarding");
       paintBoardingTime(boarding, flight);
       paintTakeoffTime(button.querySelector(".flight-takeoff"), button.querySelector(".takeoff-alert"), flight, button);
       badge.hidden = !boarding.hidden;
-      badge.dataset.stage = flight.stage;
+      badge.dataset.stage = flight === state.nextDeparture ? "queued" : flight.stage;
       badge.textContent = flightStatus(flight);
       paintFlightProgress(button, flight);
       if (!boarding.hidden) {
@@ -344,19 +427,24 @@
           ? "Boarding due" : "Boarding time";
       }
     }
-    if (!state.flights.length) {
-      if (!$("#empty-board")) {
-        const message = document.createElement("p");
-        message.className = "detail-copy";
-        message.id = "empty-board";
-        message.textContent = "Waiting for the next arrival.";
-        $("#flight-list").append(message);
-      }
-    } else {
-      $("#empty-board")?.remove();
-    }
+    $("#flight-view").querySelector(".empty-board").hidden = shiftComplete() || upcoming.length !== state.flights.length;
     const occupied = gates.filter((_, index) => flightAtGate(index)).length;
     $("#gate-count").textContent = occupied + " / " + gates.length + " gates in use";
+    const {departure, taxiIn, nextDeparture} = state;
+    $("#airfield-label").textContent = !departureOnRunway() && (departure || taxiIn) ? "Taxiway" : "Runway 09 / 27";
+    $("#airfield-status").textContent = departure ? departure.flight.id + (departureOnRunway() ? " taking off" : " taxiing out")
+      : taxiIn ? taxiIn.flight.id + " taxiing in" : "Available";
+    $("#next-slot").textContent = nextDeparture?.id ?? "Open";
+    $("#next-slot").classList.toggle("reserved-slot", Boolean(nextDeparture));
+  }
+
+  function paintArrivalTime(container, flight) {
+    container.hidden = flight?.stage !== "scheduled";
+    if (!container.hidden) {
+      const time = container.querySelector("time");
+      time.dateTime = formatTime(clockMinutes(flight.arrivalAt));
+      time.textContent = time.dateTime;
+    }
   }
 
   function progress(label, value, percentage) {
@@ -375,13 +463,17 @@
     const close = $("#close-boarding");
     const upgrade = $("#flight-upgrade");
     const takeoff = $("#detail-takeoff");
+    const card = flight && flightElements.get(flight.id);
+    if (card && card.nextElementSibling !== panel) card.after(panel);
+    if (!card && panel.parentNode !== $("#flight-view")) $("#flight-view").append(panel);
     paintTakeoffTime(takeoff, takeoff.querySelector(".takeoff-alert"), flight, takeoff);
+    paintArrivalTime($("#detail-arrival"), flight);
     paintBoardingTime($("#detail-boarding"), flight);
     paintGatePicker(flight, gate);
     close.hidden = upgrade.hidden = true;
     panel.hidden = !flight && gate < 0;
     if (panel.hidden) return;
-    action.hidden = !flight || flight.stage === "boarding";
+    action.hidden = !flight || flight.stage === "boarding" || flight.stage === "scheduled";
     if (!flight) {
       $("#detail-kicker").textContent = "Gate " + gates[gate].name;
       $("#detail-title").textContent = "Stand available";
@@ -391,13 +483,13 @@
     const {stage, passengers, id, destination} = flight;
     const counts = occupancy.byFlight.get(id);
     const arriving = isArriving(flight);
-    $("#detail-kicker").textContent = (arriving ? "Next flight" : gates[flight.gate].name) + " / " + id;
+    $("#detail-kicker").textContent = arriving ? id : gates[flight.gate].name + " / " + id;
     $("#detail-title").textContent = arriving ? "To " + destination : destination;
-    if (stage === "holding") {
-      $("#detail-content").innerHTML = '<p class="detail-copy">Aircraft holding for a gate.</p>';
+    if (stage === "scheduled" || stage === "holding") {
+      $("#detail-content").innerHTML = stage === "holding" ? '<p class="detail-copy">Aircraft holding for a gate.</p>' : "";
     } else if (stage === "reserved") {
       $("#detail-content").innerHTML = '<p class="detail-copy">Gate ' + gates[flight.gate].name +
-        ' is reserved. Taxi-in starts when the departing aircraft reaches the runway.</p>';
+        ' is reserved. Taxi-in starts when the taxiway clears.</p>';
     } else if (stage === "inbound") {
       $("#detail-content").innerHTML = '<p class="detail-copy">Taxiing to gate ' + gates[flight.gate].name + '.</p>';
     } else if (stage === "outbound") {
@@ -418,19 +510,22 @@
       $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
         stat("Passengers in terminal", (passengers - counts.outside) + " / " + passengers) + '</div>');
     }
-    const departureBlocked = Boolean(state.departure || state.taxiIn);
     const waiting = passengers - counts.boarded - counts.boarding - counts.missed;
+    const nextDeparture = state.nextDeparture;
+    const readyAction = flight === nextDeparture ? "Release next takeoff slot"
+      : departureBlocked() ? (nextDeparture ? "Take " + nextDeparture.id + "’s runway slot" : "Reserve next takeoff slot")
+      : "Clear for departure";
     const labels = {
       parked: "Start boarding",
       closing: "Finishing boarding",
-      ready: departureBlocked ? "Airfield in use" : "Clear for departure",
+      ready: readyAction,
       holding: gate >= 0 ? "Assign gate " + gates[gate].name
         : availableGate() >= 0 ? "Choose an open gate" : "No open gates",
       reserved: "Waiting for taxi clearance",
       inbound: "Taxiing to gate", outbound: "Departure in progress"
     };
     action.textContent = labels[stage] ?? "";
-    action.disabled = stage !== "parked" && !(stage === "ready" && !departureBlocked) &&
+    action.disabled = stage !== "parked" && stage !== "ready" &&
       !(stage === "holding" && gate >= 0);
     close.hidden = stage !== "boarding" || waiting === 0;
     if (!close.hidden) close.textContent = "Close boarding · " + waiting + (waiting === 1 ? " empty seat" : " empty seats");
@@ -446,7 +541,8 @@
     }
     const minutes = clockMinutes(state.now);
     const time = formatTime(minutes);
-    const satisfaction = Math.min(100, Math.max(55, 84 + state.dispatched * 2 + (state.lanes - 2) * 4 -
+    const dispatched = state.results.length;
+    const satisfaction = Math.min(100, Math.max(55, 84 + dispatched * 2 + (state.lanes - 2) * 4 -
       Math.floor((occupancy.security.length - 38) / 16) - Math.ceil(state.missedPassengers / 5) - Math.floor(state.delayMinutes / 5)));
     $("#cash").textContent = currency.format(state.cash);
     $("#passengers").textContent = occupancy.total;
@@ -454,18 +550,28 @@
     $(".clock-day").textContent = "DAY " + String(1 + Math.floor(minutes / 1440)).padStart(2, "0");
     $("#clock").textContent = time;
     $("#clock").setAttribute("datetime", time);
-    $("#run-label").textContent = state.paused ? "Paused" : "Running";
-    $("#run-label").classList.toggle("paused", state.paused);
+    const complete = shiftComplete();
+    $("#run-label").textContent = complete ? "Complete" : state.paused ? "Paused" : "Running";
+    $("#run-label").classList.toggle("paused", state.paused && !complete);
     $("#pause-icon").setAttribute("href", state.paused ? "#play" : "#pause");
     $("#pause-toggle").setAttribute("aria-label", state.paused ? "Resume simulation" : "Pause simulation");
-    document.querySelectorAll("[data-speed]").forEach(button => button.setAttribute("aria-pressed", String(!state.paused && state.speed === Number(button.dataset.speed))));
+    $("#pause-toggle").disabled = complete;
+    document.querySelectorAll("[data-speed]").forEach(button => {
+      button.disabled = complete;
+      button.setAttribute("aria-pressed", String(!complete && !state.paused && state.speed === Number(button.dataset.speed)));
+    });
     const terminalOpen = state.view === "terminal";
+    const scheduleOpen = state.view === "schedule";
+    const flightsOpen = state.view === "flights";
     $("#terminal-tab").setAttribute("aria-pressed", String(terminalOpen));
-    $("#flights-tab").setAttribute("aria-pressed", String(!terminalOpen));
+    $("#schedule-tab").setAttribute("aria-pressed", String(scheduleOpen));
+    $("#flights-tab").setAttribute("aria-pressed", String(flightsOpen));
     $("#terminal-view").hidden = !terminalOpen;
-    $("#flight-view").hidden = terminalOpen;
+    $("#schedule-view").hidden = !scheduleOpen;
+    $("#flight-view").hidden = !flightsOpen || complete;
     paintFlights();
     paintDetail();
+    if (scheduleOpen) paintSchedule();
     if (terminalOpen) {
       $("#check-in-count").textContent = occupancy.checkIn.length;
       $("#landside-count").textContent = occupancy.landside.length;
@@ -480,13 +586,13 @@
         count.textContent = occupancy.gates[index].length;
       });
       const upgrade = $("#upgrade");
-      upgrade.disabled = state.lanes === 3 || state.cash < laneCost;
+      upgrade.disabled = complete || state.lanes === 3 || state.cash < laneCost;
       upgrade.innerHTML = state.lanes === 3 ? "All lanes open" : "Open a lane <span>" + currency.format(laneCost) + "</span>";
     }
-    const goal = Math.min(state.dispatched, 2);
-    $("#goal-bar").style.width = goal * 50 + "%";
-    $("#goal-count").textContent = goal + " / 2";
-    $("#objective-title").textContent = goal === 2 ? "Shift objective complete" : "Dispatch 2 aircraft";
+    $("#goal-bar").style.width = dispatched / timetable.length * 100 + "%";
+    $("#goal-count").textContent = dispatched + " / " + timetable.length;
+    $("#objective-title").textContent = complete ? "Operating day complete" : "Dispatch " + timetable.length + " flights";
+    $("#view-report").hidden = !complete;
 
     const gate = selectedGate();
     mapPins.forEach(({element, count}, index) => {
@@ -498,7 +604,8 @@
       element.setAttribute("aria-label", "Gate " + gates[index].name + ", " +
         (flight ? flightStatus(flight) : "available") + ", " + waiting + " waiting");
     });
-    const holding = flightAtHoldingPoint();
+    const waiting = holdingFlights();
+    const holding = flightAtHoldingPoint(waiting);
     if (holding) {
       const route = holding.id + " to " + holding.destination;
       const {time} = takeoffSchedule(holding);
@@ -506,7 +613,9 @@
       holdingPinTime.dateTime = time;
       holdingPinTime.textContent = time;
       holdingPin.setAttribute("aria-pressed", String(holding.id === state.selected));
-      holdingPin.setAttribute("aria-label", statusText[holding.stage] + ". Next flight " + route + ". Takeoff at " + time);
+      holdingPinCount.hidden = waiting.length === 1;
+      holdingPinCount.textContent = waiting.length;
+      holdingPin.setAttribute("aria-label", waiting.length + " awaiting taxi-in. " + route + ". Takeoff at " + time);
     }
     for (const {count, section} of mapSigns) {
       if (count) count.textContent = occupancy[section].length;
@@ -576,21 +685,35 @@
       flight.stage = "boarding";
       announce("Boarding started at " + gates[flight.gate].name + ".");
     } else if (flight.stage === "ready") {
-      flight.stage = "outbound";
-      state.departure = makeDeparture(flight);
-      announce(flight.id + " cleared for departure.");
+      if (state.nextDeparture === flight) {
+        state.nextDeparture = null;
+        announce(flight.id + " released the next takeoff slot.");
+      } else if (departureBlocked()) {
+        state.nextDeparture = flight;
+        announce(flight.id + " has the next takeoff slot.");
+      } else {
+        clearForDeparture(flight);
+      }
     } else if (flight.stage === "holding") {
       const gate = selectedGate();
       if (gate < 0) return;
       flight.gate = gate;
       if (taxiwayBusy()) {
         flight.stage = "reserved";
+        state.taxiQueue.push(flight);
         announce(gates[gate].name + " reserved for " + flight.id + ".");
       } else {
         startTaxiIn(flight);
       }
     }
     paint();
+  }
+
+  function clearForDeparture(flight) {
+    state.nextDeparture = null;
+    flight.stage = "outbound";
+    state.departure = makeDeparture(flight);
+    announce(flight.id + " cleared for departure.");
   }
 
   function closeSelectedBoarding() {
@@ -604,9 +727,7 @@
     paint();
   }
 
-  function update(dt) {
-    if (state.paused) return;
-    const simDelta = dt * state.speed;
+  function advanceShift(simDelta) {
     state.now += simDelta;
     const changed = passengerFlow.advance(state.flights, flow, state.now, simDelta, state.lanes,
       flight => {
@@ -620,38 +741,70 @@
       occupancyDirty = true;
       flight.stage = "parked";
       announce(flight.id + " parked at " + gates[flight.gate].name + ".");
-      state.nextArrival = state.now + 18;
     }
     if (state.departure && movementElapsed(state.departure) === state.departure.duration) {
       const {flight, start, liftoff} = state.departure;
       state.departure = null;
       occupancyDirty = true;
       const boarded = flight.manifest.filter(person => person.zone === "boarded").length;
-      const income = 3800 + boarded * passengerFare;
+      const revenue = 3800 + boarded * passengerFare;
       const liftoffMinute = clockMinutes(start + liftoff);
-      state.delayMinutes += Math.max(0, liftoffMinute - clockMinutes(flight.takeoffAt));
-      const completed = ++state.dispatched === 2;
-      state.cash += income + (completed ? 10000 : 0);
+      const due = clockMinutes(flight.takeoffAt);
+      state.delayMinutes += Math.max(0, liftoffMinute - due);
+      state.cash += revenue - handlingCost;
+      state.results.push({id: flight.id, destination: flight.destination, due, takeoff: liftoffMinute,
+        missed: flight.passengers - boarded, revenue});
       state.flights = state.flights.filter(item => item !== flight);
       if (state.selected === flight.id) state.selected = state.flights[0]?.id || "gate-" + flight.gate;
-      announce(completed ? "Shift complete. $10,000 bonus earned." : flight.id + " airborne with " + boarded +
-        " passengers. " + currency.format(income) + " earned.");
+      if (shiftComplete()) {
+        state.paused = true;
+        announce("Operating day complete. Your shift report is ready.");
+        paint();
+        showShiftReport();
+        return;
+      }
+      announce(flight.id + " airborne with " + boarded + " passengers. " + currency.format(revenue - handlingCost) + " net.");
     }
-    if (!taxiwayBusy()) {
-      const waiting = state.flights.find(item => item.stage === "reserved");
-      if (waiting) startTaxiIn(waiting);
+    if (state.nextDeparture && !departureBlocked()) clearForDeparture(state.nextDeparture);
+    if (state.taxiQueue.length && !taxiwayBusy()) startTaxiIn(state.taxiQueue.shift());
+    for (const flight of state.flights) {
+      if (flight.stage === "scheduled" && state.now >= flight.arrivalAt) {
+        flight.stage = "holding";
+        occupancyDirty = true;
+        announce(flight.id + " awaiting a gate assignment.");
+      }
     }
-    if (state.now > state.nextArrival && !state.flights.some(isArriving)) {
-      let route, airline;
-      do {
-        route = state.nextRoute % routes.length;
-        airline = state.nextRoute++ % airlines.length;
-      } while (state.flights.some(flight => flight.destination === routes[route][0]));
-      const flight = makeArrival(route, airline, state.now);
-      state.flights.push(flight);
-      occupancyDirty = true;
-      announce(flight.id + " holding short for a gate assignment.");
+  }
+
+  function update(dt) {
+    if (state.paused) return;
+    let remaining = dt * state.speed;
+    // Keep queue processing and walking on small steps at accelerated speeds.
+    while (remaining > 0 && !shiftComplete()) {
+      const step = Math.min(remaining, .05);
+      advanceShift(step);
+      remaining -= step;
     }
+  }
+
+  const report = $("#shift-report");
+
+  function showShiftReport() {
+    const results = state.results.slice().sort((a, b) => a.due - b.due);
+    const onTime = results.filter(({due, takeoff}) => takeoff <= due).length;
+    const revenue = results.reduce((total, flight) => total + flight.revenue, 0);
+    const handling = results.length * handlingCost;
+    const security = (state.lanes - 2) * laneCost;
+    $("#report-on-time").textContent = onTime + " / " + results.length;
+    $("#report-missed").textContent = results.reduce((total, flight) => total + flight.missed, 0);
+    $("#report-profit").textContent = currency.format(revenue - handling - security);
+    $("#report-finances").innerHTML = stat("Flight revenue", currency.format(revenue)) +
+      stat("Ground handling", currency.format(-handling)) + stat("Extra security lane", currency.format(0 - security));
+    $("#report-flights").innerHTML = results.map(({id, destination, due, takeoff, missed}) =>
+      '<tr><th scope="row">' + id + '<span>' + destination + '</span></th><td>' + formatTime(due) +
+      '</td><td>' + formatTime(takeoff) + (takeoff > due ? '<span class="report-late">+' + (takeoff - due) + ' min</span>' : '') +
+      '</td><td>' + missed + '</td></tr>').join("");
+    report.showModal();
   }
 
   const aircraftSelection = $("#aircraft-selection");
@@ -673,9 +826,9 @@
 
   function draw() {
     if (!renderer || (mobileLayout.matches && game.dataset.mobileView === "operations")) return;
-    const moving = state.flights.map(flight => ({
-      mesh: planes[flight.airline], ...aircraftPosition(flight), flightId: flight.id
-    }));
+    const holding = flightAtHoldingPoint();
+    const moving = state.flights.filter(flight => !isArriving(flight) || flight.stage === "inbound" || flight === holding)
+      .map(flight => ({mesh: planes[flight.airline], ...aircraftPosition(flight), flightId: flight.id}));
     const selectedAircraft = moving.find(object => object.flightId === state.selected);
     const carTravel = state.now * 2.4;
     for (const vehicle of scene.traffic) {
@@ -700,24 +853,46 @@
       element.style.top = top + "px";
       element.hidden = left < 18 || top < 19 || left > renderer.view.width - 18 || top > renderer.view.height - 18 ||
         (element.className === "map-note" && renderer.view.width < 520) ||
-        (element === holdingPin && (!flightAtHoldingPoint() || left < 90 || left > renderer.view.width - 90));
+        (element === holdingPin && (!holding || left < 90 || left > renderer.view.width - 90));
     }
   }
 
   function togglePause() {
+    if (shiftComplete()) return;
     state.paused = !state.paused;
     paint();
   }
 
   $("#flights-tab").addEventListener("click", () => notifyTab("flights"));
+  $("#schedule-tab").addEventListener("click", () => notifyTab("schedule"));
   $("#terminal-tab").addEventListener("click", () => notifyTab("terminal"));
   $("#show-map").addEventListener("click", () => showMobileView("map"));
   $("#show-operations").addEventListener("click", () => showMobileView("operations"));
   $("#flight-action").addEventListener("click", command);
   $("#close-boarding").addEventListener("click", closeSelectedBoarding);
   $("#pause-toggle").addEventListener("click", togglePause);
+  $("#view-report").addEventListener("click", showShiftReport);
+  $("#close-report").addEventListener("click", () => report.close());
+  $("#restart-shift").addEventListener("click", () => {
+    state = createShift();
+    flow = passengerFlow.create(state.flights, state.lanes);
+    occupancyDirty = true;
+    $("#upcoming").open = false;
+    report.close();
+    $(".panel-body").scrollTop = 0;
+    showMobileView("map");
+    fit();
+    announce("Operating day started. Boarding underway at A01.");
+    paint();
+    (mobileLayout.matches ? $("#show-operations") : $("#flights-tab")).focus({preventScroll: true});
+  });
+  report.addEventListener("close", () => {
+    if (!shiftComplete()) return;
+    if (mobileLayout.matches) showMobileView("operations");
+    $("#view-report").focus();
+  });
   function openLane() {
-    if (state.lanes !== 2 || state.cash < laneCost) return;
+    if (shiftComplete() || state.lanes !== 2 || state.cash < laneCost) return;
     state.lanes++;
     state.cash -= laneCost;
     announce("Security lane 3 is now open.");
@@ -839,7 +1014,7 @@
     canvas.addEventListener("pointerleave", () => canvas.removeAttribute("data-aircraft-hover"));
   }
   window.addEventListener("keydown", event => {
-    if (event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+    if (report.open || event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
     if (event.code === "Space" && !["BUTTON", "INPUT", "TEXTAREA"].includes(event.target.tagName)) {
       event.preventDefault();
       togglePause();
@@ -854,7 +1029,7 @@
   function frame(timestamp) {
     update(Math.max(0, Math.min(.15, (timestamp - lastFrame) / 1000)));
     lastFrame = timestamp;
-    const drawDue = requestDraw || (!state.paused && timestamp - lastDraw >= 32);
+    const drawDue = requestDraw || (!shiftComplete() && !state.paused && timestamp - lastDraw >= 32);
     if ((drawDue || !renderer) && (occupancyDirty || (!state.paused && timestamp - lastPaint > 160))) {
       paint();
       lastPaint = timestamp;

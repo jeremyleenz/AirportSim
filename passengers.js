@@ -520,7 +520,7 @@ const passengerFlow = (() => {
     }
     for (const flight of flights) {
       for (const person of flight.manifest) {
-        if (person.zone === "missed") continue;
+        if (person.zone === "missed" || person.zone === "outside" || person.zone === "boarded") continue;
         person.moving = false;
         if (person.cafeUntil !== undefined || person.strollUntil !== undefined) {
           changed = recallActivities(person, flight, flow, now) || changed;
