@@ -64,9 +64,12 @@ button, h1, h2, h3, p { margin: 0; }
 .map-gate { position: absolute; pointer-events: auto; translate: -50% -100%; display: flex; gap: 6px; align-items: center; background: #14272d; border: 1px solid #95b4b2; color: var(--light); font: 700 .84rem var(--mono); border-radius: 6px; padding: 6px 8px; box-shadow: 0 3px 8px #12292469; }
 .map-gate i { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
 .map-gate[data-state="boarding"] i, .map-gate[data-state="ready"] i { background: var(--mint); }
-.map-gate[data-state="parked"] i, .map-gate[data-state="reserved"] i { background: var(--amber); }
+.map-gate[data-state="parked"] i, .map-gate[data-state="reserved"] i, .map-gate[data-state="holding"] i { background: var(--amber); }
 .map-gate[aria-pressed="true"] { background: var(--mint); border-color: #ecfff3; color: #162e28; }
 .map-gate[aria-pressed="true"] i { background: #426a53; }
+.map-holding { align-items: baseline; text-align: left; white-space: nowrap; }
+.holding-time { display: block; margin-top: 3px; font: 500 .73rem var(--mono); }
+.holding-time time { font-weight: 700; }
 .map-count { border-left: 1px solid currentColor; padding-left: .43em; letter-spacing: 0; opacity: .86; }
 .map-note { position: absolute; translate: -50% -50%; font: 700 .65rem var(--mono); letter-spacing: .13em; color: #f5f9ee; background: #364e4bdc; padding: 4px 6px; border-radius: 3px; white-space: nowrap; }
 .map-note .map-count { display: inline-block; margin-left: .48em; }

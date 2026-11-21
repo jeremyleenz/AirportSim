@@ -54,7 +54,12 @@
       <canvas id="scene" aria-label="3D airport map"></canvas>
       <div id="aircraft-selection" class="aircraft-selection" aria-hidden="true" hidden><i></i><i></i><i></i><i></i></div>
       <div class="map-heading"><span>Northpoint Regional</span><strong>Airport view</strong><small><i></i> TERMINAL 1 · NPT</small></div>
-      <div id="map-labels" class="map-labels"></div>
+      <div id="map-labels" class="map-labels">
+        <button id="map-holding" class="map-gate map-holding" type="button" data-state="holding" hidden>
+          <i aria-hidden="true"></i>
+          <span><span class="holding-route"></span><span class="holding-time">Takeoff <time></time></span></span>
+        </button>
+      </div>
       <div class="map-controls">
         <div class="zoom-group">
           <button id="zoom-in" title="Zoom in" aria-label="Zoom in"><svg class="icon"><use href="#plus"/></svg></button>

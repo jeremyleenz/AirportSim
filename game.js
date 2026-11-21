@@ -7,6 +7,7 @@
   const laneCost = 12500;
   const startMinutes = 8 * 60 + 42;
   const secondsPerMinute = 3.4;
+  const minutesFromHoldingToBoarding = 40;
   const minutesFromBoardingToTakeoff = 30;
   const takeoffWarningMinutes = 10;
   const inboundTaxiSpeed = 4;
@@ -25,13 +26,18 @@
     ["Melbourne", 214, 96], ["Brisbane", 507, 90], ["Auckland", 318, 110],
     ["Hobart", 126, 86], ["Adelaide", 435, 102], ["Wellington", 201, 94]
   ];
-  function makeFlight(route, airline, stage, gate, initialPassengers, boardingMinute = null,
-    takeoffMinute = boardingMinute === null ? null : boardingMinute + minutesFromBoardingToTakeoff) {
+  function makeFlight(route, airline, stage, gate, initialPassengers, boardingMinute,
+    takeoffMinute = boardingMinute + minutesFromBoardingToTakeoff) {
     const [destination, number, passengers] = routes[route];
     const manifest = initialPassengers ? passengerFlow.manifest(passengers, initialPassengers, "checkIn") : [];
-    const boardingAt = (boardingMinute ?? 0) * secondsPerMinute;
-    const takeoffAt = takeoffMinute === null ? null : takeoffMinute * secondsPerMinute;
+    const boardingAt = boardingMinute * secondsPerMinute;
+    const takeoffAt = takeoffMinute * secondsPerMinute;
     return {destination, id: airlines[airline].code + number, airline, passengers, stage, gate, manifest, boardingAt, takeoffAt};
+  }
+
+  function makeArrival(route, airline, now) {
+    const boardingMinute = Math.ceil(now / secondsPerMinute) + minutesFromHoldingToBoarding;
+    return makeFlight(route, airline, "holding", null, null, boardingMinute);
   }
 
   const state = {
@@ -40,7 +46,7 @@
     flights: [
       makeFlight(0, 0, "boarding", 0, {boarded: 68, gateQueue: 8, gate: 20}, 0, 13),
       makeFlight(1, 1, "parked", 1, {gate: 19, cafe: 5, concourse: 12, security: 38}, 16),
-      makeFlight(2, 2, "holding", null)
+      makeArrival(2, 2, 0)
     ],
     selected: "SA507", view: "flights", taxiIn: null, departure: null
   };
@@ -102,6 +108,14 @@
     createLabel("WALKWAYS", 13.3, 1.65, 16.9, "concourse"),
     createLabel("RWY 09 / 27", -22, .05, runwayZ - 9.4)
   ] : [];
+  const holdingPin = $("#map-holding");
+  const holdingPinRoute = holdingPin.querySelector(".holding-route");
+  const holdingPinTime = holdingPin.querySelector("time");
+  const holdingPinPosition = {element: holdingPin, x: holdingPosition.x, y: 6.4, z: holdingPosition.z};
+  holdingPin.addEventListener("click", () => {
+    const flight = flightAtHoldingPoint();
+    if (flight) select(flight.id);
+  });
   $("#lounge-counts").innerHTML = gates.map(({name}) => stat(name, 0)).join("");
 
   function announce(message) {
@@ -129,6 +143,14 @@
     const departure = state.departure;
     const pushedBack = departure && movementProgress(departure) >= pushbackEnd ? departure.flight : null;
     return state.flights.find(flight => flight.gate === gate && flight !== pushedBack);
+  }
+
+  function isArriving({stage}) {
+    return stage === "holding" || stage === "reserved" || stage === "inbound";
+  }
+
+  function flightAtHoldingPoint() {
+    return state.flights.find(({stage}) => stage === "holding" || stage === "reserved");
   }
 
   function movementProgress({start, duration}) {
@@ -201,7 +223,7 @@
   }
 
   function takeoffSchedule(flight) {
-    if (flight?.takeoffAt == null) return null;
+    if (!flight) return null;
     if (state.departure?.flight === flight && movementProgress(state.departure) >= liftoff) return null;
 
     const scheduledMinute = clockMinutes(flight.takeoffAt);
@@ -247,13 +269,15 @@
           '<span class="flight-status"></span>' +
           '<span class="flight-boarding" hidden><span class="boarding-label"></span><time></time></span>' +
           '<span class="takeoff-alert" hidden></span></span>';
-        button.querySelector("strong").textContent = flight.destination;
         button.addEventListener("click", () => select(flight.id));
         $("#flight-list").append(button);
         flightElements.set(flight.id, button);
       }
       button.setAttribute("aria-pressed", String(flight.id === state.selected));
-      button.querySelector("small").textContent = flight.id + " · " + (gates[flight.gate]?.name || "Arrival");
+      const arriving = isArriving(flight);
+      const gate = gates[flight.gate];
+      button.querySelector("strong").textContent = arriving ? "To " + flight.destination : flight.destination;
+      button.querySelector("small").textContent = flight.id + " · " + (gate?.name || "Next flight");
       const badge = button.querySelector(".flight-status");
       const boarding = button.querySelector(".flight-boarding");
       paintBoardingTime(boarding, flight);
@@ -310,10 +334,11 @@
     }
     const {stage, passengers, id, destination} = flight;
     const counts = occupancy.byFlight.get(id);
-    $("#detail-kicker").textContent = (gates[flight.gate]?.name || "Inbound") + " / " + id;
-    $("#detail-title").textContent = destination;
+    const arriving = isArriving(flight);
+    $("#detail-kicker").textContent = (arriving ? "Next flight" : gates[flight.gate].name) + " / " + id;
+    $("#detail-title").textContent = arriving ? "To " + destination : destination;
     if (stage === "holding") {
-      $("#detail-content").innerHTML = '<p class="detail-copy">Aircraft holding short.</p>';
+      $("#detail-content").innerHTML = '<p class="detail-copy">Aircraft holding for a gate.</p>';
     } else if (stage === "reserved") {
       $("#detail-content").innerHTML = '<p class="detail-copy">Gate ' + gates[flight.gate].name +
         ' is reserved. Taxi-in starts when the departing aircraft reaches the runway.</p>';
@@ -401,6 +426,16 @@
       element.setAttribute("aria-label", "Gate " + gates[index].name + ", " +
         (flight ? statusText[flight.stage] : "available") + ", " + waiting + " waiting");
     });
+    const holding = flightAtHoldingPoint();
+    if (holding) {
+      const route = holding.id + " to " + holding.destination;
+      const {time} = takeoffSchedule(holding);
+      holdingPinRoute.textContent = route;
+      holdingPinTime.dateTime = time;
+      holdingPinTime.textContent = time;
+      holdingPin.setAttribute("aria-pressed", String(holding.id === state.selected));
+      holdingPin.setAttribute("aria-label", statusText[holding.stage] + ". Next flight " + route + ". Takeoff at " + time);
+    }
     for (const {count, section} of mapSigns) {
       if (count) count.textContent = occupancy[section].length;
     }
@@ -492,8 +527,6 @@
       state.taxiIn = null;
       occupancyDirty = true;
       flight.stage = "parked";
-      flight.boardingAt = (Math.ceil(state.now / secondsPerMinute) + 28) * secondsPerMinute;
-      flight.takeoffAt = flight.boardingAt + minutesFromBoardingToTakeoff * secondsPerMinute;
       flight.manifest = passengerFlow.manifest(flight.passengers);
       announce(flight.id + " parked at " + gates[flight.gate].name + ".");
       state.nextArrival = state.now + 18;
@@ -514,13 +547,13 @@
       if (waiting) startTaxiIn(waiting);
     }
     if (state.now > state.nextArrival && availableGate() >= 0 &&
-      !state.flights.some(flight => flight.stage === "holding" || flight.stage === "reserved" || flight.stage === "inbound")) {
+      !state.flights.some(isArriving)) {
       let route, airline;
       do {
         route = state.nextRoute % routes.length;
         airline = state.nextRoute++ % airlines.length;
       } while (state.flights.some(flight => flight.destination === routes[route][0]));
-      const flight = makeFlight(route, airline, "holding", null);
+      const flight = makeArrival(route, airline, state.now);
       state.flights.push(flight);
       occupancyDirty = true;
       announce(flight.id + " holding short for a gate assignment.");
@@ -562,12 +595,13 @@
     if (gate) moving.push({mesh: scene.highlight, x: gate.x, castShadow: false});
     renderer.render([...scene.fixed, ...moving, ...people]);
     showAircraftSelection(selectedAircraft);
-    for (const {x, y, z, element} of [...mapPins, ...mapSigns]) {
+    for (const {x, y, z, element} of [...mapPins, ...mapSigns, holdingPinPosition]) {
       const [left, top] = renderer.project(x, y, z);
       element.style.left = left + "px";
       element.style.top = top + "px";
       element.hidden = left < 18 || top < 19 || left > renderer.view.width - 18 || top > renderer.view.height - 18 ||
-        (element.className === "map-note" && renderer.view.width < 520);
+        (element.className === "map-note" && renderer.view.width < 520) ||
+        (element === holdingPin && (!flightAtHoldingPoint() || left < 90 || left > renderer.view.width - 90));
     }
   }
 
