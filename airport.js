@@ -15,6 +15,25 @@ const airport = (() => {
   const securityQueue = {centers: [-7.2, -.7, 5.8], front: 23.25, width: 4.3};
   const queueRows = 9;
   const queueSpacing = .47;
+  const loungeBenches = [-7.32, 1.28, 4.17, 7.06];
+  const cafeTables = [-30.8, -27.2, -23.6, -20.0, -16.8].map(x => ({x, z: x < -25 ? 24.25 : 23.35}));
+
+  function loungeSeats(x) {
+    return loungeBenches.flatMap(dx => [10.25, 12.8].flatMap((z, row) =>
+      [-.86, 0, .86].map(seat => ({
+        position: [x + dx + seat, floor, z],
+        angle: row ? Math.PI : 0,
+        aisleX: x + (dx < 0 ? -9.15 : 9.16),
+        seated: true
+      }))));
+  }
+
+  const cafeSeats = cafeTables.flatMap(({x, z}) => [-1, 1].map(side => ({
+    position: [x, floor + .03, z + .91 * side],
+    angle: side > 0 ? Math.PI : 0,
+    aisleZ: side > 0 ? 26.77 : 21.35,
+    seated: true
+  })));
 
   function bridgePath(x) {
     return [[x - 4.7, floor, 8.18], [x - 4.7, floor, 7.5],
@@ -232,7 +251,7 @@ const airport = (() => {
       bridge(mesh, x);
       mesh.rect(x + .4, floor + .018, 11.8, 19.15, 5.45, "#a6b9b7");
       mesh.rect(x + .4, floor + .020, 14.36, 19.05, .11, "#e3e8d1");
-      for (const dx of [-7.32, 1.28, 4.17, 7.06]) {
+      for (const dx of loungeBenches) {
         bench(mesh, x + dx, 10.25, "#628388");
         bench(mesh, x + dx, 12.8, "#55797d", -1);
       }
@@ -253,8 +272,7 @@ const airport = (() => {
     mesh.box(-29.2, floor + .63, 20.07, 8.06, .13, .98, "#f3e8cf");
     for (let i = 0; i < 7; i++) mesh.box(-32.6 + i * .51, floor + .76, 20.21, .26, .17, .28,
       ["#79614b", "#c88454", "#eee2bf"][i % 3]);
-    for (const x of [-30.8, -27.2, -23.6, -20.0, -16.8]) {
-      const z = x < -25 ? 24.25 : 23.35;
+    for (const {x, z} of cafeTables) {
       mesh.ring(x, floor, z, .17, .14, .6, "#7b6853", 8);
       mesh.ring(x, floor + .6, z, .58, .58, .09, "#f0e8d5", 12);
       for (const dz of [-.91, .91]) {
@@ -445,8 +463,22 @@ const airport = (() => {
     return mesh;
   }
 
+  function seatedTraveler(tint, skin) {
+    const mesh = new Mesh();
+    for (const x of [-.085, .085]) {
+      mesh.box(x, .29, .107, .12, .10, .29, "#475458");
+      mesh.box(x, .025, .244, .10, .32, .13, "#475458");
+      mesh.box(x, .018, .285, .12, .07, .18, "#3f4b50");
+    }
+    mesh.ring(0, .326, -.044, .15, .185, .191, tint, 6);
+    mesh.ring(0, .516, -.03, .113, .111, .119, skin, 8);
+    mesh.ring(0, .627, -.038, .11, .08, .047, "#4d5146", 7);
+    mesh.box(.27, .01, -.17, .19, .23, .19, tint);
+    return mesh;
+  }
+
   const terminalPaths = {
-    queueRows, queueSpacing, bridgePath, boardingPath,
+    queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, cafeSeats,
     checkIn: checkInQueue,
     security: securityQueue
   };
@@ -456,7 +488,8 @@ const airport = (() => {
       const style = person.index * 5 + flight.airline * 3;
       const outfit = outfits[style % outfits.length];
       const phase = person.distance / .72 % 1;
-      const mesh = person.moving ? outfit.steps[Math.floor(phase * outfit.steps.length)] : outfit.idle;
+      const mesh = person.seated ? outfit.seated
+        : person.moving ? outfit.steps[Math.floor(phase * outfit.steps.length)] : outfit.idle;
       const [x, y, z] = person.position;
       return {mesh, x, y, z, angle: person.angle, castShadow: false};
     });
@@ -486,7 +519,7 @@ const airport = (() => {
     const outfits = ["#b66e5e", "#4b807e", "#c9a354", "#ece1ce", "#556e89", "#81936c", "#906d81"]
       .map((tint, i) => {
         const skin = ["#e5b896", "#bb8462", "#d19d7c", "#99684f"][i % 4];
-        return {idle: traveler(tint, skin), steps: Array.from({length: 8}, (_, phase) =>
+        return {idle: traveler(tint, skin), seated: seatedTraveler(tint, skin), steps: Array.from({length: 8}, (_, phase) =>
           traveler(tint, skin, Math.sin(phase * Math.PI / 4) * .15))};
       });
     const highlight = new Mesh().path([[-10.7, 5.45], [-10.7, -11.3], [-8.8, -15],

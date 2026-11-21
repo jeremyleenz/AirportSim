@@ -6,6 +6,7 @@
   const currency = new Intl.NumberFormat("en-US", {style: "currency", currency: "USD", maximumFractionDigits: 0});
   const laneCost = 12500;
   const startMinutes = 8 * 60 + 42;
+  const secondsPerMinute = 3.4;
   const planeIcon = '<svg class="icon" aria-hidden="true"><use href="#plane"/></svg>';
   const airlines = [
     {code: "PL", symbol: "#197f79", ui: "#8fd8ca"},
@@ -17,10 +18,10 @@
     ["Melbourne", 214, 96], ["Brisbane", 507, 90], ["Auckland", 318, 110],
     ["Hobart", 126, 86], ["Adelaide", 435, 102], ["Wellington", 201, 94]
   ];
-  function makeFlight(route, airline, stage, gate, initialPassengers) {
+  function makeFlight(route, airline, stage, gate, initialPassengers, boardingAt = 0) {
     const [destination, number, passengers] = routes[route];
     const manifest = initialPassengers ? passengerFlow.manifest(passengers, initialPassengers, "checkIn") : [];
-    return {destination, id: airlines[airline].code + number, airline, passengers, stage, gate, manifest};
+    return {destination, id: airlines[airline].code + number, airline, passengers, stage, gate, manifest, boardingAt};
   }
 
   const state = {
@@ -28,7 +29,7 @@
     nextArrival: 0, nextRoute: 3,
     flights: [
       makeFlight(0, 0, "boarding", 0, {boarded: 68, gateQueue: 8, gate: 20}),
-      makeFlight(1, 1, "parked", 1, {gate: 24, concourse: 12, security: 38}),
+      makeFlight(1, 1, "parked", 1, {gate: 19, cafe: 5, concourse: 12, security: 38}, 16 * secondsPerMinute),
       makeFlight(2, 2, "holding", null)
     ],
     selected: "SA507", stand: null, view: "flights", moving: null
@@ -85,7 +86,7 @@
   });
   const mapSigns = renderer ? [
     createLabel("TERMINAL 1", 0, 2.65, 31.4),
-    createLabel("CAFÉ", -26, 2.53, 19.05),
+    createLabel("CAFÉ", -26, 2.53, 19.05, "cafe"),
     createLabel("SECURITY", -.7, 2.45, 20.2, "security"),
     createLabel("CHECK-IN", 25, 2.17, 19.45, "checkIn"),
     createLabel("WALKWAYS", 13.3, 1.65, 16.9, "concourse"),
@@ -124,6 +125,15 @@
   }
 
   const flightElements = new Map();
+
+  function clockMinutes(seconds) {
+    return startMinutes + Math.floor(seconds / secondsPerMinute + 1e-9);
+  }
+
+  function formatTime(minutes) {
+    return [Math.floor(minutes / 60) % 24, minutes % 60].map(num => String(num).padStart(2, "0")).join(":");
+  }
+
   function paintFlights() {
     const active = new Set(state.flights.map(flight => flight.id));
     for (const [id, button] of flightElements) {
@@ -149,7 +159,8 @@
       button.querySelector("small").textContent = flight.id + " · " + (gates[flight.gate]?.name || "Arrival");
       const badge = button.querySelector(".flight-status");
       badge.dataset.stage = flight.stage;
-      badge.textContent = statusText[flight.stage];
+      badge.textContent = flight.stage === "parked" && state.now >= flight.boardingAt
+        ? "Boarding due" : statusText[flight.stage];
     }
     if (!state.flights.length) {
       if (!$("#empty-board")) {
@@ -190,7 +201,8 @@
     }
     const {stage, passengers, id, destination} = flight;
     const counts = occupancy.byFlight.get(id);
-    $("#detail-kicker").textContent = (gates[flight.gate]?.name || "Inbound") + " / " + id;
+    const schedule = stage === "parked" ? " · BOARD " + formatTime(clockMinutes(flight.boardingAt)) : "";
+    $("#detail-kicker").textContent = (gates[flight.gate]?.name || "Inbound") + " / " + id + schedule;
     $("#detail-title").textContent = destination;
     if (stage === "holding") {
       $("#detail-content").innerHTML = '<p class="detail-copy">Aircraft holding short. Assign an open stand to bring it to the terminal.</p>';
@@ -202,7 +214,7 @@
       const {boarded, boarding, gateQueue, gate: lounge} = counts;
       $("#detail-content").innerHTML = progress("Passengers boarded", boarded + " / " + passengers, boarded / passengers * 100) +
         '<div class="flow-stats">' + stat("In lounge", lounge) + stat("In boarding line", gateQueue) +
-        stat("On the way to the gate", passengers - lounge - gateQueue - boarding - boarded) +
+        stat("Away from gate", passengers - lounge - gateQueue - boarding - boarded) +
         stat("Walking to aircraft", boarding) + '</div>';
     }
     const runwayBusy = Boolean(state.moving);
@@ -224,8 +236,8 @@
       occupancyDirty = false;
       requestDraw = true;
     }
-    const minutes = startMinutes + Math.floor(state.now / 3.4);
-    const time = [Math.floor(minutes / 60) % 24, minutes % 60].map(num => String(num).padStart(2, "0")).join(":");
+    const minutes = clockMinutes(state.now);
+    const time = formatTime(minutes);
     const satisfaction = Math.min(100, Math.max(55, 84 + state.dispatched * 2 + (state.lanes - 2) * 4 - Math.floor((occupancy.security.length - 38) / 16)));
     $("#cash").textContent = currency.format(state.cash);
     $("#passengers").textContent = occupancy.total;
@@ -249,6 +261,7 @@
       $("#check-in-count").textContent = occupancy.checkIn.length;
       $("#security-count").textContent = occupancy.security.length;
       $("#concourse-count").textContent = occupancy.concourse.length;
+      $("#cafe-count").textContent = occupancy.cafe.length;
       $("#boarding-count").textContent = occupancy.boarding.length;
       $("#lanes-count").textContent = state.lanes + " / 3";
       $("#lounge-counts").querySelectorAll("b").forEach((count, index) => {
@@ -344,6 +357,7 @@
       occupancyDirty = true;
       if (flight.stage === "inbound") {
         flight.stage = "parked";
+        flight.boardingAt = (Math.ceil(state.now / secondsPerMinute) + 28) * secondsPerMinute;
         flight.manifest = passengerFlow.manifest(flight.passengers);
         announce(flight.id + " parked at " + gates[flight.gate].name + ".");
         state.nextArrival = state.now + 18;
