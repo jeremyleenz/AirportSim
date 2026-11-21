@@ -2,7 +2,7 @@
 
 const passengerFlow = (() => {
   const {gates, floor, terminalPaths} = airport;
-  const {queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, cafeSeats} = terminalPaths;
+  const {queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats} = terminalPaths;
   const pace = 4.1;
   const entranceZ = 29;
   const corridorZ = 27.77;
@@ -12,12 +12,18 @@ const passengerFlow = (() => {
   const scanTime = .43;
   const point = (x, z) => [x, floor, z];
 
-  function manifest(capacity, initial = {}, remainder = "outside") {
+  function manifest(capacity, initial, arrivalStart, arrivalEnd) {
     const people = [];
-    for (const [zone, count] of Object.entries(initial)) {
+    for (const [zone, count] of Object.entries(initial ?? {})) {
       for (let i = 0; i < count; i++) people.push(makePerson(people.length, zone));
     }
-    while (people.length < capacity) people.push(makePerson(people.length, remainder));
+    const outside = capacity - people.length;
+    for (let i = 0; i < outside; i++) {
+      const person = makePerson(people.length, "outside");
+      const fraction = (i + .2 + (i * 7 % 13) / 20) / outside;
+      person.arrivalAt = arrivalStart + (arrivalEnd - arrivalStart) * fraction;
+      people.push(person);
+    }
     return people;
   }
 
@@ -35,10 +41,12 @@ const passengerFlow = (() => {
     const flow = {
       checkIn: banks(terminalPaths.checkIn),
       security: banks(terminalPaths.security),
-      boarding: gates.map(({x}) => ({...makeBoardingLine(x), spots: makeLounge(x)})),
+      boarding: gates.map(({x}, gate) => ({...makeBoardingLine(x), spots: makeLounge(x, gate)})),
+      sharedSeats: sharedSeats.map(spot => ({...spot})),
       cafe: cafeSeats.map(spot => ({...spot})),
       nextEntry: 0, entrancesUsed: 0, openedLanes: lanes
     };
+    flow.guestSeats = flow.boarding.flatMap(queue => queue.spots.seats);
     for (const flight of flights) {
       for (const person of flight.manifest) {
         if (person.zone === "gate" || person.zone === "cafe") {
@@ -87,8 +95,8 @@ const passengerFlow = (() => {
     return best;
   }
 
-  function makeLounge(x) {
-    const seats = loungeSeats(x);
+  function makeLounge(x, gate) {
+    const seats = loungeSeats(x).map(spot => ({...spot, gate}));
     const standing = [];
     const clearAreas = [[.4, 8.14, 9.28, 9.77], [.4, 8.14, 10.91, 12.18], [.4, 8.14, 13.42, 14.17],
       [-8.38, -6.11, 11.02, 12.13]];
@@ -152,24 +160,34 @@ const passengerFlow = (() => {
 
   function reserveCafe(person, flight, flow, now) {
     const spot = reserve(person, flow.cafe, 3);
-    if (spot) {
-      const exit = cafeExit(spot);
-      const walkBack = travelTime(spot.position, exit) + (Math.abs(gates[flight.gate].x - cafeDoorX) + 11) / pace;
-      person.cafeUntil = Math.max(now, gateBy(person, flight) - walkBack);
-    }
+    if (spot) person.cafeUntil = flight.gate === null ? now + 22 + person.index % 13 : Infinity;
     return spot;
   }
 
+  function cafeLeaveAt(person, flight) {
+    if (flight.gate === null) return person.cafeUntil;
+    const spot = person.spot;
+    const walkBack = travelTime(spot.position, cafeExit(spot)) + (Math.abs(gates[flight.gate].x - cafeDoorX) + 11) / pace;
+    return Math.min(person.cafeUntil, gateBy(person, flight) - walkBack);
+  }
+
+  function strollPath(person, destinationX) {
+    const [x] = person.position;
+    const z = 16.25 + person.index % 5 * .45;
+    const turnX = x > 12 || (x >= -12 && person.index % 2) ? -25 + person.index % 7 : 20 + person.index % 8;
+    return [point(x, z), point(turnX, z), point(turnX, z + .55), point((turnX + destinationX) / 2, z + .55)];
+  }
+
   function afterSecurity(person, flight, flow, now) {
-    const queue = flow.boarding[flight.gate];
-    if (flight.stage === "parked") {
+    if (flight.stage !== "boarding") {
+      const gate = gates[flight.gate];
       const preference = person.index * 11 % 19;
       const [x] = person.position;
       if (preference < 8) {
         const spot = reserveCafe(person, flight, flow, now);
         if (spot) {
           const path = [point(x, cafeCorridorZ), ...cafeExit(spot).reverse(), spot.position];
-          if (now + travelTime(person.position, path) + 3 < person.cafeUntil) {
+          if (now + travelTime(person.position, path) + 3 < cafeLeaveAt(person, flight)) {
             walk(person, path, "cafe");
             return;
           }
@@ -178,11 +196,8 @@ const passengerFlow = (() => {
         }
       }
       if (preference < 14) {
-        const z = 16.25 + person.index % 5 * .45;
-        const turnX = person.index % 2 ? -25 + person.index % 7 : 20 + person.index % 8;
-        const endX = (turnX + gates[flight.gate].x) / 2;
-        const path = [point(x, z), point(turnX, z), point(turnX, z + .55), point(endX, z + .55)];
-        const returnAt = gateBy(person, flight) - (Math.abs(endX - gates[flight.gate].x) + 10) / pace;
+        const path = strollPath(person, gate?.x ?? x);
+        const returnAt = gate ? gateBy(person, flight) - (Math.abs(path.at(-1)[0] - gate.x) + 10) / pace : Infinity;
         if (now + travelTime(person.position, path) < returnAt) {
           person.strollUntil = returnAt;
           walk(person, path);
@@ -190,28 +205,59 @@ const passengerFlow = (() => {
         }
       }
     }
-    walkToGate(person, flight, queue, now);
+    goToGateOrWait(person, flight, flow, now);
   }
 
-  function recallActivities(person, flight, queue, now) {
-    const boarding = flight.stage === "boarding";
-    if (person.strollUntil !== undefined && (boarding || now >= person.strollUntil || !person.route)) {
-      person.strollUntil = undefined;
-      walkToGate(person, flight, queue, now);
+  function goToGateOrWait(person, flight, flow, now) {
+    const queue = flow.boarding[flight.gate];
+    if (queue && walkToGate(person, flight, queue, now)) return;
+    const spot = reserve(person, flow.sharedSeats, 7) || reserve(person, flow.guestSeats, 7);
+    if (spot) {
+      walkToSeat(person, spot, spot.gate === undefined ? "sharedSeats" : "otherGate");
+    } else {
+      person.strollUntil = Infinity;
+      walk(person, strollPath(person, person.position[0]));
     }
-    if (person.cafeUntil === undefined || (!boarding && now < person.cafeUntil)) return false;
+  }
+
+  function recallWaitingSeat(person, flight, flow, now) {
+    if (person.route || flight.gate === null || (person.zone !== "sharedSeats" && person.zone !== "otherGate")) return false;
+    const spot = person.spot;
+    if (spot.gate === flight.gate) {
+      person.zone = "gate";
+      return true;
+    }
+    const walkBack = (Math.abs(spot.aisleX - gates[flight.gate].x) + 14) / pace;
+    if (flight.stage !== "boarding" && now < gateBy(person, flight) - walkBack) return false;
+    const queue = flow.boarding[flight.gate];
+    const hasLoungeSpace = queue.spots.seats.some(seat => !seat.owner) || queue.spots.standing.some(place => !place.owner);
+    if (!hasLoungeSpace && !(wantsToQueue(person, flight, now) && hasRoom(queue))) return false;
+    const row = seatAisle(spot);
+    leaveSpot(person);
+    person.zone = "concourse";
+    walk(person, [point(person.position[0], row), point(spot.aisleX, row), point(spot.aisleX, 16.1)], "concourse");
+    return true;
+  }
+
+  function recallActivities(person, flight, flow, now) {
+    const boarding = flight.stage === "boarding";
+    if (person.strollUntil !== undefined && (!person.route ||
+      (person.strollUntil < Infinity && (boarding || now >= person.strollUntil)))) {
+      person.strollUntil = undefined;
+      goToGateOrWait(person, flight, flow, now);
+    }
+    if (person.cafeUntil === undefined || (!boarding && now < cafeLeaveAt(person, flight))) return false;
 
     const seatedAtCafe = person.zone === "cafe";
     const spot = leaveSpot(person);
     const route = person.route;
     person.cafeUntil = undefined;
     person.zone = "concourse";
-    if (seatedAtCafe || route.index >= 3) {
+    if (seatedAtCafe || route?.index >= 3) {
       const exit = seatedAtCafe ? cafeExit(spot) : route.points.slice(1, route.index).reverse();
-      person.returningToGate = true;
       walk(person, exit, "concourse");
     } else {
-      walkToGate(person, flight, queue, now);
+      goToGateOrWait(person, flight, flow, now);
     }
     return seatedAtCafe;
   }
@@ -230,7 +276,7 @@ const passengerFlow = (() => {
     person.route = null;
     const previousZone = person.zone;
     if (route.zone) person.zone = route.zone;
-    if (route.zone === "gate" || route.zone === "cafe") settle(person);
+    if (person.spot && route.points.at(-1) === person.spot.position) settle(person);
     return previousZone !== person.zone;
   }
 
@@ -262,11 +308,18 @@ const passengerFlow = (() => {
       approachLine(person, queue, approach, travelTime(person.position, approach), now);
     } else {
       const spot = reserveLounge(person, queue);
-      const [x] = spot.position;
-      const row = seatAisle(spot);
-      walk(person, [point(startX, middleZ), point(spot.aisleX, middleZ),
-        point(spot.aisleX, row), point(x, row), spot.position], "gate");
+      if (!spot) return false;
+      walkToSeat(person, spot, "gate");
     }
+    return true;
+  }
+
+  function walkToSeat(person, spot, zone) {
+    const [x] = spot.position;
+    const middleZ = 16.1 + person.index % 5 * .48;
+    const row = seatAisle(spot);
+    walk(person, [point(person.position[0], middleZ), point(spot.aisleX, middleZ),
+      point(spot.aisleX, row), point(x, row), spot.position], zone);
   }
 
   function seatAisle(spot) {
@@ -394,26 +447,33 @@ const passengerFlow = (() => {
     return moved > 0;
   }
 
+  function nextPassenger(flights, now) {
+    let next = null;
+    for (const flight of flights) {
+      const person = flight.manifest.find(item => item.zone === "outside");
+      if (person && person.arrivalAt <= now && (!next || person.arrivalAt < next.arrivalAt)) next = person;
+    }
+    return next;
+  }
+
   function advance(flights, flow, now, dt, lanes, onReady) {
     let changed = false;
     for (const flight of flights) {
       for (const person of flight.manifest) {
         person.moving = false;
         if (person.cafeUntil !== undefined || person.strollUntil !== undefined) {
-          changed = recallActivities(person, flight, flow.boarding[flight.gate], now) || changed;
+          changed = recallActivities(person, flight, flow, now) || changed;
         }
+        changed = recallWaitingSeat(person, flight, flow, now) || changed;
+        const previousZone = person.zone;
         const wasWalking = person.route;
         const walkStart = wasWalking?.startAt ?? -Infinity;
         const walkTime = Math.min(dt, Math.max(0, now - walkStart));
         if (wasWalking && walkTime > 0 && person.zone === "gate") leaveSpot(person);
         changed = follow(person, walkTime) || changed;
         if (wasWalking?.zone === "concourse" && !person.route) {
-          if (person.returningToGate) {
-            person.returningToGate = false;
-            walkToGate(person, flight, flow.boarding[flight.gate], now);
-          } else {
-            afterSecurity(person, flight, flow, now);
-          }
+          if (previousZone === "security") afterSecurity(person, flight, flow, now);
+          else goToGateOrWait(person, flight, flow, now);
         }
       }
     }
@@ -462,7 +522,7 @@ const passengerFlow = (() => {
     });
 
     if (now >= flow.nextEntry) {
-      const person = flights.flatMap(flight => flight.manifest).find(item => item.zone === "outside");
+      const person = nextPassenger(flights, now);
       const queue = person && findLine(flow.checkIn, 3);
       if (queue) {
         const entranceX = -6 + flow.entrancesUsed++ % 4 * 4;
@@ -485,20 +545,21 @@ const passengerFlow = (() => {
 
   function snapshot(flights) {
     const people = {
-      checkIn: [], security: [], concourse: [], cafe: [], boarding: [], visible: [],
+      checkIn: [], security: [], concourse: [], cafe: [], sharedSeats: [], boarding: [], visible: [],
       gates: gates.map(() => [])
     };
     const byFlight = new Map();
     for (const flight of flights) {
       const counts = {outside: 0, checkIn: 0, security: 0, concourse: 0, cafe: 0,
-        gate: 0, gateQueue: 0, boarding: 0, boarded: 0};
+        sharedSeats: 0, otherGate: 0, gate: 0, gateQueue: 0, boarding: 0, boarded: 0};
       byFlight.set(flight.id, counts);
       for (const person of flight.manifest) {
         counts[person.zone]++;
         if (person.zone === "boarded" || person.zone === "outside") continue;
         const entry = {person, flight};
         const atGate = person.zone === "gate" || person.zone === "gateQueue";
-        const section = atGate ? people.gates[flight.gate] : people[person.zone];
+        const gate = person.zone === "otherGate" ? person.spot.gate : atGate ? flight.gate : null;
+        const section = gate === null ? people[person.zone] : people.gates[gate];
         section.push(entry);
         people.visible.push(entry);
       }

@@ -17,18 +17,19 @@ const airport = (() => {
   const queueRows = 9;
   const queueSpacing = .47;
   const loungeBenches = [-7.32, 1.28, 4.17, 7.06];
+  const sharedBenches = [-12.5, 12.5].flatMap(x => [9.75, 11.75, 13.75].map(z => ({x, z})));
   const cafeTables = [-30.8, -27.2, -23.6, -20.0, -16.8].map(x => ({x, z: x < -25 ? 24.25 : 23.35}));
+
+  function benchSeats(x, z, angle, aisleX) {
+    return [-.86, 0, .86].map(dx => ({position: [x + dx, floor, z], angle, aisleX, seated: true}));
+  }
 
   function loungeSeats(x) {
     return loungeBenches.flatMap(dx => [10.25, 12.8].flatMap((z, row) =>
-      [-.86, 0, .86].map(seat => ({
-        position: [x + dx + seat, floor, z],
-        angle: row ? Math.PI : 0,
-        aisleX: x + (dx < 0 ? -9.15 : 9.16),
-        seated: true
-      }))));
+      benchSeats(x + dx, z, row ? Math.PI : 0, x + (dx < 0 ? -9.15 : 9.16))));
   }
 
+  const sharedSeats = sharedBenches.flatMap(({x, z}) => benchSeats(x, z, 0, x - 1.95));
   const cafeSeats = cafeTables.flatMap(({x, z}) => [-1, 1].map(side => ({
     position: [x, floor + .03, z + .91 * side],
     angle: side > 0 ? Math.PI : 0,
@@ -264,6 +265,8 @@ const airport = (() => {
       mesh.box(x - 6.12, floor + 1.89, 9.599, 1.22, .12, .06, paint);
     }
 
+    for (const {x, z} of sharedBenches) bench(mesh, x, z, "#63836c");
+
     // Coffee shop, security, and check-in are separate spaces in the cutaway.
     mesh.rect(-25, floor + .025, 22.9, 19.4, 7.7, "#c39569");
     for (let z = 19.2; z < 26.7; z += .34) mesh.rect(-25, floor + .029, z, 19.25, .027, "#ad825c");
@@ -479,7 +482,7 @@ const airport = (() => {
   }
 
   const terminalPaths = {
-    queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, cafeSeats,
+    queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats,
     checkIn: checkInQueue,
     security: securityQueue
   };

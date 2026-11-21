@@ -9,6 +9,8 @@
   const secondsPerMinute = 3.4;
   const minutesFromHoldingToBoarding = 40;
   const minutesFromBoardingToTakeoff = 30;
+  const earliestPassengerArrival = 70;
+  const latestPassengerArrival = 40;
   const takeoffWarningMinutes = 10;
   const inboundTaxiSpeed = 4;
   const pushbackEnd = .25;
@@ -29,9 +31,11 @@
   function makeFlight(route, airline, stage, gate, initialPassengers, boardingMinute,
     takeoffMinute = boardingMinute + minutesFromBoardingToTakeoff) {
     const [destination, number, passengers] = routes[route];
-    const manifest = initialPassengers ? passengerFlow.manifest(passengers, initialPassengers, "checkIn") : [];
     const boardingAt = boardingMinute * secondsPerMinute;
     const takeoffAt = takeoffMinute * secondsPerMinute;
+    const manifest = passengerFlow.manifest(passengers, initialPassengers,
+      takeoffAt - earliestPassengerArrival * secondsPerMinute,
+      takeoffAt - latestPassengerArrival * secondsPerMinute);
     return {destination, id: airlines[airline].code + number, airline, passengers, stage, gate, manifest, boardingAt, takeoffAt};
   }
 
@@ -45,7 +49,7 @@
     nextArrival: 0, nextRoute: 3,
     flights: [
       makeFlight(0, 0, "boarding", 0, {boarded: 68, gateQueue: 8, gate: 20}, 0, 13),
-      makeFlight(1, 1, "parked", 1, {gate: 19, cafe: 5, concourse: 12, security: 38}, 16),
+      makeFlight(1, 1, "parked", 1, {gate: 19, cafe: 5, concourse: 12, security: 38, checkIn: 16}, 16),
       makeArrival(2, 2, 0)
     ],
     selected: "SA507", view: "flights", taxiIn: null, departure: null
@@ -103,6 +107,7 @@
   const mapSigns = renderer ? [
     createLabel("TERMINAL 1", 0, 2.65, 31.4),
     createLabel("CAFÉ", -26, 2.53, 19.05, "cafe"),
+    createLabel("SHARED SEATS", -12.5, .8, 19.2, "sharedSeats"),
     createLabel("SECURITY", -.7, 2.45, 20.2, "security"),
     createLabel("CHECK-IN", 25, 2.17, 19.45, "checkIn"),
     createLabel("WALKWAYS", 13.3, 1.65, 16.9, "concourse"),
@@ -349,11 +354,16 @@
         ? '<p class="detail-copy">Taking off from runway 09.</p>'
         : '<p class="detail-copy">Aircraft cleared for runway 09.</p>';
     } else {
-      const {boarded, boarding, gateQueue, gate: lounge} = counts;
+      const {outside, boarded, boarding, gateQueue, gate: lounge} = counts;
       $("#detail-content").innerHTML = progress("Passengers boarded", boarded + " / " + passengers, boarded / passengers * 100) +
         '<div class="flow-stats">' + stat("In lounge", lounge) + stat("In boarding line", gateQueue) +
-        stat("Away from gate", passengers - lounge - gateQueue - boarding - boarded) +
+        stat("Away from gate", passengers - outside - lounge - gateQueue - boarding - boarded) +
+        (outside ? stat("Yet to arrive", outside) : "") +
         stat("Walking to aircraft", boarding) + '</div>';
+    }
+    if (arriving) {
+      $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
+        stat("Passengers in terminal", (passengers - counts.outside) + " / " + passengers) + '</div>');
     }
     const departureBlocked = Boolean(state.departure || state.taxiIn);
     const labels = {
@@ -401,6 +411,7 @@
       $("#check-in-count").textContent = occupancy.checkIn.length;
       $("#security-count").textContent = occupancy.security.length;
       $("#concourse-count").textContent = occupancy.concourse.length;
+      $("#shared-seats-count").textContent = occupancy.sharedSeats.length;
       $("#cafe-count").textContent = occupancy.cafe.length;
       $("#boarding-count").textContent = occupancy.boarding.length;
       $("#lanes-count").textContent = state.lanes + " / 3";
@@ -527,7 +538,6 @@
       state.taxiIn = null;
       occupancyDirty = true;
       flight.stage = "parked";
-      flight.manifest = passengerFlow.manifest(flight.passengers);
       announce(flight.id + " parked at " + gates[flight.gate].name + ".");
       state.nextArrival = state.now + 18;
     }
@@ -546,8 +556,7 @@
       const waiting = state.flights.find(item => item.stage === "reserved");
       if (waiting) startTaxiIn(waiting);
     }
-    if (state.now > state.nextArrival && availableGate() >= 0 &&
-      !state.flights.some(isArriving)) {
+    if (state.now > state.nextArrival && !state.flights.some(isArriving)) {
       let route, airline;
       do {
         route = state.nextRoute % routes.length;
