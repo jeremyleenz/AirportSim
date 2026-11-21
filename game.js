@@ -56,7 +56,8 @@
     const manifest = passengerFlow.manifest(passengers, initialPassengers,
       takeoffAt - earliestPassengerArrival * secondsPerMinute,
       takeoffAt - latestPassengerArrival * secondsPerMinute);
-    return {...plan, stage, gate, manifest};
+    const incomingPassengers = arrivalAt === null ? 0 : Math.round(passengers * (.55 + index * 3 % 5 * .04));
+    return {...plan, stage, gate, manifest, incomingPassengers};
   }
 
   function createShift() {
@@ -68,7 +69,7 @@
   let state = createShift();
   const statusText = {
     scheduled: "Expected",
-    parked: "At gate", boarding: "Boarding", closing: "Boarding closed", ready: "Ready", holding: "Holding",
+    parked: "At gate", deplaning: "Deplaning", boarding: "Boarding", closing: "Boarding closed", ready: "Ready", holding: "Holding",
     reserved: "Gate reserved", inbound: "Taxiing in", outbound: "Departing"
   };
   let flow = passengerFlow.create(state.flights, state.lanes);
@@ -124,6 +125,7 @@
   });
   const mapSigns = renderer ? [
     createLabel("ENTRANCE", 0, 2.65, 31.4),
+    createLabel("ARRIVALS EXIT", airport.terminalPaths.airsideExit.x, 1.2, 30.9),
     createLabel("CAFÉ", -26, 1.84, 19.05, "cafe"),
     createLabel("SHARED SEATS", -12.5, .8, 19.2, "sharedSeats"),
     createLabel("SECURITY", -.7, 2.75, 19.1, "security"),
@@ -482,7 +484,7 @@
     flightDetail.hidden = !flight && gate < 0;
     if (flightDetail.hidden) return;
     $("#stand-heading").hidden = Boolean(flight);
-    action.hidden = !flight || flight.stage === "boarding" || flight.stage === "scheduled";
+    action.hidden = !flight || ["boarding", "deplaning", "scheduled"].includes(flight.stage);
     if (!flight) {
       $("#stand-name").textContent = "Gate " + gates[gate].name;
       $("#detail-content").innerHTML = '<p class="detail-copy">This gate can receive the next arrival.</p>';
@@ -498,6 +500,10 @@
         ' is reserved. Taxi-in starts when the taxiway clears.</p>';
     } else if (stage === "inbound") {
       $("#detail-content").innerHTML = '<p class="detail-copy">Taxiing to gate ' + gates[flight.gate].name + '.</p>';
+    } else if (stage === "deplaning") {
+      const {remaining, onBridge} = flight.deplaning;
+      $("#detail-content").innerHTML = '<div class="flow-stats">' + stat("Arrivals still aboard", remaining) +
+        stat("Arrivals on jet bridge", onBridge) + '</div>';
     } else if (stage === "outbound") {
       $("#detail-content").innerHTML = departureOnRunway(flight)
         ? '<p class="detail-copy">Taking off from runway 09.</p>'
@@ -586,6 +592,8 @@
       $("#shared-seats-count").textContent = occupancy.sharedSeats.length;
       $("#cafe-count").textContent = occupancy.cafe.length;
       $("#boarding-count").textContent = occupancy.boarding.length;
+      $("#deplaning-count").textContent = occupancy.deplaning.length;
+      $("#arrivals-exit-count").textContent = occupancy.arrivalsExit.length;
       $("#exiting-count").textContent = occupancy.exiting.length;
       $("#lanes-count").textContent = state.lanes + " / 3";
       $("#lounge-counts").querySelectorAll("b").forEach((count, index) => {
@@ -825,6 +833,10 @@
       flight => {
         flight.stage = "ready";
         announce(flight.id + " is ready for departure.");
+      },
+      flight => {
+        flight.stage = "parked";
+        announce(flight.id + " finished deplaning. Boarding can begin.");
       });
     occupancyDirty ||= changed;
     for (const [flight, movement] of state.movements) {
@@ -832,8 +844,9 @@
       state.movements.delete(flight);
       occupancyDirty = true;
       if (flight.stage === "inbound") {
-        flight.stage = "parked";
-        announce(flight.id + " parked at " + gates[flight.gate].name + ".");
+        flight.stage = "deplaning";
+        passengerFlow.startDeplaning(flight, state.now);
+        announce(flight.id + " deplaning at " + gates[flight.gate].name + ".");
       } else {
         finishDeparture(movement);
         if (shiftComplete()) return;

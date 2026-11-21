@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
   <script defer src="renderer.js"></script>
-  <script defer src="airport.js?v=2"></script>
-  <script defer src="passengers.js?v=3"></script>
-  <script defer src="game.js?v=8"></script>
+  <script defer src="airport.js?v=3"></script>
+  <script defer src="passengers.js?v=4"></script>
+  <script defer src="game.js?v=9"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -129,7 +129,9 @@
             <div class="detail-stat"><span>Shared seating</span><b id="shared-seats-count"></b></div>
             <div class="detail-stat"><span>Café</span><b id="cafe-count"></b></div>
             <div class="detail-stat"><span>Walking to aircraft</span><b id="boarding-count"></b></div>
-            <div class="detail-stat"><span>Leaving terminal</span><b id="exiting-count"></b></div>
+            <div class="detail-stat"><span>Walking off aircraft</span><b id="deplaning-count"></b></div>
+            <div class="detail-stat"><span>Arrivals heading out</span><b id="arrivals-exit-count"></b></div>
+            <div class="detail-stat"><span>Missed flights · heading out</span><b id="exiting-count"></b></div>
           </div>
           <div class="terminal-stat">
             <h3>Gate areas</h3>

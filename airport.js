@@ -15,7 +15,7 @@ const airport = (() => {
   const terminalEdge = 37.95;
   const terminalFrontZ = 28.91;
   const cafeBoundaryX = -13.1;
-  const airsideExit = {x: -14.48, z: terminalFrontZ + .7, width: 1.4};
+  const airsideExit = {x: -14.48, z: terminalFrontZ + .7, thresholdZ: terminalFrontZ, width: 1.4};
   const checkInQueue = {centers: [18, 25.2, 32.5], front: 22.14, width: 4.95, deskZ: 21.25};
   const securityQueue = {centers: [-7.2, -.7, 5.8], front: 23.25, width: 4.3,
     checkpointZ: 20.7, portalOffsetX: 1.05, portalWidth: .88, exitZ: 19.10};
@@ -311,6 +311,8 @@ const airport = (() => {
     frontWall(entranceHalfWidth, terminalEdge);
     for (const x of [exitLeft, exitRight]) mesh.box(x, floor, terminalFrontZ, .14, 1.15, .25, frame);
     mesh.box(airsideExit.x, floor + 1.02, terminalFrontZ, airsideExit.width + .14, .13, .25, teal);
+    mesh.face([[exitLeft, floor, terminalFrontZ], [exitLeft, .04, airsideExit.z],
+      [exitRight, .04, airsideExit.z], [exitRight, floor, terminalFrontZ]], concrete, [0, 1, 0]);
 
     for (const {x} of gates) {
       bridge(mesh, x);

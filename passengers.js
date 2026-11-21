@@ -11,6 +11,7 @@ const passengerFlow = (() => {
   const cafeCorridorZ = 17.7;
   const boardingSpacing = .64;
   const scanTime = .43;
+  const deplaneInterval = .32;
   const point = (x, z) => [x, floor, z];
 
   function manifest(capacity, initial, arrivalStart, arrivalEnd) {
@@ -45,7 +46,7 @@ const passengerFlow = (() => {
       boarding: gates.map(({x}, gate) => ({...makeBoardingLine(x), spots: makeLounge(x, gate)})),
       sharedSeats: sharedSeats.map(spot => ({...spot})),
       cafe: cafeSeats.map(spot => ({...spot})),
-      exiting: [],
+      exiting: [], arrivals: [],
       nextEntry: 0, entrancesUsed: 0, openedLanes: lanes
     };
     flow.guestSeats = flow.boarding.flatMap(queue => queue.spots.seats);
@@ -507,8 +508,55 @@ const passengerFlow = (() => {
     return missed.size;
   }
 
-  function advance(flights, flow, now, dt, lanes, onReady) {
+  function startDeplaning(flight, now) {
+    const {x} = gates[flight.gate];
+    const bridge = bridgePath(x).reverse();
+    const [doorX] = bridge.at(-1);
+    const aisleX = x - 9.35;
+    const concourseZ = x < airsideExit.x ? 17.5 : 18.18;
+    const path = [...bridge.slice(1), point(doorX, 8.62), point(aisleX, 8.62),
+      point(aisleX, concourseZ), point(airsideExit.x, concourseZ), point(airsideExit.x, airsideExit.thresholdZ),
+      [airsideExit.x, .04, airsideExit.z], [airsideExit.x, .04, 31.6]];
+    flight.deplaning = {remaining: flight.incomingPassengers, onBridge: 0, nextAt: now + .65,
+      door: bridge[0], bridgeWaypoints: bridge.length - 1, path};
+  }
+
+  function advanceArrivals(flights, flow, now, dt, onDeplaned) {
     let changed = false;
+    for (let i = flow.arrivals.length - 1; i >= 0; i--) {
+      const {person, flight} = flow.arrivals[i];
+      const arrival = flight.deplaning;
+      person.moving = false;
+      follow(person, dt);
+      if (person.zone === "deplaning" && (!person.route || person.route.index >= arrival.bridgeWaypoints)) {
+        person.zone = "arrivalsExit";
+        arrival.onBridge--;
+        if (arrival.remaining === 0 && arrival.onBridge === 0) onDeplaned(flight);
+        changed = true;
+      }
+      if (!person.route) {
+        flow.arrivals.splice(i, 1);
+        changed = true;
+      }
+    }
+    for (const flight of flights) {
+      if (flight.stage !== "deplaning") continue;
+      const arrival = flight.deplaning;
+      if (!arrival.remaining || now < arrival.nextAt) continue;
+      const person = makePerson(flight.passengers + flight.incomingPassengers - arrival.remaining, "deplaning");
+      person.position = arrival.door;
+      walk(person, arrival.path);
+      flow.arrivals.push({person, flight});
+      arrival.remaining--;
+      arrival.onBridge++;
+      arrival.nextAt = now + deplaneInterval;
+      changed = true;
+    }
+    return changed;
+  }
+
+  function advance(flights, flow, now, dt, lanes, onReady, onDeplaned) {
+    let changed = advanceArrivals(flights, flow, now, dt, onDeplaned);
     for (let i = flow.exiting.length - 1; i >= 0; i--) {
       const {person} = flow.exiting[i];
       person.moving = false;
@@ -611,9 +659,10 @@ const passengerFlow = (() => {
   function snapshot(flights, flow) {
     const people = {
       checkIn: [], landside: [], security: [], concourse: [], cafe: [], sharedSeats: [], boarding: [],
-      exiting: [...flow.exiting], visible: [...flow.exiting],
+      deplaning: [], arrivalsExit: [], exiting: [...flow.exiting], visible: [...flow.exiting, ...flow.arrivals],
       gates: gates.map(() => [])
     };
+    for (const entry of flow.arrivals) people[entry.person.zone].push(entry);
     const byFlight = new Map();
     for (const flight of flights) {
       const counts = {outside: 0, checkIn: 0, landside: 0, security: 0, concourse: 0, cafe: 0,
@@ -633,5 +682,5 @@ const passengerFlow = (() => {
     return {...people, byFlight, total: people.visible.length};
   }
 
-  return {manifest, create, closeBoarding, advance, snapshot};
+  return {manifest, create, startDeplaning, closeBoarding, advance, snapshot};
 })();
