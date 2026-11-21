@@ -234,7 +234,7 @@ const world = (() => {
         canvas.width = pixelWidth;
         canvas.height = pixelHeight;
       }
-      Object.assign(view, {width, height, scale: Math.min(width / 138, height / 89) * view.zoom});
+      Object.assign(view, {width, height, scale: Math.min(width / 151, height / 89) * view.zoom});
     }
 
     function project(x, y, z) {

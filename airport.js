@@ -10,7 +10,8 @@ const airport = (() => {
   };
   const {grass, asphalt, apron, concrete, warm, frame, glass, pale, white, paint, ink, teal} = colors;
   const floor = .78;
-  const road = -36.5;
+  const runwayZ = -46;
+  const taxiwayZ = -23.2;
   const checkInQueue = {centers: [18, 25.2, 32.5], front: 22.14, width: 4.95};
   const securityQueue = {centers: [-7.2, -.7, 5.8], front: 23.25, width: 4.3};
   const queueRows = 9;
@@ -81,25 +82,25 @@ const airport = (() => {
     mesh.rect(0, -.08, 0, 560, 560, grass);
     const grassColors = ["#90a688", "#8ba184", "#93a989", "#8da382"];
     for (let i = -9; i <= 9; i++) mesh.rect(i * 12 + 6, -.076, -10, 12, 145, grassColors[(i + 12) % 4]);
-    mesh.rect(0, .005, road, 102, 15.5, "#707b73");
-    mesh.rect(0, .012, road, 100, 13.5, "#4c575a");
-    for (const z of [road - 6.15, road + 6.15]) mesh.rect(0, .025, z, 98, .16, white);
-    for (let x = -45; x < 47; x += 7.4) mesh.rect(x, .026, road, 3.55, .2, white);
+    mesh.rect(0, .005, runwayZ, 102, 15.5, "#707b73");
+    mesh.rect(0, .012, runwayZ, 100, 13.5, "#4c575a");
+    for (const z of [runwayZ - 6.15, runwayZ + 6.15]) mesh.rect(0, .025, z, 98, .16, white);
+    for (let x = -45; x < 47; x += 7.4) mesh.rect(x, .026, runwayZ, 3.55, .2, white);
     for (const x of [-32.5, 32.5]) {
-      for (let n = -3; n <= 3; n++) mesh.rect(x, .029, road + n * .76, 5.2, .18, "#909994");
+      for (let n = -3; n <= 3; n++) mesh.rect(x, .029, runwayZ + n * .76, 5.2, .18, "#909994");
     }
     for (let x = -48; x <= 48; x += 2) {
-      for (const z of [road - 6.7, road + 6.7]) mesh.rect(x, .024, z, .15, .25, "#a4abb1");
+      for (const z of [runwayZ - 6.7, runwayZ + 6.7]) mesh.rect(x, .024, z, .15, .25, "#a4abb1");
     }
-    runwayNumber(mesh, "09", -38.5, road, 1);
-    runwayNumber(mesh, "27", 38.5, road, -1);
+    runwayNumber(mesh, "09", -38.5, runwayZ, 1);
+    runwayNumber(mesh, "27", 38.5, runwayZ, -1);
 
-    mesh.rect(0, .013, -23.2, 99, 6.7, asphalt);
+    mesh.rect(0, .013, taxiwayZ, 99, 6.7, asphalt);
     for (const x of [-45, 45]) {
-      mesh.rect(x, .014, -30, 9, 12.5, asphalt);
-      mesh.path(curve([[x, -34], [x, -22], [x * .83, -23.2]]), .16, .026, paint);
+      mesh.rect(x, .014, (runwayZ + taxiwayZ) / 2, 9, taxiwayZ - runwayZ, asphalt);
+      mesh.path(curve([[x, runwayZ + 2.5], [x, taxiwayZ + 1.2], [x * .83, taxiwayZ]]), .16, .026, paint);
     }
-    mesh.rect(0, .018, -23.2, 74.8, .15, paint);
+    mesh.rect(0, .018, taxiwayZ, 74.8, .15, paint);
     mesh.rect(0, .009, -7.35, 85, 23.5, apron);
     mesh.rect(0, .012, -18.4, 85, 1.4, "#858f8c");
     mesh.rect(0, .015, -17.7, 84.9, .16, white);
@@ -108,7 +109,7 @@ const airport = (() => {
     for (let z = -15; z <= 8; z += 3.8) mesh.rect(0, .012, z, 84.8, .055, "#8a9691");
 
     for (const {x} of gates) {
-      mesh.path(curve([[x - 9, -23.2], [x, -23.2], [x, -16]]), .16, .03, paint);
+      mesh.path(curve([[x - 9, taxiwayZ], [x, taxiwayZ], [x, -16]]), .16, .03, paint);
       mesh.line([x, -16], [x, 3.45], .14, .028, paint);
       mesh.rect(x, .031, 2.2, 2.25, .17, paint);
       mesh.path([[x - 10.7, 5.5], [x - 10.7, -11.3], [x - 8.8, -15], [x + 8.8, -15],
@@ -351,7 +352,7 @@ const airport = (() => {
     for (const x of [-40, -33, -24, -7, 5, 24, 38]) tree(mesh, x, 30.9, .72);
     for (let i = 0; i < 120; i++) {
       const x = -63 + random() * 126, z = -60 + random() * 116;
-      const outside = (z < -44 && (x > 8 || x < -32)) || (z > 42 && (x < -47 || x > -4))
+      const outside = (z < runwayZ - 8.5 && (x > 8 || x < -32)) || (z > 42 && (x < -47 || x > -4))
         || (x < -53 && z > -25) || (x > 48 && z < 29 && z > -18);
       if (outside) tree(mesh, x, z, .62 + random() * .89);
     }
@@ -527,5 +528,5 @@ const airport = (() => {
     return {fixed: [...fixed, ...fleet], traffic, outfits, highlight};
   }
 
-  return {gates, aircraft, scene, passengerActors, terminalPaths, floor, road};
+  return {gates, aircraft, scene, passengerActors, terminalPaths, floor, runwayZ, taxiwayZ};
 })();

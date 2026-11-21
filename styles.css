@@ -55,7 +55,7 @@ button, h1, h2, h3, p { margin: 0; }
 .map-gate { position: absolute; pointer-events: auto; translate: -50% -100%; display: flex; gap: 6px; align-items: center; background: #14272d; border: 1px solid #95b4b2; color: var(--light); font: 700 .84rem var(--mono); border-radius: 6px; padding: 6px 8px; box-shadow: 0 3px 8px #12292469; }
 .map-gate i { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
 .map-gate[data-state="boarding"] i, .map-gate[data-state="ready"] i { background: var(--mint); }
-.map-gate[data-state="parked"] i { background: var(--amber); }
+.map-gate[data-state="parked"] i, .map-gate[data-state="reserved"] i { background: var(--amber); }
 .map-gate[aria-pressed="true"] { background: var(--mint); border-color: #ecfff3; color: #162e28; }
 .map-gate[aria-pressed="true"] i { background: #426a53; }
 .map-count { border-left: 1px solid currentColor; padding-left: .43em; letter-spacing: 0; opacity: .86; }
@@ -94,6 +94,7 @@ button, h1, h2, h3, p { margin: 0; }
 .flight-name small { font: .72rem var(--mono); color: var(--muted); }
 .flight-status { font: 600 .68rem var(--mono); border-radius: 4px; padding: 5px 6px; background: #2a3d44; color: #c9dbde; }
 .flight-status[data-stage="boarding"], .flight-status[data-stage="ready"] { color: var(--mint); background: #1f4840; }
+.flight-status[data-stage="reserved"] { color: var(--amber); background: #493c30; }
 .flight-boarding, .detail-boarding { display: grid; justify-items: end; gap: 3px; white-space: nowrap; color: var(--amber); }
 .boarding-label { font-size: .76rem; font-weight: 650; color: inherit; }
 .flight-boarding time { font: 700 1.25rem/1 var(--mono); }
