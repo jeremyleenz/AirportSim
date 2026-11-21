@@ -20,6 +20,11 @@ const airport = (() => {
     return [[x - 4.7, floor, 8.18], [x - 4.7, floor, 7.5],
       [x - 3.35, 1.45, 3.3], [x - 1.05, 1.45, 1.2], [x - .60, 1.45, 1.2]];
   }
+
+  function boardingPath(x) {
+    return [[-4.7, 9.22], [-4.7, 13.64], [-2.88, 13.64], [-2.88, 9.79],
+      [-1.06, 9.79], [-1.06, 14.66], [9.16, 14.66]].map(([dx, z]) => [x + dx, floor, z]);
+  }
   let seed = 561;
   function random() {
     seed = (Math.imul(1664525, seed) + 1013904223) >>> 0;
@@ -170,6 +175,18 @@ const airport = (() => {
     }
   }
 
+  function boardingQueue(mesh, x) {
+    const path = boardingPath(x);
+    mesh.path(path.map(([px, , z]) => [px, z]), .72, floor + .025, "#b8cbc4");
+    for (const [left, right, from, to] of [[0, null, 9.64, 14.1], [0, 2, 9.64, 12.88],
+      [2, 4, 10.49, 14.04], [4, null, 9.58, 14.08]]) {
+      const rail = right === null ? path[left][0] + (left === 0 ? -.91 : .91)
+        : (path[left][0] + path[right][0]) / 2;
+      mesh.box(rail, floor + .445, (from + to) / 2, .041, .049, to - from, "#63817f");
+      for (const z of [from, (from + to) / 2, to]) bollard(mesh, rail, z);
+    }
+  }
+
   function bridge(mesh, x) {
     const points = bridgePath(x).slice(0, -1);
     for (let i = 1; i < points.length; i++) {
@@ -215,15 +232,16 @@ const airport = (() => {
       bridge(mesh, x);
       mesh.rect(x + .4, floor + .018, 11.8, 19.15, 5.45, "#a6b9b7");
       mesh.rect(x + .4, floor + .020, 14.36, 19.05, .11, "#e3e8d1");
-      for (const dx of [-5.5, -2.3, 1.1, 4.3]) {
+      for (const dx of [-7.32, 1.28, 4.17, 7.06]) {
         bench(mesh, x + dx, 10.25, "#628388");
         bench(mesh, x + dx, 12.8, "#55797d", -1);
       }
-      desk(mesh, x + 8.2, 10.4, teal);
+      boardingQueue(mesh, x);
+      desk(mesh, x - 6.12, 9.28, teal);
       for (const z of [9.7, 14.1]) planter(mesh, x - 8.15, floor, z, 1.3);
-      mesh.box(x + 8.15, floor + .94, 9.5, .09, 1.12, .09, frame);
-      mesh.box(x + 8.15, floor + 1.8, 9.5, 1.5, .36, .14, ink);
-      mesh.box(x + 8.15, floor + 1.89, 9.599, 1.22, .12, .06, paint);
+      mesh.box(x - 6.12, floor + .94, 9.5, .09, 1.12, .09, frame);
+      mesh.box(x - 6.12, floor + 1.8, 9.5, 1.5, .36, .14, ink);
+      mesh.box(x - 6.12, floor + 1.89, 9.599, 1.22, .12, .06, paint);
     }
 
     // Coffee shop, security, and check-in are separate spaces in the cutaway.
@@ -428,7 +446,7 @@ const airport = (() => {
   }
 
   const terminalPaths = {
-    queueRows, queueSpacing, bridgePath,
+    queueRows, queueSpacing, bridgePath, boardingPath,
     checkIn: checkInQueue,
     security: securityQueue
   };

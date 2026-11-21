@@ -20,14 +20,14 @@
   function makeFlight(route, airline, stage, gate, initialPassengers) {
     const [destination, number, passengers] = routes[route];
     const manifest = initialPassengers ? passengerFlow.manifest(passengers, initialPassengers, "checkIn") : [];
-    return {destination, id: airlines[airline].code + number, airline, passengers, stage, gate, manifest, nextBoarding: 0};
+    return {destination, id: airlines[airline].code + number, airline, passengers, stage, gate, manifest};
   }
 
   const state = {
     cash: 124500, now: 0, speed: 1, paused: false, dispatched: 0, lanes: 2,
     nextArrival: 0, nextRoute: 3,
     flights: [
-      makeFlight(0, 0, "boarding", 0, {boarded: 68, gate: 28}),
+      makeFlight(0, 0, "boarding", 0, {boarded: 68, gateQueue: 8, gate: 20}),
       makeFlight(1, 1, "parked", 1, {gate: 24, concourse: 12, security: 38}),
       makeFlight(2, 2, "holding", null)
     ],
@@ -199,15 +199,16 @@
     } else if (stage === "outbound") {
       $("#detail-content").innerHTML = '<p class="detail-copy">Aircraft cleared for runway 09.</p>';
     } else {
-      const {boarded, boarding, gate: waiting} = counts;
+      const {boarded, boarding, gateQueue, gate: lounge} = counts;
       $("#detail-content").innerHTML = progress("Passengers boarded", boarded + " / " + passengers, boarded / passengers * 100) +
-        '<div class="flow-stats">' + stat("Waiting at gate", waiting) +
-        stat("On the way to the gate", passengers - waiting - boarding - boarded) +
+        '<div class="flow-stats">' + stat("In lounge", lounge) + stat("In boarding line", gateQueue) +
+        stat("On the way to the gate", passengers - lounge - gateQueue - boarding - boarded) +
         stat("Walking to aircraft", boarding) + '</div>';
     }
     const runwayBusy = Boolean(state.moving);
     const labels = {
-      parked: "Start boarding", boarding: counts.gate || counts.boarding ? "Boarding in progress" : "Waiting for passengers",
+      parked: "Start boarding", boarding: counts.gate || counts.gateQueue || counts.boarding
+        ? "Boarding in progress" : "Waiting for passengers",
       ready: runwayBusy ? "Airfield in use" : "Clear for departure",
       holding: gate < 0 ? "All gates occupied" : runwayBusy ? "Airfield in use" : "Assign gate " + gates[gate].name,
       inbound: "Taxiing to gate", outbound: "Departure in progress"
