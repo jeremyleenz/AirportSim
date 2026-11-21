@@ -15,6 +15,7 @@
   const minutesFromBoardingToTakeoff = 30;
   const earliestPassengerArrival = 70;
   const latestPassengerArrival = 40;
+  const lateNoticeMinutes = 12;
   const takeoffWarningMinutes = 10;
   const taxiSpeed = 4;
   const pushbackSpeed = 2.5;
@@ -31,7 +32,7 @@
     ["Melbourne", 96], ["Brisbane", 90], ["Auckland", 110],
     ["Hobart", 86], ["Adelaide", 102], ["Wellington", 94]
   ];
-  // Arrival and takeoff times are minutes after the shift opens at 08:42.
+  // Times are minutes after the shift opens at 08:42.
   const timetable = [
     [0, 0, 214, null, 13], [1, 1, 507, null, 46], [2, 2, 318, 0, 70],
     [3, 3, 126, 20, 84], [4, 0, 435, 25, 97],
@@ -46,16 +47,28 @@
     return {id: airlines[airline].code + number, destination, airline, passengers, arrivalAt, boardingAt, takeoffAt};
   });
 
+  function lateArrivalTimes(takeoffAt) {
+    if (Math.random() >= .25) return [];
+    const count = 1 + Math.floor(Math.random() * 8);
+    return Array.from({length: count}, () => {
+      const timing = Math.random();
+      const [earliest, latest] = timing < .7 ? [-26, -12] : timing < .9 ? [-12, -1] : [0, 7];
+      const first = Math.max(earliest, -takeoffAt / secondsPerMinute);
+      return takeoffAt + (first + (latest - first) * Math.random()) * secondsPerMinute;
+    }).sort((a, b) => a - b);
+  }
+
   function makeFlight(plan, index) {
     const {arrivalAt, takeoffAt, passengers} = plan;
     const gate = arrivalAt === null ? index : null;
     const stage = arrivalAt === null ? (gate === 0 ? "boarding" : "parked")
       : arrivalAt === 0 ? "holding" : "scheduled";
-    const initialPassengers = gate === 0 ? {boarded: 68, gateQueue: 8, gate: 20}
-      : gate === 1 ? {gate: 19, cafe: 5, concourse: 12, security: 38, checkIn: 16} : null;
+    const lateTimes = lateArrivalTimes(takeoffAt);
+    const initialPassengers = gate === 0 ? {boarded: 68, gateQueue: 8, gate: 20 - lateTimes.length}
+      : gate === 1 ? {gate: 19, cafe: 5, concourse: 12, security: 38, checkIn: 16 - lateTimes.length} : null;
     const manifest = passengerFlow.manifest(passengers, initialPassengers,
       takeoffAt - earliestPassengerArrival * secondsPerMinute,
-      takeoffAt - latestPassengerArrival * secondsPerMinute);
+      takeoffAt - latestPassengerArrival * secondsPerMinute, lateTimes);
     const incomingPassengers = arrivalAt === null ? 0 : Math.round(passengers * (.55 + index * 3 % 5 * .04));
     return {...plan, stage, gate, manifest, incomingPassengers};
   }
@@ -368,8 +381,40 @@
     button.querySelector(".flight-progress-track span").style.width = boarded / flight.passengers * 100 + "%";
     const stages = [[checkIn, "at check-in"], [security, "at security"], [gate + gateQueue, "at gate"],
       [boarding, "walking to aircraft"], [outside, "yet to arrive"], [missed, "empty seats"]];
+    const lateWaiting = notifiedLatePassengers(flight);
+    const late = lateWaiting ? '<span class="flight-late-passengers">' + latePassengerLabel(lateWaiting) + '</span>' : '';
     button.querySelector(".flight-stages").innerHTML = stages.filter(([count]) => count > 0)
-      .map(([count, label]) => '<span><b>' + count + '</b> ' + label + '</span>').join("");
+      .map(([count, label]) => '<span><b>' + count + '</b> ' + label + '</span>').join("") + late;
+  }
+
+  function notifiedLatePassengers(flight) {
+    if (flight.stage !== "boarding") return 0;
+    const {regularUnboarded, lateOutside, lateInTerminal} = occupancy.byFlight.get(flight.id);
+    if (regularUnboarded) return 0;
+    const taxiToLiftoff = outboundRoutes[flight.gate]?.liftoff ?? 0;
+    const notice = Math.max(lateNoticeMinutes * secondsPerMinute, taxiToLiftoff + 4 * secondsPerMinute);
+    if (state.now < flight.takeoffAt - notice) return 0;
+    return lateOutside + lateInTerminal;
+  }
+
+  function latePassengerLabel(count) {
+    return count + (count === 1 ? " late passenger" : " late passengers");
+  }
+
+  function paintLateAlert() {
+    const alert = $("#late-flight-alert");
+    const flights = state.flights.filter(notifiedLatePassengers);
+    const flight = flights.at(-1);
+    alert.hidden = !flight;
+    if (!flight) {
+      delete alert.dataset.flight;
+      return;
+    }
+    const message = flight.id + " · " + latePassengerLabel(notifiedLatePassengers(flight));
+    const label = flights.length > 1 ? message + " · +" + (flights.length - 1) + " flights" : message;
+    if (alert.textContent !== label) alert.textContent = label;
+    if (alert.dataset.flight !== flight.id) announce(message + ". Open the flight to review boarding.");
+    alert.dataset.flight = flight.id;
   }
 
   function paintFlights() {
@@ -477,10 +522,11 @@
     const action = $("#flight-action");
     const close = $("#close-boarding");
     const upgrade = $("#flight-upgrade");
+    const lateNotice = $("#late-passengers");
     const host = flightElements.get(flight?.id)?.card ?? $("#flight-view");
     if (flightDetail.parentNode !== host) host.append(flightDetail);
     paintGatePicker(flight, gate);
-    close.hidden = upgrade.hidden = true;
+    close.hidden = upgrade.hidden = lateNotice.hidden = true;
     flightDetail.hidden = !flight && gate < 0;
     if (flightDetail.hidden) return;
     $("#stand-heading").hidden = Boolean(flight);
@@ -520,6 +566,13 @@
     if (arriving) {
       $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
         stat("Passengers in terminal", (passengers - counts.outside) + " / " + passengers) + '</div>');
+    }
+    const {lateOutside, lateInTerminal, nextLateArrival} = counts;
+    if (notifiedLatePassengers(flight)) {
+      lateNotice.hidden = false;
+      lateNotice.innerHTML = (lateOutside ? stat("Late passengers yet to arrive", lateOutside) +
+        stat("Next terminal arrival", state.now < nextLateArrival ? scheduleTime(nextLateArrival) : "At entrance") : "") +
+        (lateInTerminal ? stat("Late passengers in terminal", lateInTerminal) : "");
     }
     const waiting = passengers - counts.boarded - counts.boarding - counts.missed;
     const nextDeparture = state.nextDeparture;
@@ -583,6 +636,7 @@
     $("#flight-view").hidden = !flightsOpen || complete;
     paintFlights();
     paintDetail();
+    paintLateAlert();
     if (scheduleOpen) paintSchedule();
     if (terminalOpen) {
       $("#check-in-count").textContent = occupancy.checkIn.length;
@@ -956,6 +1010,13 @@
   $("#flights-tab").addEventListener("click", () => notifyTab("flights"));
   $("#schedule-tab").addEventListener("click", () => notifyTab("schedule"));
   $("#terminal-tab").addEventListener("click", () => notifyTab("terminal"));
+  $("#late-flight-alert").addEventListener("click", () => {
+    const id = $("#late-flight-alert").dataset.flight;
+    if (!id) return;
+    select(id);
+    if (mobileLayout.matches) showMobileView("operations");
+    revealFlight();
+  });
   $("#show-map").addEventListener("click", () => showMobileView("map"));
   $("#show-operations").addEventListener("click", () => showMobileView("operations"));
   $("#flight-action").addEventListener("click", command);

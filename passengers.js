@@ -14,16 +14,22 @@ const passengerFlow = (() => {
   const deplaneInterval = .32;
   const point = (x, z) => [x, floor, z];
 
-  function manifest(capacity, initial, arrivalStart, arrivalEnd) {
+  function manifest(capacity, initial, arrivalStart, arrivalEnd, lateTimes = []) {
     const people = [];
     for (const [zone, count] of Object.entries(initial ?? {})) {
       for (let i = 0; i < count; i++) people.push(makePerson(people.length, zone));
     }
     const outside = capacity - people.length;
+    const regular = outside - lateTimes.length;
     for (let i = 0; i < outside; i++) {
       const person = makePerson(people.length, "outside");
-      const fraction = (i + .2 + (i * 7 % 13) / 20) / outside;
-      person.arrivalAt = arrivalStart + (arrivalEnd - arrivalStart) * fraction;
+      if (i < regular) {
+        const fraction = (i + .2 + (i * 7 % 13) / 20) / regular;
+        person.arrivalAt = arrivalStart + (arrivalEnd - arrivalStart) * fraction;
+      } else {
+        person.lateArrival = true;
+        person.arrivalAt = lateTimes[i - regular];
+      }
       people.push(person);
     }
     return people;
@@ -304,11 +310,11 @@ const passengerFlow = (() => {
 
   function walkToGate(person, flight, queue, now) {
     const [startX] = person.position;
-    const entry = queue.points.at(-1);
     const middleZ = 16.1 + person.index % 5 * .48;
     if (wantsToQueue(person, flight, now) && hasRoom(queue)) {
-      const approach = [point(startX, middleZ), point(entry[0], middleZ), entry];
-      approachLine(person, queue, approach, travelTime(person.position, approach), now);
+      const {position, offset} = boardingEntry(queue);
+      const points = [point(startX, middleZ), point(position[0], middleZ), position];
+      approachLine(person, queue, {points, offset, duration: travelTime(person.position, points)}, now);
     } else {
       const spot = reserveLounge(person, queue);
       if (!spot) return false;
@@ -364,31 +370,42 @@ const passengerFlow = (() => {
     return flight.stage === "parked" && queuesEarly && now >= flight.boardingAt - leadTime;
   }
 
-  function approachLine(person, queue, points, duration, now) {
+  function boardingEntry(queue) {
+    const tailOffset = queue.line.at(-1)?.offset ?? -boardingSpacing;
+    const joinOffset = tailOffset + (queue.approaching.length + 1) * boardingSpacing;
+    const fullEntranceInUse = queue.approaching.at(-1)?.offset === queue.length;
+    // The open end of the first lane lets passengers join behind a short line without crossing a rail.
+    if (!fullEntranceInUse && joinOffset <= queue.offsets[1]) {
+      return {position: queue.points[1], offset: queue.offsets[1]};
+    }
+    return {position: queue.points.at(-1), offset: queue.length};
+  }
+
+  function approachLine(person, queue, {points, offset, duration}, now) {
     const joinAt = Math.max(now + duration, queue.nextJoin);
     queue.nextJoin = joinAt + .31;
     walk(person, points, undefined, joinAt - duration);
-    queue.approaching.push(person);
+    queue.approaching.push({person, offset});
   }
 
   function callFromLounge(flight, queue, now) {
     if (!hasRoom(queue) || now < queue.nextCall) return;
-    const entry = queue.points.at(-1);
+    const {position, offset} = boardingEntry(queue);
     let first = null;
     for (const person of flight.manifest) {
-      if (person.zone !== "gate" || person.route || queue.approaching.includes(person) ||
+      if (person.zone !== "gate" || person.route || queue.approaching.some(entry => entry.person === person) ||
         !wantsToQueue(person, flight, now)) continue;
       const row = seatAisle(person.spot);
       const aisleX = person.spot.aisleX;
       const points = [point(person.position[0], row), point(aisleX, row)];
-      if (aisleX < entry[0]) points.push(point(aisleX, 15.36), point(entry[0], 15.36));
-      points.push(entry);
+      if (aisleX !== position[0]) points.push(point(aisleX, 15.36), point(position[0], 15.36));
+      points.push(position);
       const duration = travelTime(person.position, points);
       const arrival = duration + (person.index * 7 % 9) * .055;
-      if (!first || arrival < first.arrival) first = {person, points, duration, arrival};
+      if (!first || arrival < first.arrival) first = {person, points, offset, duration, arrival};
     }
     if (first) {
-      approachLine(first.person, queue, first.points, first.duration, now + .13);
+      approachLine(first.person, queue, first, now + .13);
       queue.nextCall = now + .25;
     }
   }
@@ -419,14 +436,12 @@ const passengerFlow = (() => {
       }
     }
     const tail = queue.line.at(-1);
-    if (!tail || queue.length - tail.offset >= boardingSpacing) {
-      const index = queue.approaching.findIndex(person => !person.route);
-      if (index >= 0) {
-        const [person] = queue.approaching.splice(index, 1);
-        person.zone = "gateQueue";
-        queue.line.push({person, offset: queue.length});
-        changed = true;
-      }
+    const next = queue.approaching[0];
+    if (next && !next.person.route && (!tail || next.offset - tail.offset >= boardingSpacing)) {
+      queue.approaching.shift();
+      next.person.zone = "gateQueue";
+      queue.line.push(next);
+      changed = true;
     }
     callFromLounge(flight, queue, now);
     return changed;
@@ -470,8 +485,12 @@ const passengerFlow = (() => {
     const path = [];
     if (zone === "gateQueue") {
       const {offset} = queue.line.find(entry => entry.person === person);
-      const next = queue.offsets.findIndex(distance => distance > offset);
-      if (next >= 0) path.push(...queue.points.slice(next));
+      if (offset <= queue.offsets[1]) {
+        path.push(queue.points[1]);
+      } else {
+        const next = queue.offsets.findIndex(distance => distance > offset);
+        if (next >= 0) path.push(...queue.points.slice(next));
+      }
     } else if (spot && (zone === "gate" || zone === "otherGate" || zone === "sharedSeats")) {
       const row = seatAisle(spot);
       path.push(point(x, row), point(spot.aisleX, row));
@@ -666,10 +685,21 @@ const passengerFlow = (() => {
     const byFlight = new Map();
     for (const flight of flights) {
       const counts = {outside: 0, checkIn: 0, landside: 0, security: 0, concourse: 0, cafe: 0,
-        sharedSeats: 0, otherGate: 0, gate: 0, gateQueue: 0, boarding: 0, boarded: 0, missed: 0};
+        sharedSeats: 0, otherGate: 0, gate: 0, gateQueue: 0, boarding: 0, boarded: 0, missed: 0,
+        regularUnboarded: 0, lateOutside: 0, lateInTerminal: 0, nextLateArrival: null};
       byFlight.set(flight.id, counts);
       for (const person of flight.manifest) {
         counts[person.zone]++;
+        if (person.lateArrival) {
+          if (person.zone === "outside") {
+            counts.lateOutside++;
+            counts.nextLateArrival ??= person.arrivalAt;
+          } else if (!["boarding", "boarded", "missed"].includes(person.zone)) {
+            counts.lateInTerminal++;
+          }
+        } else if (person.zone !== "boarded") {
+          counts.regularUnboarded++;
+        }
         if (person.zone === "boarded" || person.zone === "outside" || person.zone === "missed") continue;
         const entry = {person, flight};
         const atGate = person.zone === "gate" || person.zone === "gateQueue";
