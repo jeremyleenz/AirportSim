@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
   <link rel="stylesheet" href="styles.css">
@@ -49,7 +49,7 @@
       <div class="weather"><svg class="icon"><use href="#sun"/></svg><span>19°C</span></div>
     </div>
   </header>
-  <main class="game">
+  <main class="game" data-mobile-view="map">
     <section id="map" class="map" aria-label="Interactive isometric view of Northpoint Airport">
       <canvas id="scene" aria-label="3D airport map"></canvas>
       <div id="aircraft-selection" class="aircraft-selection" aria-hidden="true" hidden><i></i><i></i><i></i><i></i></div>
@@ -66,11 +66,11 @@
           <button id="zoom-out" title="Zoom out" aria-label="Zoom out"><svg class="icon"><use href="#minus"/></svg></button>
           <button id="reset-view" title="Fit airport in view" aria-label="Fit airport in view"><svg class="icon"><use href="#focus"/></svg></button>
         </div>
-        <div class="map-hint">Drag to pan <b>·</b> Scroll to zoom</div>
+        <div class="map-hint">Drag to pan <b>·</b> <span class="desktop-zoom-hint">Scroll to zoom</span><span class="touch-zoom-hint">Pinch to zoom</span></div>
       </div>
       <div id="map-error" class="map-error" hidden>The airport view needs WebGL. Open the game in a browser with hardware acceleration enabled.</div>
     </section>
-    <aside class="operations" aria-label="Airport operations">
+    <aside id="operations" class="operations" aria-label="Airport operations">
       <div class="panel-head"><div class="panel-icon"><svg class="icon"><use href="#tower"/></svg></div><div><p>Control tower</p><h1>Operations</h1></div></div>
       <nav class="tabs" aria-label="Operations views">
         <button type="button" id="flights-tab" aria-pressed="true"><svg class="icon"><use href="#plane"/></svg>Flights</button>
@@ -82,7 +82,7 @@
           <div id="flight-list" class="flight-list"></div>
           <div id="flight-detail" class="flight-detail">
             <div class="detail-head">
-              <div><p id="detail-kicker"></p><h3 id="detail-title"></h3></div>
+              <div><p id="detail-kicker"></p><h3 id="detail-title" tabindex="-1"></h3></div>
               <div id="detail-boarding" class="detail-boarding" hidden>
                 <span class="boarding-label">Boarding time</span>
                 <time></time>
@@ -129,7 +129,11 @@
     </aside>
   </main>
   <footer class="bottom-bar">
-    <div class="time-controls" aria-label="Simulation speed">
+    <div class="mobile-views" role="group" aria-label="Game view">
+      <button id="show-map" type="button" aria-controls="map" aria-pressed="true">Map</button>
+      <button id="show-operations" type="button" aria-label="Operations" aria-controls="operations" aria-pressed="false">Ops</button>
+    </div>
+    <div class="time-controls" role="group" aria-label="Simulation speed">
       <button type="button" id="pause-toggle" aria-label="Pause simulation" title="Pause or resume (Space)"><svg class="icon"><use id="pause-icon" href="#pause"/></svg></button>
       <button type="button" data-speed="1" aria-pressed="true">1×</button>
       <button type="button" data-speed="2" aria-pressed="false">2×</button>

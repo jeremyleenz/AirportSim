@@ -3,6 +3,8 @@
 (() => {
   const $ = selector => document.querySelector(selector);
   const {gates, runwayZ, taxiwayZ, floor} = airport;
+  const mobileLayout = window.matchMedia("(max-width: 760px), (pointer: coarse) and (max-height: 500px)");
+  const game = $(".game");
   const currency = new Intl.NumberFormat("en-US", {style: "currency", currency: "USD", maximumFractionDigits: 0});
   const laneCost = 12500;
   const startMinutes = 8 * 60 + 42;
@@ -102,7 +104,7 @@
     const count = addMapCount(button);
     button.addEventListener("click", () => {
       const flight = flightAtGate(gate);
-      select(flight?.id || state.flights.find(item => item.stage === "holding")?.id || "gate-" + gate, gate);
+      selectFromMap(flight?.id || state.flights.find(item => item.stage === "holding")?.id || "gate-" + gate, gate);
     });
     if (renderer) $("#map-labels").append(button);
     return {element: button, x: x + 2.9, y: 2.85, z: 7.93, count};
@@ -122,7 +124,7 @@
   const holdingPinPosition = {element: holdingPin, x: holdingPosition.x, y: 6.4, z: holdingPosition.z};
   holdingPin.addEventListener("click", () => {
     const flight = flightAtHoldingPoint();
-    if (flight) select(flight.id);
+    if (flight) selectFromMap(flight.id);
   });
   $("#lounge-counts").innerHTML = gates.map(({name}) => stat(name, 0)).join("");
 
@@ -140,6 +142,26 @@
     state.view = "flights";
     paint();
     requestDraw = true;
+  }
+
+  function showMobileView(view) {
+    game.dataset.mobileView = view;
+    $("#show-map").setAttribute("aria-pressed", String(view === "map"));
+    $("#show-operations").setAttribute("aria-pressed", String(view === "operations"));
+    requestDraw = true;
+  }
+
+  function revealFlight() {
+    $("#flight-detail").scrollIntoView({block: "nearest"});
+    $("#detail-title").focus({preventScroll: true});
+  }
+
+  function selectFromMap(id, stand = null) {
+    select(id, stand);
+    if (mobileLayout.matches) {
+      showMobileView("operations");
+      revealFlight();
+    }
   }
 
   function notifyTab(view) {
@@ -277,7 +299,10 @@
           '<span class="flight-status"></span>' +
           '<span class="flight-boarding" hidden><span class="boarding-label"></span><time></time></span>' +
           '<span class="takeoff-alert" hidden></span></span>';
-        button.addEventListener("click", () => select(flight.id));
+        button.addEventListener("click", () => {
+          select(flight.id);
+          if (mobileLayout.matches) revealFlight();
+        });
         $("#flight-list").append(button);
         flightElements.set(flight.id, button);
       }
@@ -591,7 +616,7 @@
   }
 
   function draw() {
-    if (!renderer) return;
+    if (!renderer || (mobileLayout.matches && game.dataset.mobileView === "operations")) return;
     const moving = state.flights.map(flight => ({
       mesh: planes[flight.airline], ...aircraftPosition(flight), flightId: flight.id
     }));
@@ -625,6 +650,8 @@
 
   $("#flights-tab").addEventListener("click", () => notifyTab("flights"));
   $("#terminal-tab").addEventListener("click", () => notifyTab("terminal"));
+  $("#show-map").addEventListener("click", () => showMobileView("map"));
+  $("#show-operations").addEventListener("click", () => showMobileView("operations"));
   $("#flight-action").addEventListener("click", command);
   $("#pause-toggle").addEventListener("click", togglePause);
   $("#upgrade").addEventListener("click", () => {
@@ -645,11 +672,10 @@
     if (!renderer) return;
     const {view} = renderer;
     const next = Math.max(.65, Math.min(2.7, view.zoom * factor));
-    if (anchor) {
-      const multiplier = next / view.zoom - 1;
-      view.x += (view.width * .495 + view.x - anchor[0]) * multiplier;
-      view.y += (view.height * .51 + view.y - anchor[1]) * multiplier;
-    }
+    const [x, y] = anchor ?? [view.width / 2, view.height / 2];
+    const multiplier = next / view.zoom - 1;
+    view.x += (view.width * .495 + view.x - x) * multiplier;
+    view.y += (view.height * .51 + view.y - y) * multiplier;
     view.zoom = next;
     requestDraw = true;
   }
@@ -662,52 +688,88 @@
   $("#reset-view").addEventListener("click", fit);
   const canvas = $("#scene");
   if (renderer) {
-    function aircraftAt(event) {
+    const pointers = new Map();
+    const dragThreshold = 6;
+    const touchOffsets = [[8, 0], [-8, 0], [0, 8], [0, -8]];
+    let tapOrigin = null;
+
+    function mapPoint(event) {
       const rect = canvas.getBoundingClientRect();
-      return renderer.pickAircraft(event.clientX - rect.left, event.clientY - rect.top);
+      return {x: event.clientX - rect.left, y: event.clientY - rect.top};
+    }
+
+    function aircraftAt({x, y}, touch) {
+      const hit = renderer.pickAircraft(x, y);
+      if (hit || !touch) return hit;
+      for (const [dx, dy] of touchOffsets) {
+        const nearby = renderer.pickAircraft(x + dx, y + dy);
+        if (nearby) return nearby;
+      }
+      return null;
+    }
+
+    function pan(dx, dy) {
+      const {view} = renderer;
+      view.x = Math.max(-view.width * 1.5, Math.min(view.width * 1.5, view.x + dx));
+      view.y = Math.max(-view.height * 1.5, Math.min(view.height * 1.5, view.y + dy));
+      requestDraw = true;
     }
 
     canvas.addEventListener("wheel", event => {
       event.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      zoom(Math.exp(-Math.max(-72, Math.min(72, event.deltaY)) * .003), [event.clientX - rect.left, event.clientY - rect.top]);
+      const {x, y} = mapPoint(event);
+      zoom(Math.exp(-Math.max(-72, Math.min(72, event.deltaY)) * .003), [x, y]);
     }, {passive: false});
-    let pointer = null;
-    const dragThreshold = 5;
     canvas.addEventListener("pointerdown", event => {
-      if (event.button !== 0 || pointer) return;
-      pointer = {id: event.pointerId, x: event.clientX, y: event.clientY,
-        dragging: false, flightId: aircraftAt(event)};
+      const touch = event.pointerType === "touch";
+      if (event.button !== 0 || pointers.size >= 2 ||
+        (pointers.size && (!touch || !pointers.values().next().value.touch))) return;
+      const point = {...mapPoint(event), touch};
+      pointers.set(event.pointerId, point);
+      tapOrigin = pointers.size === 1 ? {...point, flightId: touch ? null : aircraftAt(point, false)} : null;
       canvas.setPointerCapture(event.pointerId);
     });
     canvas.addEventListener("pointermove", event => {
-      if (!pointer) {
-        canvas.toggleAttribute("data-aircraft-hover", Boolean(aircraftAt(event)));
+      const point = pointers.get(event.pointerId);
+      const next = mapPoint(event);
+      if (!point) {
+        if (!pointers.size && event.pointerType === "mouse") {
+          canvas.toggleAttribute("data-aircraft-hover", Boolean(aircraftAt(next, false)));
+        }
         return;
       }
-      if (pointer.id !== event.pointerId) return;
-      const dx = event.clientX - pointer.x, dy = event.clientY - pointer.y;
-      if (!pointer.dragging && Math.hypot(dx, dy) < dragThreshold) return;
-      pointer.dragging = true;
-      const {view} = renderer;
-      view.x = Math.max(-view.width * 1.5, Math.min(view.width * 1.5, view.x + dx));
-      view.y = Math.max(-view.height * 1.5, Math.min(view.height * 1.5, view.y + dy));
-      pointer.x = event.clientX;
-      pointer.y = event.clientY;
-      requestDraw = true;
+      const dx = next.x - point.x, dy = next.y - point.y;
+      if (pointers.size === 2) {
+        const [first, second] = pointers.values();
+        const other = point === first ? second : first;
+        const distance = Math.hypot(point.x - other.x, point.y - other.y);
+        const nextDistance = Math.hypot(next.x - other.x, next.y - other.y);
+        if (distance > 0 && nextDistance > 0) {
+          zoom(nextDistance / distance, [(point.x + other.x) / 2, (point.y + other.y) / 2]);
+        }
+        pan(dx / 2, dy / 2);
+      } else {
+        if (tapOrigin && Math.hypot(dx, dy) < dragThreshold) return;
+        tapOrigin = null;
+        pan(dx, dy);
+      }
+      Object.assign(point, next);
     });
     canvas.addEventListener("pointerup", event => {
-      if (pointer?.id !== event.pointerId) return;
-      const {dragging, flightId, x, y} = pointer;
-      pointer = null;
-      if (!dragging && Math.hypot(event.clientX - x, event.clientY - y) < dragThreshold &&
-        state.flights.some(flight => flight.id === flightId)) {
-        select(flightId);
-      }
+      if (!pointers.delete(event.pointerId)) return;
+      const origin = tapOrigin;
+      tapOrigin = null;
+      if (!origin) return;
+      const point = mapPoint(event);
+      if (Math.hypot(point.x - origin.x, point.y - origin.y) >= dragThreshold) return;
+      const flightId = origin.touch ? aircraftAt(point, true) : origin.flightId;
+      if (state.flights.some(flight => flight.id === flightId)) selectFromMap(flightId);
     });
-    canvas.addEventListener("lostpointercapture", event => {
-      if (pointer?.id === event.pointerId) pointer = null;
-    });
+    function cancelPointer(event) {
+      if (pointers.delete(event.pointerId)) tapOrigin = null;
+    }
+    canvas.addEventListener("pointercancel", cancelPointer);
+    canvas.addEventListener("lostpointercapture", cancelPointer);
     canvas.addEventListener("pointerleave", () => canvas.removeAttribute("data-aircraft-hover"));
   }
   window.addEventListener("keydown", event => {
