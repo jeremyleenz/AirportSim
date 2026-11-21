@@ -15,6 +15,7 @@ const airport = (() => {
   const terminalEdge = 37.95;
   const terminalFrontZ = 28.91;
   const cafeBoundaryX = -13.1;
+  const airsideExit = {x: -14.48, z: terminalFrontZ + .7, width: 1.4};
   const checkInQueue = {centers: [18, 25.2, 32.5], front: 22.14, width: 4.95, deskZ: 21.25};
   const securityQueue = {centers: [-7.2, -.7, 5.8], front: 23.25, width: 4.3,
     checkpointZ: 20.7, portalOffsetX: 1.05, portalWidth: .88, exitZ: 19.10};
@@ -302,10 +303,14 @@ const airport = (() => {
     wall(mesh, terminalEdge, sideCenter, sideLength, false, 2.52);
     wall(mesh, -terminalEdge, sideCenter, sideLength, false, 1.15);
     const entranceHalfWidth = 9;
-    const frontCenter = (terminalEdge + entranceHalfWidth) / 2;
-    const frontLength = terminalEdge - entranceHalfWidth;
-    wall(mesh, -frontCenter, terminalFrontZ, frontLength, true, .72);
-    wall(mesh, frontCenter, terminalFrontZ, frontLength, true, .72);
+    const frontWall = (left, right) => wall(mesh, (left + right) / 2, terminalFrontZ, right - left, true, .72);
+    const exitLeft = airsideExit.x - airsideExit.width / 2;
+    const exitRight = airsideExit.x + airsideExit.width / 2;
+    frontWall(-terminalEdge, exitLeft);
+    frontWall(exitRight, -entranceHalfWidth);
+    frontWall(entranceHalfWidth, terminalEdge);
+    for (const x of [exitLeft, exitRight]) mesh.box(x, floor, terminalFrontZ, .14, 1.15, .25, frame);
+    mesh.box(airsideExit.x, floor + 1.02, terminalFrontZ, airsideExit.width + .14, .13, .25, teal);
 
     for (const {x} of gates) {
       bridge(mesh, x);
@@ -527,7 +532,7 @@ const airport = (() => {
   }
 
   const terminalPaths = {
-    queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats,
+    queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats, airsideExit,
     checkIn: checkInQueue,
     security: securityQueue
   };
@@ -573,7 +578,8 @@ const airport = (() => {
       });
     const highlight = new Mesh().path([[-10.7, 5.45], [-10.7, -11.3], [-8.8, -15],
       [8.8, -15], [10.7, -11.3], [10.7, 5.45]], .23, .05, "#b6e0b3");
-    return {fixed: [...fixed, ...fleet], traffic, outfits, highlight};
+    const securityHighlight = new Mesh().ring(0, .036, 0, .31, .31, .018, "#89c995", 10);
+    return {fixed: [...fixed, ...fleet], traffic, outfits, highlight, securityHighlight};
   }
 
   return {gates, aircraft, scene, passengerActors, terminalPaths, floor, runwayZ, taxiwayZ};

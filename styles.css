@@ -113,7 +113,14 @@ button, h1, h2, h3, p { margin: 0; }
 .takeoff-alert { border-radius: 4px; padding: 4px 6px; font: 700 .73rem var(--mono); color: var(--takeoff-text); background: var(--takeoff-background); white-space: nowrap; }
 .flight-status { font: 600 .68rem var(--mono); border-radius: 4px; padding: 5px 6px; background: #2a3d44; color: #c9dbde; }
 .flight-status[data-stage="boarding"], .flight-status[data-stage="ready"] { color: var(--mint); background: #1f4840; }
-.flight-status[data-stage="reserved"] { color: var(--amber); background: #493c30; }
+.flight-status[data-stage="reserved"], .flight-status[data-stage="closing"] { color: var(--amber); background: #493c30; }
+.flight-progress { display: grid; grid-column: 1 / -1; gap: 5px; padding: 6px 1px 0; border-top: 1px solid #8fa8a338; color: var(--muted); font-size: .75rem; }
+.flight-load { display: flex; align-items: center; justify-content: space-between; gap: 8px; white-space: nowrap; }
+.flight-progress b { color: var(--light); font-family: var(--mono); }
+.flight-progress-track { display: block; width: 42%; height: 3px; border-radius: 3px; overflow: hidden; background: #304248; }
+.flight-progress-track span { display: block; height: 100%; background: var(--mint); }
+.flight-stages { display: flex; flex-wrap: wrap; gap: 3px 10px; }
+.flight-stages:empty { display: none; }
 .flight-boarding, .detail-boarding { display: grid; justify-items: end; gap: 3px; white-space: nowrap; color: var(--amber); }
 .boarding-label { font-size: .76rem; font-weight: 650; color: inherit; }
 .flight-boarding time { font: 700 1.25rem/1 var(--mono); }
@@ -149,6 +156,11 @@ button, h1, h2, h3, p { margin: 0; }
 .primary:hover:not(:disabled) { background: #cff7de; }
 .primary:disabled { background: #263b40; color: #a8bcb8; }
 .primary span { font: 700 .8rem var(--mono); margin-left: 7px; }
+.secondary { display: block; border: 1px solid #4d6467; border-radius: 7px; background: #21353a; color: var(--light); width: 100%; min-height: 38px; margin-top: 7px; padding: 6px 8px; font-size: .85rem; font-weight: 650; }
+.secondary:hover:not(:disabled) { background: #30474b; }
+.secondary:disabled { color: var(--muted); opacity: .7; }
+.secondary span { margin-left: 5px; font: .76rem var(--mono); }
+.boarding-cutoff { color: var(--amber); }
 .detail-copy { color: var(--muted); font-size: .84rem; line-height: 1.4; }
 .objective { display: grid; align-items: start; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 10px; padding: 12px 11px; margin-top: 15px; background: #152a2a; border: 1px solid #34534a; border-radius: 9px; }
 .objective .icon { color: var(--mint); margin-top: 2px; }
@@ -196,7 +208,7 @@ button, h1, h2, h3, p { margin: 0; }
 }
 @media (pointer: coarse) {
   .zoom-group button, .time-controls button { min-width: 44px; min-height: 44px; }
-  .tabs button, .primary, .map-gate { min-height: 44px; }
+  .tabs button, .primary, .secondary, .map-gate { min-height: 44px; }
   .desktop-zoom-hint { display: none; }
   .touch-zoom-hint { display: inline; }
 }
@@ -241,7 +253,7 @@ button, h1, h2, h3, p { margin: 0; }
   .mobile-views button { display: grid; place-items: center; padding: 0 8px; background: transparent; border: 0; border-radius: 5px; font-weight: 700; }
   .mobile-views button[aria-pressed="true"] { background: #34564b; color: #d0f8df; }
   .mobile-views button, .zoom-group button, .time-controls button { min-width: 44px; min-height: 44px; }
-  .tabs button, .primary, .map-gate { min-height: 44px; }
+  .tabs button, .primary, .secondary, .map-gate { min-height: 44px; }
   .gate-choice { min-height: 48px; align-content: center; }
 }
 @media (max-width: 420px) {

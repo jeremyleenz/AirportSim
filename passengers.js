@@ -2,12 +2,12 @@
 
 const passengerFlow = (() => {
   const {gates, floor, terminalPaths} = airport;
-  const {queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats,
+  const {queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats, airsideExit,
     security: securityLayout} = terminalPaths;
   const pace = 4.1;
   const entranceZ = 29;
   const corridorZ = 27.77;
-  const cafeDoorX = -14.48;
+  const cafeDoorX = airsideExit.x;
   const cafeCorridorZ = 17.7;
   const boardingSpacing = .64;
   const scanTime = .43;
@@ -45,6 +45,7 @@ const passengerFlow = (() => {
       boarding: gates.map(({x}, gate) => ({...makeBoardingLine(x), spots: makeLounge(x, gate)})),
       sharedSeats: sharedSeats.map(spot => ({...spot})),
       cafe: cafeSeats.map(spot => ({...spot})),
+      exiting: [],
       nextEntry: 0, entrancesUsed: 0, openedLanes: lanes
     };
     flow.guestSeats = flow.boarding.flatMap(queue => queue.spots.seats);
@@ -457,10 +458,69 @@ const passengerFlow = (() => {
     return next;
   }
 
+  function exitPath(person, queue) {
+    const {zone, spot, route, position: [x, , z]} = person;
+    if (zone === "checkIn" || zone === "landside" || (zone === "security" && z >= securityLayout.checkpointZ)) {
+      return [point(x, corridorZ), point(0, corridorZ), point(0, entranceZ + .6)];
+    }
+    const exit = point(airsideExit.x, airsideExit.z);
+    if (zone === "cafe") return [point(x, spot.aisleZ), point(cafeDoorX, spot.aisleZ), exit];
+
+    const path = [];
+    if (zone === "gateQueue") {
+      const {offset} = queue.line.find(entry => entry.person === person);
+      const next = queue.offsets.findIndex(distance => distance > offset);
+      if (next >= 0) path.push(...queue.points.slice(next));
+    } else if (spot && (zone === "gate" || zone === "otherGate" || zone === "sharedSeats")) {
+      const row = seatAisle(spot);
+      path.push(point(x, row), point(spot.aisleX, row));
+    } else if (zone === "concourse" && route?.zone === "concourse") {
+      path.push(...route.points.slice(route.index));
+    } else if (spot && route?.index > 1) {
+      path.push(...route.points.slice(0, route.index).reverse());
+    }
+    const [aisleX] = path.at(-1) ?? person.position;
+    path.push(point(aisleX, cafeCorridorZ), point(cafeDoorX, cafeCorridorZ), exit);
+    return path;
+  }
+
+  function closeBoarding(flight, flow) {
+    const missed = new Set(flight.manifest.filter(person => person.zone !== "boarding" && person.zone !== "boarded"));
+    const queue = flow.boarding[flight.gate];
+    for (const person of missed) {
+      if (person.position) {
+        const path = exitPath(person, queue);
+        leaveSpot(person);
+        walk(person, path);
+        flow.exiting.push({person, flight});
+      }
+      person.zone = "missed";
+    }
+    for (const bank of [...flow.checkIn, ...flow.security]) {
+      for (const line of bank.lines) line.people = line.people.filter(person => !missed.has(person));
+    }
+    queue.line = [];
+    queue.approaching = [];
+    queue.scanUntil = null;
+    queue.nextJoin = 0;
+    queue.nextCall = 0;
+    return missed.size;
+  }
+
   function advance(flights, flow, now, dt, lanes, onReady) {
     let changed = false;
+    for (let i = flow.exiting.length - 1; i >= 0; i--) {
+      const {person} = flow.exiting[i];
+      person.moving = false;
+      follow(person, dt);
+      if (!person.route) {
+        flow.exiting.splice(i, 1);
+        changed = true;
+      }
+    }
     for (const flight of flights) {
       for (const person of flight.manifest) {
+        if (person.zone === "missed") continue;
         person.moving = false;
         if (person.cafeUntil !== undefined || person.strollUntil !== undefined) {
           changed = recallActivities(person, flight, flow, now) || changed;
@@ -539,26 +599,29 @@ const passengerFlow = (() => {
     }
 
     for (const flight of flights) {
-      if (flight.stage !== "parked" && flight.stage !== "boarding") continue;
-      changed = advanceGateQueue(flight, flow.boarding[flight.gate], now, dt) || changed;
-      if (flight.stage === "boarding" && flight.manifest.every(person => person.zone === "boarded")) onReady(flight);
+      if (flight.stage === "parked" || flight.stage === "boarding") {
+        changed = advanceGateQueue(flight, flow.boarding[flight.gate], now, dt) || changed;
+      }
+      if ((flight.stage === "boarding" || flight.stage === "closing") &&
+        flight.manifest.every(person => person.zone === "boarded" || person.zone === "missed")) onReady(flight);
     }
     return changed;
   }
 
-  function snapshot(flights) {
+  function snapshot(flights, flow) {
     const people = {
-      checkIn: [], landside: [], security: [], concourse: [], cafe: [], sharedSeats: [], boarding: [], visible: [],
+      checkIn: [], landside: [], security: [], concourse: [], cafe: [], sharedSeats: [], boarding: [],
+      exiting: [...flow.exiting], visible: [...flow.exiting],
       gates: gates.map(() => [])
     };
     const byFlight = new Map();
     for (const flight of flights) {
       const counts = {outside: 0, checkIn: 0, landside: 0, security: 0, concourse: 0, cafe: 0,
-        sharedSeats: 0, otherGate: 0, gate: 0, gateQueue: 0, boarding: 0, boarded: 0};
+        sharedSeats: 0, otherGate: 0, gate: 0, gateQueue: 0, boarding: 0, boarded: 0, missed: 0};
       byFlight.set(flight.id, counts);
       for (const person of flight.manifest) {
         counts[person.zone]++;
-        if (person.zone === "boarded" || person.zone === "outside") continue;
+        if (person.zone === "boarded" || person.zone === "outside" || person.zone === "missed") continue;
         const entry = {person, flight};
         const atGate = person.zone === "gate" || person.zone === "gateQueue";
         const gate = person.zone === "otherGate" ? person.spot.gate : atGate ? flight.gate : null;
@@ -570,5 +633,5 @@ const passengerFlow = (() => {
     return {...people, byFlight, total: people.visible.length};
   }
 
-  return {manifest, create, advance, snapshot};
+  return {manifest, create, closeBoarding, advance, snapshot};
 })();
