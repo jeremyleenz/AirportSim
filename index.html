@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=6">
   <script defer src="renderer.js"></script>
   <script defer src="airport.js?v=2"></script>
   <script defer src="passengers.js?v=3"></script>
-  <script defer src="game.js?v=6"></script>
+  <script defer src="game.js?v=7"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -98,19 +98,10 @@
             <summary><span>Upcoming flights <b id="upcoming-count"></b></span><span id="upcoming-next"></span></summary>
             <div id="upcoming-list" class="flight-list"></div>
           </details>
-          <div id="flight-detail" class="flight-detail">
-            <div class="detail-head">
-              <div><p id="detail-kicker"></p><h3 id="detail-title" tabindex="-1"></h3></div>
-              <div id="detail-boarding" class="detail-boarding" hidden>
-                <span class="boarding-label">Boarding time</span>
-                <time></time>
-              </div>
+          <div id="flight-detail" class="flight-detail" hidden>
+            <div id="stand-heading" class="detail-head" hidden>
+              <p id="stand-name"></p><h3 id="stand-title" tabindex="-1">Stand available</h3>
             </div>
-            <div id="detail-takeoff" class="detail-takeoff" hidden>
-              <span>Scheduled takeoff <time></time></span>
-              <span class="takeoff-alert" hidden></span>
-            </div>
-            <p id="detail-arrival" class="detail-arrival" hidden>Aircraft due <time></time></p>
             <div id="detail-content"></div>
             <fieldset id="gate-picker" class="gate-picker" hidden>
               <legend>Choose a gate</legend>

@@ -164,17 +164,18 @@
     requestDraw = true;
   }
 
-  function revealFlight() {
-    $("#flight-detail").scrollIntoView({block: "nearest"});
-    $("#detail-title").focus({preventScroll: true});
+  function revealFlight(focus = true) {
+    const entry = flightElements.get(state.selected);
+    (entry?.card ?? flightDetail).scrollIntoView({block: "nearest"});
+    if (focus) (entry?.button ?? $("#stand-title")).focus({preventScroll: true});
   }
 
   function selectFromMap(id, stand = null) {
     select(id, stand);
     if (mobileLayout.matches) {
       showMobileView("operations");
-      revealFlight();
     }
+    revealFlight(mobileLayout.matches);
   }
 
   function notifyTab(view) {
@@ -239,6 +240,7 @@
   }
 
   const flightElements = new Map();
+  const flightDetail = $("#flight-detail");
   const gatePicker = $("#gate-picker");
   const gateOptions = gates.map(({name}, index) => {
     const label = document.createElement("label");
@@ -375,16 +377,19 @@
     $("#upcoming-count").textContent = upcoming.length;
     $("#upcoming-next").textContent = upcoming.length ? "Next at " + formatTime(clockMinutes(upcoming[0].arrivalAt)) : "";
     const active = new Set(state.flights.map(flight => flight.id));
-    for (const [id, button] of flightElements) {
+    for (const [id, {card}] of flightElements) {
       if (!active.has(id)) {
-        button.remove();
+        if (flightDetail.parentNode === card) $("#flight-view").append(flightDetail);
+        card.remove();
         flightElements.delete(id);
       }
     }
     for (const flight of state.flights) {
-      let button = flightElements.get(flight.id);
-      if (!button) {
-        button = document.createElement("button");
+      let entry = flightElements.get(flight.id);
+      if (!entry) {
+        const card = document.createElement("div");
+        card.className = "flight-card";
+        const button = document.createElement("button");
         button.type = "button";
         button.className = "flight";
         button.style.setProperty("--livery", airlines[flight.airline].ui);
@@ -396,19 +401,28 @@
           '<span class="flight-status"></span>' +
           '<span class="flight-boarding" hidden><span class="boarding-label"></span><time></time></span>' +
           '<span class="takeoff-alert" hidden></span></span>' +
+          '<span class="flight-chevron" aria-hidden="true"></span>' +
           '<span class="flight-progress"><span class="flight-load"><span><b></b> boarded</span>' +
           '<span class="flight-progress-track" aria-hidden="true"><span></span></span></span>' +
           '<span class="flight-stages"></span></span>';
         button.addEventListener("click", () => {
-          select(flight.id);
-          if (mobileLayout.matches) revealFlight();
+          const expanded = state.selected === flight.id;
+          select(expanded ? null : flight.id);
+          if (!expanded && mobileLayout.matches) revealFlight(false);
         });
-        flightElements.set(flight.id, button);
+        card.append(button);
+        entry = {card, button};
+        flightElements.set(flight.id, entry);
       }
+      const {card, button} = entry;
       const expected = flight.stage === "scheduled";
       const list = expected ? upcomingList : flightList;
-      if (button.parentNode !== list) list.append(button);
-      button.setAttribute("aria-pressed", String(flight.id === state.selected));
+      if (card.parentNode !== list) list.append(card);
+      const expanded = flight.id === state.selected;
+      card.classList.toggle("expanded", expanded);
+      button.setAttribute("aria-expanded", String(expanded));
+      if (expanded) button.setAttribute("aria-controls", flightDetail.id);
+      else button.removeAttribute("aria-controls");
       const arriving = isArriving(flight);
       const gate = gates[flight.gate];
       button.querySelector("strong").textContent = arriving ? "To " + flight.destination : flight.destination;
@@ -447,10 +461,6 @@
     }
   }
 
-  function progress(label, value, percentage) {
-    return stat(label, value) + '<div class="detail-bar"><div style="width:' + percentage + '%"></div></div>';
-  }
-
   function stat(label, value) {
     return '<div class="detail-stat"><span>' + label + '</span><b>' + value + '</b></div>';
   }
@@ -458,33 +468,25 @@
   function paintDetail() {
     const flight = state.flights.find(item => item.id === state.selected);
     const gate = selectedGate();
-    const panel = $("#flight-detail");
     const action = $("#flight-action");
     const close = $("#close-boarding");
     const upgrade = $("#flight-upgrade");
-    const takeoff = $("#detail-takeoff");
-    const card = flight && flightElements.get(flight.id);
-    if (card && card.nextElementSibling !== panel) card.after(panel);
-    if (!card && panel.parentNode !== $("#flight-view")) $("#flight-view").append(panel);
-    paintTakeoffTime(takeoff, takeoff.querySelector(".takeoff-alert"), flight, takeoff);
-    paintArrivalTime($("#detail-arrival"), flight);
-    paintBoardingTime($("#detail-boarding"), flight);
+    const host = flightElements.get(flight?.id)?.card ?? $("#flight-view");
+    if (flightDetail.parentNode !== host) host.append(flightDetail);
     paintGatePicker(flight, gate);
     close.hidden = upgrade.hidden = true;
-    panel.hidden = !flight && gate < 0;
-    if (panel.hidden) return;
+    flightDetail.hidden = !flight && gate < 0;
+    if (flightDetail.hidden) return;
+    $("#stand-heading").hidden = Boolean(flight);
     action.hidden = !flight || flight.stage === "boarding" || flight.stage === "scheduled";
     if (!flight) {
-      $("#detail-kicker").textContent = "Gate " + gates[gate].name;
-      $("#detail-title").textContent = "Stand available";
+      $("#stand-name").textContent = "Gate " + gates[gate].name;
       $("#detail-content").innerHTML = '<p class="detail-copy">This gate can receive the next arrival.</p>';
       return;
     }
-    const {stage, passengers, id, destination} = flight;
+    const {stage, passengers, id} = flight;
     const counts = occupancy.byFlight.get(id);
     const arriving = isArriving(flight);
-    $("#detail-kicker").textContent = arriving ? id : gates[flight.gate].name + " / " + id;
-    $("#detail-title").textContent = arriving ? "To " + destination : destination;
     if (stage === "scheduled" || stage === "holding") {
       $("#detail-content").innerHTML = stage === "holding" ? '<p class="detail-copy">Aircraft holding for a gate.</p>' : "";
     } else if (stage === "reserved") {
@@ -499,8 +501,7 @@
     } else {
       const {outside, boarded, boarding, gateQueue, gate: lounge, missed, checkIn, security} = counts;
       const elsewhere = passengers - outside - missed - boarded - lounge - gateQueue - boarding - checkIn - security;
-      $("#detail-content").innerHTML = progress("Passengers boarded", boarded + " / " + passengers, boarded / passengers * 100) +
-        '<div class="flow-stats">' + (checkIn ? stat("At check-in", checkIn) : "") +
+      $("#detail-content").innerHTML = '<div class="flow-stats">' + (checkIn ? stat("At check-in", checkIn) : "") +
         (security ? stat("At security", security) : "") + stat("In lounge", lounge) +
         stat("In boarding line", gateQueue) + stat("Walking to aircraft", boarding) +
         (elsewhere ? stat("Elsewhere in terminal", elsewhere) : "") +

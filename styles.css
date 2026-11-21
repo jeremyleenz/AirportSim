@@ -129,9 +129,13 @@ button, h1, h2, h3, p { margin: 0; }
 .upcoming summary b { margin-left: 3px; color: var(--mint); font: 700 .74rem var(--mono); }
 #upcoming-next { margin-left: auto; color: var(--muted); font: .72rem var(--mono); }
 .upcoming .flight-list { margin-top: 7px; }
-.flight { width: 100%; text-align: left; min-height: 59px; display: grid; grid-template-columns: 36px minmax(0, 1fr) max-content; align-items: center; gap: 9px; background: #192930; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.flight-card { min-width: 0; background: #192930; border: 1px solid var(--line); border-radius: 8px; }
+.flight-card.expanded { background: #203936; border-color: #659780; }
+.flight { width: 100%; text-align: left; min-height: 59px; display: grid; grid-template-columns: 34px minmax(0, 1fr) max-content 10px; align-items: center; gap: 8px; background: transparent; border: 0; border-radius: 7px; padding: 8px; }
 .flight:hover { background: #253937; }
-.flight[aria-pressed="true"] { background: #203936; border-color: #659780; }
+.flight[aria-expanded="true"] { border-radius: 7px 7px 0 0; }
+.flight-chevron { width: 7px; height: 7px; margin-bottom: 3px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); rotate: 45deg; }
+.expanded .flight-chevron { margin: 3px 0 0; border-color: var(--mint); rotate: 225deg; }
 .airline-mark { display: grid; place-items: center; width: 34px; height: 34px; color: var(--livery); border-radius: 6px; background: color-mix(in srgb, var(--livery) 14%, #14242b); }
 .airline-mark .icon { width: 17px; height: 17px; transform: rotate(32deg); }
 .flight-name { display: grid; gap: 4px; min-width: 0; }
@@ -140,9 +144,8 @@ button, h1, h2, h3, p { margin: 0; }
 .flight-state { display: grid; justify-items: end; gap: 4px; }
 .flight-takeoff { font-size: .78rem; color: var(--takeoff-text, var(--muted)); white-space: nowrap; }
 .flight-takeoff time { font: 650 .88rem var(--mono); color: var(--takeoff-text, var(--light)); }
-.flight-arrival, .detail-arrival { color: var(--muted); font-size: .77rem; }
-.flight-arrival time, .detail-arrival time { color: var(--light); font: 650 .81rem var(--mono); }
-.detail-arrival { margin-bottom: 9px; }
+.flight-arrival { color: var(--muted); font-size: .77rem; }
+.flight-arrival time { color: var(--light); font: 650 .81rem var(--mono); }
 [data-takeoff="due"] { --takeoff-text: var(--amber); --takeoff-background: #493c30; }
 [data-takeoff="late"] { --takeoff-text: #ffb1a9; --takeoff-background: #502d31; }
 .takeoff-alert { border-radius: 4px; padding: 4px 6px; font: 700 .73rem var(--mono); color: var(--takeoff-text); background: var(--takeoff-background); white-space: nowrap; }
@@ -156,18 +159,14 @@ button, h1, h2, h3, p { margin: 0; }
 .flight-progress-track span { display: block; height: 100%; background: var(--mint); }
 .flight-stages { display: flex; flex-wrap: wrap; gap: 3px 10px; }
 .flight-stages:empty { display: none; }
-.flight-boarding, .detail-boarding { display: grid; justify-items: end; gap: 3px; white-space: nowrap; color: var(--amber); }
+.flight-boarding { display: grid; justify-items: end; gap: 3px; white-space: nowrap; color: var(--amber); }
 .boarding-label { font-size: .76rem; font-weight: 650; color: inherit; }
 .flight-boarding time { font: 700 1.25rem/1 var(--mono); }
 .flight-detail { background: #1a2b32; border: 1px solid #33484d; border-radius: 10px; margin-top: 14px; padding: 13px; }
-.flight-list .flight-detail { margin: 0 0 4px; }
-.detail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
+.flight-card > .flight-detail { margin: 0; padding: 11px 12px 12px; border: 0; border-top: 1px solid #8fa8a338; border-radius: 0; background: transparent; }
+.detail-head { margin-bottom: 8px; }
 .detail-head p { color: var(--dim); }
 .detail-head h3 { font-size: 1.26rem; line-height: 1.2; letter-spacing: -.03em; margin-top: 4px; }
-.detail-boarding { padding: 6px 9px; border: 1px solid #67523c; border-radius: 6px; background: #302e27; }
-.detail-boarding time { font: 750 1.65rem/1 var(--mono); }
-.detail-takeoff { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 8px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--takeoff-text, var(--muted)); font-size: .82rem; }
-.detail-takeoff time { margin-left: 4px; font: 700 1.05rem var(--mono); color: var(--takeoff-text, var(--light)); }
 .detail-stat { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--muted); font-size: .83rem; }
 .detail-stat b { color: var(--light); white-space: nowrap; font: 600 .81rem var(--mono); }
 .gate-picker { border: 0; padding: 0; margin: 12px 0 0; min-width: 0; }
@@ -185,9 +184,9 @@ button, h1, h2, h3, p { margin: 0; }
 .gate-option input:disabled { cursor: default; }
 .gate-option input:disabled + .gate-choice { color: var(--dim); }
 .flow-stats { display: grid; gap: 6px; }
-#detail-content .flow-stats { margin-top: 10px; }
-.detail-bar, .objective-progress { background: #304248; height: 4px; overflow: hidden; border-radius: 4px; margin-top: 8px; }
-.detail-bar > div, #goal-bar { height: 100%; background: var(--mint); transition: width .25s; }
+#detail-content .detail-copy + .flow-stats { margin-top: 10px; }
+.objective-progress { background: #304248; height: 4px; overflow: hidden; border-radius: 4px; margin-top: 8px; }
+#goal-bar { height: 100%; background: var(--mint); transition: width .25s; }
 .primary { border: 1px solid transparent; background: var(--mint); color: #102b23; font-weight: 740; border-radius: 7px; width: 100%; min-height: 38px; margin-top: 12px; padding: 7px; font-size: .91rem; }
 .primary:hover:not(:disabled) { background: #cff7de; }
 .primary:disabled { background: #263b40; color: #a8bcb8; }
