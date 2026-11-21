@@ -2,7 +2,8 @@
 
 const passengerFlow = (() => {
   const {gates, floor, terminalPaths} = airport;
-  const {queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats} = terminalPaths;
+  const {queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats,
+    security: securityLayout} = terminalPaths;
   const pace = 4.1;
   const entranceZ = 29;
   const corridorZ = 27.77;
@@ -40,7 +41,7 @@ const passengerFlow = (() => {
     }
     const flow = {
       checkIn: banks(terminalPaths.checkIn),
-      security: banks(terminalPaths.security),
+      security: banks(securityLayout),
       boarding: gates.map(({x}, gate) => ({...makeBoardingLine(x), spots: makeLounge(x, gate)})),
       sharedSeats: sharedSeats.map(spot => ({...spot})),
       cafe: cafeSeats.map(spot => ({...spot})),
@@ -68,8 +69,8 @@ const passengerFlow = (() => {
           selected.line.people.push(person);
         }
         if (person.zone === "concourse") {
-          const exit = terminalPaths.security.centers[person.index % lanes] + 1.05;
-          person.position = point(exit, 19.10);
+          const exit = securityLayout.centers[person.index % lanes] + securityLayout.portalOffsetX;
+          person.position = point(exit, securityLayout.exitZ);
           afterSecurity(person, flight, flow, 0);
           follow(person, (person.index % 12) * .09);
         }
@@ -439,7 +440,7 @@ const passengerFlow = (() => {
         const [tail] = line.people.splice(index, 1);
         const destination = newBank.lines[moved++ % newBank.lines.length];
         destination.people.push(tail);
-        tail.zone = "concourse";
+        tail.zone = "landside";
         walk(tail, [point(line.x, corridorZ), point(destination.x, corridorZ)], "security");
       }
     }
@@ -503,9 +504,10 @@ const passengerFlow = (() => {
     }
 
     useCounter(flow.security, lanes, .49, (person, bank) => {
-      const exitX = bank.x + 1.05;
+      const exitX = bank.x + securityLayout.portalOffsetX;
       const [x] = person.position;
-      walk(person, [point(x, 23.06), point(exitX, 23.06), point(exitX, 19.10)], "concourse");
+      const approachZ = bank.front - .19;
+      walk(person, [point(x, approachZ), point(exitX, approachZ), point(exitX, securityLayout.exitZ)], "concourse");
       return true;
     });
     useCounter(flow.checkIn, 3, .4, (person, bank) => {
@@ -514,9 +516,10 @@ const passengerFlow = (() => {
       const [x] = person.position;
       const deskX = bank.x + (x < bank.x ? -2.0 : 1.45);
       const sideX = bank.x - 2.85;
-      person.zone = "concourse";
+      const deskFrontZ = terminalPaths.checkIn.deskZ + .57;
+      person.zone = "landside";
       queue.line.people.push(person);
-      walk(person, [point(x, 21.52), point(deskX, 21.52), point(sideX, 21.52),
+      walk(person, [point(x, deskFrontZ), point(deskX, deskFrontZ), point(sideX, deskFrontZ),
         point(sideX, corridorZ), point(queue.line.x, corridorZ)], "security");
       return true;
     });
@@ -545,12 +548,12 @@ const passengerFlow = (() => {
 
   function snapshot(flights) {
     const people = {
-      checkIn: [], security: [], concourse: [], cafe: [], sharedSeats: [], boarding: [], visible: [],
+      checkIn: [], landside: [], security: [], concourse: [], cafe: [], sharedSeats: [], boarding: [], visible: [],
       gates: gates.map(() => [])
     };
     const byFlight = new Map();
     for (const flight of flights) {
-      const counts = {outside: 0, checkIn: 0, security: 0, concourse: 0, cafe: 0,
+      const counts = {outside: 0, checkIn: 0, landside: 0, security: 0, concourse: 0, cafe: 0,
         sharedSeats: 0, otherGate: 0, gate: 0, gateQueue: 0, boarding: 0, boarded: 0};
       byFlight.set(flight.id, counts);
       for (const person of flight.manifest) {

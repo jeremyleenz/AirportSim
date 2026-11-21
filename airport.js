@@ -12,8 +12,12 @@ const airport = (() => {
   const floor = .78;
   const runwayZ = -46;
   const taxiwayZ = -23.2;
-  const checkInQueue = {centers: [18, 25.2, 32.5], front: 22.14, width: 4.95};
-  const securityQueue = {centers: [-7.2, -.7, 5.8], front: 23.25, width: 4.3};
+  const terminalEdge = 37.95;
+  const terminalFrontZ = 28.91;
+  const cafeBoundaryX = -13.1;
+  const checkInQueue = {centers: [18, 25.2, 32.5], front: 22.14, width: 4.95, deskZ: 21.25};
+  const securityQueue = {centers: [-7.2, -.7, 5.8], front: 23.25, width: 4.3,
+    checkpointZ: 20.7, portalOffsetX: 1.05, portalWidth: .88, exitZ: 19.10};
   const queueRows = 9;
   const queueSpacing = .47;
   const loungeBenches = [-7.32, 1.28, 4.17, 7.06];
@@ -227,15 +231,64 @@ const airport = (() => {
     mesh.box(x - 4.68, .04, 7.72, .63, .63, .75, frame);
   }
 
+  function securityPartition(mesh, x, z, length, alongX) {
+    const span = (offset, width, y, height, depth, color) => {
+      mesh.box(x + (alongX ? offset : 0), floor + y, z + (alongX ? 0 : offset),
+        alongX ? width : depth, height, alongX ? depth : width, color);
+    };
+    span(0, length, 0, .12, .19, "#788c87");
+    span(0, length, .12, .56, .07, "#aec5be");
+    span(0, length, .68, .06, .13, "#dce9df");
+    const panels = Math.ceil(length / 2.8);
+    for (let i = 1; i < panels; i++) {
+      span(length * (i / panels - .5), .06, .12, .56, .11, "#728e85");
+    }
+  }
+
+  function securityCheckpoint(mesh) {
+    const {centers, checkpointZ, portalOffsetX, portalWidth} = securityQueue;
+    const partition = (left, right) => securityPartition(mesh, (left + right) / 2, checkpointZ, right - left, true);
+    let left = cafeBoundaryX;
+    for (const x of centers) {
+      const portalX = x + portalOffsetX;
+      const leftPost = portalX - portalWidth / 2;
+      const rightPost = portalX + portalWidth / 2;
+      const beltX = x - 1.2;
+      partition(left, beltX - .56);
+      partition(beltX + .56, leftPost);
+      left = rightPost;
+
+      mesh.box(beltX, floor, 21, .95, .56, 3.75, "#667e7d");
+      mesh.box(beltX, floor + .56, 21, .76, .055, 3.7, "#3e5356");
+      mesh.box(beltX, floor, checkpointZ, 1.12, 1.16, .94, "#7f9993");
+      mesh.box(beltX, floor + 1.14, checkpointZ, 1.16, .10, .98, "#dfe9e0");
+      mesh.box(beltX + .31, floor + .77, checkpointZ + .48, .27, .17, .025, ink);
+      for (const edge of [leftPost, rightPost]) {
+        mesh.box(edge, floor, checkpointZ, .14, 1.62, .34, "#dfe9e0");
+        mesh.box(edge, floor, checkpointZ, .17, .19, .37, frame);
+      }
+      mesh.box(portalX, floor + 1.54, checkpointZ, portalWidth + .19, .20, .38, "#dfe9e0");
+      mesh.box(portalX, floor + 1.60, checkpointZ + .194, portalWidth * .63, .08, .025, teal);
+      mesh.rect(portalX, floor + .026, checkpointZ, portalWidth, 1.2, "#97b8ac");
+      queue(mesh, x, securityQueue);
+    }
+    partition(left, terminalEdge);
+    securityPartition(mesh, cafeBoundaryX, (checkpointZ + terminalFrontZ) / 2, terminalFrontZ - checkpointZ, false);
+  }
+
   function terminal() {
     const mesh = new Mesh();
     mesh.box(0, .031, 18.5, 76, .75, 21, "#bdc9c1");
     mesh.box(0, .46, 18.5, 76.3, .32, 21.24, "#ecede1");
     mesh.rect(0, floor + .006, 18.5, 75.8, 20.85, warm);
+    const {checkpointZ} = securityQueue;
+    mesh.rect(0, floor + .008, (8.18 + checkpointZ) / 2, 75.8, checkpointZ - 8.18, "#dce7db");
+    mesh.rect((cafeBoundaryX - terminalEdge) / 2, floor + .008, (checkpointZ + terminalFrontZ) / 2,
+      cafeBoundaryX + terminalEdge, terminalFrontZ - checkpointZ, "#dce7db");
     mesh.rect(0, floor + .010, 17.1, 75.8, 3.6, "#e9ece3");
     for (let x = -37.8; x < 38; x += 1.9) mesh.rect(x, floor + .013, 18.5, .032, 20.8, "#c5cec6");
     for (let z = 8.3; z < 29; z += 1.42) mesh.rect(0, floor + .015, z, 75.7, .034, "#c8cfc5");
-    let wallStart = -37.95;
+    let wallStart = -terminalEdge;
     for (const gate of gates) {
       const door = bridgePath(gate.x)[0][0];
       const wallEnd = door - .72;
@@ -243,11 +296,16 @@ const airport = (() => {
       mesh.box(door, floor + 1.05, 8.18, 1.54, .19, .24, pale);
       wallStart = door + .72;
     }
-    wall(mesh, (wallStart + 37.95) / 2, 8.18, 37.95 - wallStart, true, 2.6);
-    wall(mesh, 37.95, 18.5, 20.5, false, 2.52);
-    wall(mesh, -37.95, 18.5, 20.5, false, 1.15);
-    wall(mesh, -23, 28.91, 28, true, .72);
-    wall(mesh, 23, 28.91, 28, true, .72);
+    wall(mesh, (wallStart + terminalEdge) / 2, 8.18, terminalEdge - wallStart, true, 2.6);
+    const sideCenter = (8.18 + terminalFrontZ) / 2;
+    const sideLength = terminalFrontZ - 8.18;
+    wall(mesh, terminalEdge, sideCenter, sideLength, false, 2.52);
+    wall(mesh, -terminalEdge, sideCenter, sideLength, false, 1.15);
+    const entranceHalfWidth = 9;
+    const frontCenter = (terminalEdge + entranceHalfWidth) / 2;
+    const frontLength = terminalEdge - entranceHalfWidth;
+    wall(mesh, -frontCenter, terminalFrontZ, frontLength, true, .72);
+    wall(mesh, frontCenter, terminalFrontZ, frontLength, true, .72);
 
     for (const {x} of gates) {
       bridge(mesh, x);
@@ -267,11 +325,10 @@ const airport = (() => {
 
     for (const {x, z} of sharedBenches) bench(mesh, x, z, "#63836c");
 
-    // Coffee shop, security, and check-in are separate spaces in the cutaway.
     mesh.rect(-25, floor + .025, 22.9, 19.4, 7.7, "#c39569");
     for (let z = 19.2; z < 26.7; z += .34) mesh.rect(-25, floor + .029, z, 19.25, .027, "#ad825c");
-    mesh.box(-25, floor, 19.05, 19.5, 1.75, .21, "#e4d2af");
-    mesh.box(-25, floor + 1.72, 19.05, 19.55, .14, .33, "#e7e3d2");
+    mesh.box(-25, floor, 19.05, 19.5, .74, .21, "#d5bb91");
+    mesh.box(-25, floor + .74, 19.05, 19.55, .08, .28, "#eaddc3");
     mesh.box(-29.2, floor, 20.07, 8, .64, .86, "#8c6046");
     mesh.box(-29.2, floor + .63, 20.07, 8.06, .13, .98, "#f3e8cf");
     for (let i = 0; i < 7; i++) mesh.box(-32.6 + i * .51, floor + .76, 20.21, .26, .17, .28,
@@ -285,23 +342,11 @@ const airport = (() => {
       }
     }
     planter(mesh, -15.8, floor, 26.1, 1.3);
-    mesh.rect(-.8, floor + .022, 23.18, 22.4, 8.15, "#c1cec8");
-    mesh.rect(-.8, floor + .025, 19.26, 22.3, .19, teal);
-    for (const x of securityQueue.centers) {
-      mesh.box(x - .95, floor, 20.3, 1.8, 1.43, .24, "#e3e8dc");
-      mesh.box(x - 1.2, floor, 21, .95, .56, 3.75, "#596d70");
-      mesh.box(x - 1.2, floor + .56, 21, .76, .055, 3.7, "#364951");
-      mesh.box(x - 1.2, floor + .55, 20.7, 1.08, .69, .85, "#799a93");
-      mesh.box(x + .55, floor, 20.7, .14, 1.36, .34, teal);
-      mesh.box(x + 1.56, floor, 20.7, .14, 1.36, .34, teal);
-      mesh.box(x + 1.05, floor + 1.32, 20.7, 1.15, .17, .34, teal);
-      queue(mesh, x, securityQueue);
-    }
+    mesh.rect(-.8, floor + .022, (checkpointZ + 27.25) / 2, 22.4, 27.25 - checkpointZ, "#cbd8d1");
+    securityCheckpoint(mesh);
 
-    mesh.rect(24.75, floor + .024, 22.9, 21.7, 7.7, "#d4d9ce");
-    mesh.box(24.75, floor, 19.45, 21.9, 1.25, .22, "#93b6ae");
-    mesh.box(24.75, floor + 1.24, 19.45, 21.93, .15, .32, "#e8e8d2");
-    for (let n = 0; n < 6; n++) desk(mesh, 15.8 + n * 3.43, 20.8, n % 2 ? "#87a5a2" : "#6c9b91");
+    mesh.rect(24.75, floor + .024, (checkpointZ + 26.75) / 2, 21.7, 26.75 - checkpointZ, "#d4d9ce");
+    for (let n = 0; n < 6; n++) desk(mesh, 15.8 + n * 3.43, checkInQueue.deskZ, n % 2 ? "#87a5a2" : "#6c9b91");
     for (const x of checkInQueue.centers) queue(mesh, x, checkInQueue);
     for (const x of [-34.5, -12.8, 12.4, 35.6]) planter(mesh, x, floor, 26.95, 1.3);
 

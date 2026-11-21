@@ -68,10 +68,13 @@
     renderer = world.createRenderer($("#scene"));
     scene = airport.scene();
     planes = airlines.map(airline => airport.aircraft(airline.symbol));
+    const {centers, checkpointZ, portalOffsetX, portalWidth} = airport.terminalPaths.security;
+    const closedLaneX = centers.at(-1) + portalOffsetX;
+    const barrierZ = checkpointZ + .6;
     laneClosed = new world.Mesh()
-      .box(6.55, floor + .50, 22.36, 1.54, .07, .105, "#b97054")
-      .box(5.83, floor, 22.36, .08, .56, .1, "#536b6c")
-      .box(7.27, floor, 22.36, .08, .56, .1, "#536b6c");
+      .box(closedLaneX, floor + .50, barrierZ, portalWidth + .18, .07, .105, "#b97054")
+      .box(closedLaneX - portalWidth / 2, floor, barrierZ, .08, .56, .1, "#536b6c")
+      .box(closedLaneX + portalWidth / 2, floor, barrierZ, .08, .56, .1, "#536b6c");
   } catch (error) {
     console.error(error);
     $("#map-error").hidden = false;
@@ -105,12 +108,12 @@
     return {element: button, x: x + 2.9, y: 2.85, z: 7.93, count};
   });
   const mapSigns = renderer ? [
-    createLabel("TERMINAL 1", 0, 2.65, 31.4),
-    createLabel("CAFÉ", -26, 2.53, 19.05, "cafe"),
+    createLabel("ENTRANCE", 0, 2.65, 31.4),
+    createLabel("CAFÉ", -26, 1.84, 19.05, "cafe"),
     createLabel("SHARED SEATS", -12.5, .8, 19.2, "sharedSeats"),
-    createLabel("SECURITY", -.7, 2.45, 20.2, "security"),
-    createLabel("CHECK-IN", 25, 2.17, 19.45, "checkIn"),
-    createLabel("WALKWAYS", 13.3, 1.65, 16.9, "concourse"),
+    createLabel("SECURITY", -.7, 2.75, 19.1, "security"),
+    createLabel("CHECK-IN", 25, 1.95, 23.1, "checkIn"),
+    createLabel("DEPARTURES", 13.3, 1.65, 16.9, "concourse"),
     createLabel("RWY 09 / 27", -22, .05, runwayZ - 9.4)
   ] : [];
   const holdingPin = $("#map-holding");
@@ -409,6 +412,7 @@
     paintDetail();
     if (terminalOpen) {
       $("#check-in-count").textContent = occupancy.checkIn.length;
+      $("#landside-count").textContent = occupancy.landside.length;
       $("#security-count").textContent = occupancy.security.length;
       $("#concourse-count").textContent = occupancy.concourse.length;
       $("#shared-seats-count").textContent = occupancy.sharedSeats.length;

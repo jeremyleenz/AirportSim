@@ -71,7 +71,7 @@ button, h1, h2, h3, p { margin: 0; }
 .holding-time { display: block; margin-top: 3px; font: 500 .73rem var(--mono); }
 .holding-time time { font-weight: 700; }
 .map-count { border-left: 1px solid currentColor; padding-left: .43em; letter-spacing: 0; opacity: .86; }
-.map-note { position: absolute; translate: -50% -50%; font: 700 .65rem var(--mono); letter-spacing: .13em; color: #f5f9ee; background: #364e4bdc; padding: 4px 6px; border-radius: 3px; white-space: nowrap; }
+.map-note { position: absolute; translate: -50% -50%; font: 700 .65rem var(--mono); letter-spacing: .075em; color: #2c4441; background: #edf3e8ed; border: 1px solid #8ea89d; padding: 3px 6px; border-radius: 4px; white-space: nowrap; }
 .map-note .map-count { display: inline-block; margin-left: .48em; }
 .map-controls { display: flex; gap: 10px; align-items: center; position: absolute; left: 24px; bottom: 22px; }
 .zoom-group { display: flex; background: #14252cef; border: 1px solid #9adbc246; border-radius: 8px; padding: 3px; box-shadow: 0 5px 12px #14251b20; }
