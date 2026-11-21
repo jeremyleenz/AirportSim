@@ -29,17 +29,25 @@
     <symbol id="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></symbol>
   </svg>
   <header class="topbar">
-    <div class="brand">
-      <div class="brand-mark"><svg class="icon"><use href="#plane"/></svg></div>
-      <div><div class="wordmark">APRON<span>.</span></div><div class="brand-caption">Airport operations</div></div>
+    <div class="header-airport">
+      <div class="brand">
+        <div class="brand-mark"><svg class="icon"><use href="#plane"/></svg></div>
+        <div><div class="wordmark">APRON<span>.</span></div><div class="brand-caption">Airport operations</div></div>
+      </div>
+      <div class="airport-id"><strong>Northpoint Regional</strong><span><b>NPT</b> Terminal 1</span></div>
     </div>
-    <div class="airport-id"><strong>Northpoint Regional</strong><span><b>NPT</b> Terminal 1</span></div>
-    <div class="metrics" aria-label="Airport metrics">
-      <div class="metric"><svg class="icon"><use href="#wallet"/></svg><div><span>Treasury</span><strong id="cash">$124,500</strong></div></div>
-      <div class="metric"><svg class="icon"><use href="#users"/></svg><div><span>In terminal</span><strong id="passengers">—</strong></div></div>
-      <div class="metric"><svg class="icon"><use href="#heart"/></svg><div><span>Satisfaction</span><strong id="satisfaction">84%</strong></div></div>
+    <div class="clock" role="group" aria-label="Simulation clock">
+      <time id="clock" datetime="08:42">08:42</time>
+      <div class="clock-meta"><span class="clock-day">DAY 01</span><span id="run-label" class="run-label">Running</span></div>
     </div>
-    <div class="weather"><svg class="icon"><use href="#sun"/></svg><span>19°C</span></div>
+    <div class="header-status">
+      <div class="metrics" aria-label="Airport metrics">
+        <div class="metric"><svg class="icon"><use href="#wallet"/></svg><div><span>Treasury</span><strong id="cash">$124,500</strong></div></div>
+        <div class="metric"><svg class="icon"><use href="#users"/></svg><div><span>In terminal</span><strong id="passengers">—</strong></div></div>
+        <div class="metric"><svg class="icon"><use href="#heart"/></svg><div><span>Satisfaction</span><strong id="satisfaction">84%</strong></div></div>
+      </div>
+      <div class="weather"><svg class="icon"><use href="#sun"/></svg><span>19°C</span></div>
+    </div>
   </header>
   <main class="game">
     <section id="map" class="map" aria-label="Interactive isometric view of Northpoint Airport">
@@ -105,7 +113,6 @@
     </aside>
   </main>
   <footer class="bottom-bar">
-    <div class="clock"><span class="clock-day">DAY 01</span><time id="clock">08:42</time><span id="run-label" class="run-label">Running</span></div>
     <div class="time-controls" aria-label="Simulation speed">
       <button type="button" id="pause-toggle" aria-label="Pause simulation" title="Pause or resume (Space)"><svg class="icon"><use id="pause-icon" href="#pause"/></svg></button>
       <button type="button" data-speed="1" aria-pressed="true">1×</button>

@@ -24,7 +24,9 @@ button, h1, h2, h3, p { margin: 0; }
 [hidden] { display: none !important; }
 .symbols { width: 0; height: 0; position: absolute; }
 .icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
-.topbar { height: 76px; flex: 0 0 auto; display: flex; align-items: center; padding: 0 26px; gap: 25px; z-index: 3; border-bottom: 1px solid #314349; background: #111d23; }
+.topbar { height: 76px; flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; padding: 0 26px; gap: 16px; z-index: 3; border-bottom: 1px solid #314349; background: #111d23; }
+.header-airport, .header-status { display: flex; align-items: center; gap: clamp(12px, 1.7vw, 25px); }
+.header-status { justify-content: flex-end; }
 .brand { display: flex; align-items: center; gap: 12px; min-width: 151px; }
 .brand-mark { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: var(--mint); color: #172d28; }
 .brand-mark .icon { width: 24px; height: 24px; transform: rotate(39deg); stroke-width: 1.15; fill: currentColor; }
@@ -35,7 +37,7 @@ button, h1, h2, h3, p { margin: 0; }
 .airport-id strong { font-weight: 650; }
 .airport-id span { color: var(--muted); font-size: .82rem; }
 .airport-id b { color: var(--mint); font-family: var(--mono); margin-right: 6px; }
-.metrics { display: flex; align-items: center; margin-left: auto; gap: clamp(17px, 3vw, 47px); }
+.metrics { display: flex; align-items: center; gap: clamp(14px, 2.1vw, 34px); }
 .metric { display: flex; gap: 10px; align-items: center; }
 .metric > .icon { color: var(--mint); }
 .metric div { display: grid; gap: 4px; }
@@ -124,17 +126,17 @@ button, h1, h2, h3, p { margin: 0; }
 .terminal-stat { border: 1px solid var(--line); background: #192930; border-radius: 8px; margin-top: 8px; padding: 12px; }
 .terminal-stat h3 { font-size: .95rem; margin-bottom: 7px; }
 .bottom-bar { position: relative; z-index: 3; display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; flex: 0 0 53px; padding: 0 24px; border-top: 1px solid #314349; background: #111d23; }
-.clock, .event { display: flex; gap: 10px; align-items: center; }
-.clock { white-space: nowrap; }
-.clock-day { font: 650 .72rem var(--mono); color: var(--muted); letter-spacing: .09em; }
-.clock time { font: 700 1.12rem var(--mono); }
-.run-label { display: flex; gap: 5px; align-items: center; color: var(--mint); font-size: .75rem; }
+.clock { display: grid; justify-items: center; gap: 3px; padding: 4px 16px; white-space: nowrap; background: #192b2d; border: 1px solid #345048; border-radius: 9px; }
+.clock-meta { display: flex; align-items: center; gap: 9px; }
+.clock-day { font: 650 .72rem/1 var(--mono); color: var(--muted); letter-spacing: .09em; }
+.clock time { font: 750 2.4rem/1 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: .015em; color: #e2f8eb; }
+.run-label { display: flex; gap: 5px; align-items: center; color: var(--mint); font-size: .75rem; line-height: 1; }
 .run-label.paused { color: var(--amber); }
-.time-controls { display: flex; gap: 2px; padding: 2px; background: #1a2a30; border: 1px solid #2f4146; border-radius: 7px; }
+.time-controls { grid-column: 2; justify-self: center; display: flex; gap: 2px; padding: 2px; background: #1a2a30; border: 1px solid #2f4146; border-radius: 7px; }
 .time-controls button { font: 700 .8rem var(--mono); min-height: 28px; }
 .time-controls button[aria-pressed="true"] { background: #34564b; color: #d0f8df; }
 .time-controls .icon { width: 15px; height: 15px; }
-.event { justify-content: end; color: var(--muted); font-size: .81rem; }
+.event { display: flex; gap: 10px; align-items: center; justify-content: end; color: var(--muted); font-size: .81rem; }
 .event .icon { color: var(--mint); width: 15px; height: 15px; }
 @media (max-height: 780px) and (min-width: 761px) {
   .topbar { height: 65px; }
@@ -143,21 +145,33 @@ button, h1, h2, h3, p { margin: 0; }
   .flight { min-height: 52px; }
   .objective { margin-top: 10px; }
 }
+@media (max-width: 1100px) {
+  .weather { display: none; }
+}
 @media (max-width: 900px) {
   .game { grid-template-columns: minmax(0, 1fr) 295px; }
   .topbar { padding-inline: 15px; gap: 15px; }
   .airport-id { padding-left: 15px; }
-  .weather { display: none; }
+  .metrics { gap: 12px; }
+  .metric { gap: 6px; }
+  .metric .icon { width: 15px; height: 15px; }
+  .metric strong { font-size: 1rem; }
   .map-heading, .map-controls { left: 14px; }
+}
+@media (min-width: 761px) and (max-width: 820px) {
+  .airport-id, .metric .icon { display: none; }
 }
 @media (max-width: 760px) {
   body { height: auto; min-height: 100dvh; overflow: auto; padding-bottom: 51px; }
-  .topbar { min-height: 63px; height: auto; padding-block: 10px; gap: 8px; flex-wrap: wrap; justify-content: space-between; }
+  .topbar { height: auto; padding-block: 8px; gap: 8px; }
   .brand { min-width: 0; gap: 7px; }
   .brand-mark { width: 32px; height: 32px; border-radius: 7px; }
   .wordmark { font-size: 19px; }
   .brand-caption, .airport-id { display: none; }
-  .metrics { gap: 12px; }
+  .clock { grid-column: 2; padding-inline: 9px; }
+  .clock time { font-size: 2rem; }
+  .header-status { grid-column: 1 / -1; }
+  .metrics { width: 100%; justify-content: space-between; gap: 12px; }
   .metric { gap: 4px; }
   .metric .icon { width: 13px; height: 13px; }
   .metric strong { font-size: .87rem; }
@@ -173,6 +187,11 @@ button, h1, h2, h3, p { margin: 0; }
   .operations { border-left: 0; border-top: 1px solid #31474a; }
   .panel-head { padding-top: 15px; padding-bottom: 13px; }
   .panel-body { padding-top: 14px; }
-  .bottom-bar { position: fixed; inset: auto 0 0; height: 51px; padding-inline: 12px; grid-template-columns: 1fr auto; }
+  .bottom-bar { position: fixed; inset: auto 0 0; height: 51px; padding-inline: 12px; grid-template-columns: 1fr; }
+  .time-controls { grid-column: 1; }
   .event { display: none; }
+}
+@media (max-width: 420px) {
+  .brand-mark { display: none; }
+  .wordmark { font-size: 17px; }
 }
