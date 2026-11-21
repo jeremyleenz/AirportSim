@@ -88,11 +88,73 @@ const world = (() => {
   const lightZ = unit([-0.48, 1, -0.69]);
   const lightX = unit(cross([0, 1, 0], lightZ));
   const lightY = cross(lightZ, lightX);
+  const pickBounds = new WeakMap();
+  const clipDepth = 160;
+
+  function inverseModelRotation({angle = 0, pitch = 0}) {
+    const c = Math.cos(angle), s = Math.sin(angle), cp = Math.cos(pitch), sp = Math.sin(pitch);
+    // Undo the same yaw and pitch that the vertex shader applies to the mesh.
+    return ([vx, vy, vz]) => {
+      const rotatedZ = s * vx + c * vz;
+      return [c * vx - s * vz, cp * vy - sp * rotatedZ, sp * vy + cp * rotatedZ];
+    };
+  }
+
+  function rayDepth(object, origin, minimumDepth) {
+    const {mesh, x = 0, y = 0, z = 0} = object;
+    const inverseRotation = inverseModelRotation(object);
+    const start = inverseRotation(subtract(origin, [x, y, z]));
+    const direction = inverseRotation(cameraZ);
+    const {data} = mesh;
+    let bounds = pickBounds.get(mesh);
+    if (!bounds) {
+      bounds = Array.from({length: 3}, (_, axis) => {
+        let low = Infinity, high = -Infinity;
+        for (let i = axis; i < data.length; i += 9) {
+          low = Math.min(low, data[i]);
+          high = Math.max(high, data[i]);
+        }
+        return [low, high];
+      });
+      pickBounds.set(mesh, bounds);
+    }
+    let near = Math.max(-clipDepth, minimumDepth), far = clipDepth;
+    for (const [axis, [low, high]] of bounds.entries()) {
+      if (Math.abs(direction[axis]) < 1e-8) {
+        if (start[axis] < low || start[axis] > high) return -Infinity;
+      } else {
+        const a = (low - start[axis]) / direction[axis];
+        const b = (high - start[axis]) / direction[axis];
+        near = Math.max(near, Math.min(a, b));
+        far = Math.min(far, Math.max(a, b));
+        if (near > far) return -Infinity;
+      }
+    }
+
+    let closest = -Infinity;
+    for (let i = 0; i < data.length; i += 27) {
+      const a = data.slice(i, i + 3);
+      const edgeAB = subtract(data.slice(i + 9, i + 12), a);
+      const edgeAC = subtract(data.slice(i + 18, i + 21), a);
+      const perpendicular = cross(direction, edgeAC);
+      const determinant = dot(edgeAB, perpendicular);
+      if (Math.abs(determinant) < 1e-8) continue;
+      const relative = subtract(start, a);
+      const u = dot(relative, perpendicular) / determinant;
+      if (u < 0 || u > 1) continue;
+      const normal = cross(relative, edgeAB);
+      const v = dot(direction, normal) / determinant;
+      if (v < 0 || u + v > 1) continue;
+      const depth = dot(edgeAC, normal) / determinant;
+      if (depth >= near - 1e-8 && depth <= far + 1e-8) closest = Math.max(closest, depth);
+    }
+    return closest;
+  }
 
   function matrix(x, y, z, sizeX, sizeY, offsetX = 0, offsetY = 0) {
-    return [x[0] / sizeX, y[0] / sizeY, -z[0] / 160, 0,
-      x[1] / sizeX, y[1] / sizeY, -z[1] / 160, 0,
-      x[2] / sizeX, y[2] / sizeY, -z[2] / 160, 0,
+    return [x[0] / sizeX, y[0] / sizeY, -z[0] / clipDepth, 0,
+      x[1] / sizeX, y[1] / sizeY, -z[1] / clipDepth, 0,
+      x[2] / sizeX, y[2] / sizeY, -z[2] / clipDepth, 0,
       offsetX, offsetY, 0, 1];
   }
 
@@ -225,6 +287,8 @@ const world = (() => {
     }
 
     const view = {zoom: 1, x: 0, y: 0, scale: 1, width: 1, height: 1};
+    let renderedObjects = [];
+    let renderedView = {...view};
     function resize() {
       const width = canvas.clientWidth, height = canvas.clientHeight;
       const density = Math.min(window.devicePixelRatio || 1, 1.65);
@@ -241,6 +305,46 @@ const world = (() => {
       const point = [x, y, z];
       return [view.width * .495 + view.x + dot(cameraX, point) * view.scale,
         view.height * .51 + view.y - dot(cameraY, point) * view.scale];
+    }
+
+    function projectBounds(object) {
+      const {mesh, x = 0, y = 0, z = 0} = object;
+      const [screenX, screenY] = project(x, y, z);
+      const inverseRotation = inverseModelRotation(object);
+      const rightAxis = inverseRotation(cameraX);
+      const upAxis = inverseRotation(cameraY);
+      const {data} = mesh;
+      let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+      for (let i = 0; i < data.length; i += 9) {
+        const px = data[i], py = data[i + 1], pz = data[i + 2];
+        const horizontal = screenX + (px * rightAxis[0] + py * rightAxis[1] + pz * rightAxis[2]) * view.scale;
+        const vertical = screenY - (px * upAxis[0] + py * upAxis[1] + pz * upAxis[2]) * view.scale;
+        left = Math.min(left, horizontal);
+        top = Math.min(top, vertical);
+        right = Math.max(right, horizontal);
+        bottom = Math.max(bottom, vertical);
+      }
+      return {left, top, right, bottom};
+    }
+
+    function pickAircraft(x, y) {
+      const view = renderedView;
+      const horizontal = (x - view.width * .495 - view.x) / view.scale;
+      const vertical = (view.height * .51 + view.y - y) / view.scale;
+      const origin = cameraX.map((value, i) => horizontal * value + vertical * cameraY[i]);
+      let hit, depth = -Infinity;
+      for (const object of renderedObjects) {
+        if (!object.flightId) continue;
+        const candidate = rayDepth(object, origin, depth);
+        if (candidate > depth) {
+          hit = object;
+          depth = candidate;
+        }
+      }
+      if (!hit) return null;
+      // Buildings, bridges, and other scene geometry can cover part of an aircraft.
+      if (renderedObjects.some(object => !object.flightId && rayDepth(object, origin, depth) > depth)) return null;
+      return hit.flightId;
     }
 
     function render(objects) {
@@ -268,9 +372,11 @@ const world = (() => {
       gl.uniformMatrix4fv(sceneLoc.sun, false, lightMatrix);
       gl.uniform3fv(sceneLoc.light, lightZ);
       draw(objects, sceneLoc, false);
+      renderedObjects = objects;
+      renderedView = {...view};
     }
 
-    return {view, render, project};
+    return {view, render, project, projectBounds, pickAircraft};
   }
 
   return {Mesh, createRenderer};

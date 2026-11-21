@@ -106,6 +106,7 @@
     state.stand = stand;
     state.view = "flights";
     paint();
+    requestDraw = true;
   }
 
   function notifyTab(view) {
@@ -449,9 +450,29 @@
     }
   }
 
+  const aircraftSelection = $("#aircraft-selection");
+  function showAircraftSelection(aircraft) {
+    if (!aircraft) {
+      aircraftSelection.hidden = true;
+      return;
+    }
+    const {left, top, right, bottom} = renderer.projectBounds(aircraft);
+    aircraftSelection.hidden = right <= 0 || bottom <= 0 ||
+      left >= renderer.view.width || top >= renderer.view.height;
+    if (aircraftSelection.hidden) return;
+    const padding = 6;
+    aircraftSelection.style.left = (left - padding) + "px";
+    aircraftSelection.style.top = (top - padding) + "px";
+    aircraftSelection.style.width = (right - left + padding * 2) + "px";
+    aircraftSelection.style.height = (bottom - top + padding * 2) + "px";
+  }
+
   function draw() {
     if (!renderer) return;
-    const moving = state.flights.map(flight => ({mesh: planes[flight.airline], ...aircraftPosition(flight)}));
+    const moving = state.flights.map(flight => ({
+      mesh: planes[flight.airline], ...aircraftPosition(flight), flightId: flight.id
+    }));
+    const selectedAircraft = moving.find(object => object.flightId === state.selected);
     const carTravel = state.now * 2.4;
     for (const vehicle of scene.traffic) {
       const direction = Math.sign(vehicle.angle);
@@ -463,6 +484,7 @@
     const gate = gates[selectedGate()];
     if (gate) moving.push({mesh: scene.highlight, x: gate.x, castShadow: false});
     renderer.render([...scene.fixed, ...moving, ...people]);
+    showAircraftSelection(selectedAircraft);
     for (const {x, y, z, element} of [...mapPins, ...mapSigns]) {
       const [left, top] = renderer.project(x, y, z);
       element.style.left = left + "px";
@@ -516,29 +538,53 @@
   $("#reset-view").addEventListener("click", fit);
   const canvas = $("#scene");
   if (renderer) {
+    function aircraftAt(event) {
+      const rect = canvas.getBoundingClientRect();
+      return renderer.pickAircraft(event.clientX - rect.left, event.clientY - rect.top);
+    }
+
     canvas.addEventListener("wheel", event => {
       event.preventDefault();
       const rect = canvas.getBoundingClientRect();
       zoom(Math.exp(-Math.max(-72, Math.min(72, event.deltaY)) * .003), [event.clientX - rect.left, event.clientY - rect.top]);
     }, {passive: false});
     let pointer = null;
+    const dragThreshold = 5;
     canvas.addEventListener("pointerdown", event => {
       if (event.button !== 0 || pointer) return;
-      pointer = {id: event.pointerId, x: event.clientX, y: event.clientY};
+      pointer = {id: event.pointerId, x: event.clientX, y: event.clientY,
+        dragging: false, flightId: aircraftAt(event)};
       canvas.setPointerCapture(event.pointerId);
     });
     canvas.addEventListener("pointermove", event => {
-      if (pointer?.id !== event.pointerId) return;
+      if (!pointer) {
+        canvas.toggleAttribute("data-aircraft-hover", Boolean(aircraftAt(event)));
+        return;
+      }
+      if (pointer.id !== event.pointerId) return;
+      const dx = event.clientX - pointer.x, dy = event.clientY - pointer.y;
+      if (!pointer.dragging && Math.hypot(dx, dy) < dragThreshold) return;
+      pointer.dragging = true;
       const {view} = renderer;
-      view.x = Math.max(-view.width * 1.5, Math.min(view.width * 1.5, view.x + event.clientX - pointer.x));
-      view.y = Math.max(-view.height * 1.5, Math.min(view.height * 1.5, view.y + event.clientY - pointer.y));
+      view.x = Math.max(-view.width * 1.5, Math.min(view.width * 1.5, view.x + dx));
+      view.y = Math.max(-view.height * 1.5, Math.min(view.height * 1.5, view.y + dy));
       pointer.x = event.clientX;
       pointer.y = event.clientY;
       requestDraw = true;
     });
+    canvas.addEventListener("pointerup", event => {
+      if (pointer?.id !== event.pointerId) return;
+      const {dragging, flightId, x, y} = pointer;
+      pointer = null;
+      if (!dragging && Math.hypot(event.clientX - x, event.clientY - y) < dragThreshold &&
+        state.flights.some(flight => flight.id === flightId)) {
+        select(flightId);
+      }
+    });
     canvas.addEventListener("lostpointercapture", event => {
       if (pointer?.id === event.pointerId) pointer = null;
     });
+    canvas.addEventListener("pointerleave", () => canvas.removeAttribute("data-aircraft-hover"));
   }
   window.addEventListener("keydown", event => {
     if (event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;

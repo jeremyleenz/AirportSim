@@ -47,7 +47,14 @@ button, h1, h2, h3, p { margin: 0; }
 .game { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 328px; min-height: 0; }
 .map { position: relative; min-width: 0; min-height: 0; isolation: isolate; overflow: hidden; background: #819282; }
 #scene { width: 100%; height: 100%; position: absolute; inset: 0; display: block; cursor: grab; touch-action: none; }
+#scene[data-aircraft-hover] { cursor: pointer; }
 #scene:active { cursor: grabbing; }
+.aircraft-selection { position: absolute; pointer-events: none; color: var(--mint); filter: drop-shadow(0 1px 2px #102c25); }
+.aircraft-selection i { position: absolute; width: 13px; height: 13px; border: 2px solid currentColor; }
+.aircraft-selection i:nth-child(1) { top: 0; left: 0; border-right: 0; border-bottom: 0; border-radius: 4px 0 0; }
+.aircraft-selection i:nth-child(2) { top: 0; right: 0; border-left: 0; border-bottom: 0; border-radius: 0 4px 0 0; }
+.aircraft-selection i:nth-child(3) { bottom: 0; left: 0; border-top: 0; border-right: 0; border-radius: 0 0 0 4px; }
+.aircraft-selection i:nth-child(4) { bottom: 0; right: 0; border-top: 0; border-left: 0; border-radius: 0 0 4px; }
 .map-heading { position: absolute; pointer-events: none; top: 24px; left: 24px; display: grid; gap: 4px; padding: 14px 17px; background: #15252ceF; border: 1px solid #9adbc23f; border-radius: 10px; box-shadow: 0 5px 14px #14251b24; }
 .map-heading span { color: var(--muted); font-size: .83rem; }
 .map-heading strong { font-size: 1.35rem; line-height: 1.2; letter-spacing: -.035em; }
