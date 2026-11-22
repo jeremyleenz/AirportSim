@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
   <script defer src="renderer.js"></script>
   <script defer src="airport.js?v=5"></script>
   <script defer src="passengers.js?v=12"></script>
-  <script defer src="game.js?v=22"></script>
+  <script defer src="game.js?v=23"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -58,7 +58,7 @@
       <div id="map-labels" class="map-labels">
         <button id="map-holding" class="map-gate map-holding" type="button" data-state="holding" hidden>
           <i aria-hidden="true"></i>
-          <span><span class="holding-route"></span><span class="holding-time">Takeoff <time></time></span></span>
+          <span><span class="holding-route"></span><span class="holding-time">Takeoff <time></time></span><span class="map-late-time" hidden></span></span>
           <span class="holding-count map-count" hidden></span>
         </button>
       </div>

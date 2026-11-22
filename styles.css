@@ -67,6 +67,12 @@ button, h1, h2, h3, p { margin: 0; }
 .map-gate[data-state="parked"] i, .map-gate[data-state="reserved"] i, .map-gate[data-state="holding"] i { background: var(--amber); }
 .map-gate[aria-pressed="true"] { background: var(--mint); border-color: #ecfff3; color: #162e28; }
 .map-gate[aria-pressed="true"] i { background: #426a53; }
+.map-gate[data-takeoff="late"] { z-index: 1; background: var(--takeoff-background); border-color: #d18e8e; color: var(--takeoff-text); }
+.map-gate[data-takeoff="late"][aria-pressed="true"] { border-color: var(--mint); box-shadow: 0 0 0 1px var(--mint), 0 3px 8px #12292469; }
+.map-gate[data-takeoff="late"] i { background: currentColor; }
+.map-gate-info { display: flex; gap: 6px; justify-content: center; white-space: nowrap; }
+.map-late-time { display: block; margin-top: 3px; font: 700 .73rem var(--mono); white-space: nowrap; }
+.map-aircraft-delay { white-space: nowrap; font-size: .74rem; }
 .map-holding { align-items: baseline; text-align: left; white-space: nowrap; }
 .holding-time { display: block; margin-top: 3px; font: 500 .73rem var(--mono); }
 .holding-time time { font-weight: 700; }

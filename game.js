@@ -157,8 +157,10 @@
     const button = document.createElement("button");
     button.className = "map-gate";
     button.type = "button";
-    button.innerHTML = "<i aria-hidden='true'></i>" + name;
-    const count = addMapCount(button);
+    button.innerHTML = '<i aria-hidden="true"></i><span><span class="map-gate-info">' + name + '</span>' +
+      '<span class="map-late-time" hidden></span></span>';
+    const count = addMapCount(button.querySelector(".map-gate-info"));
+    const late = button.querySelector(".map-late-time");
     button.addEventListener("click", () => {
       const flight = flightAtGate(gate);
       const arrivals = state.flights.filter(item => item.stage === "holding");
@@ -166,7 +168,7 @@
       selectFromMap(flight?.id || arrival?.id || "gate-" + gate, gate);
     });
     if (renderer) $("#map-labels").append(button);
-    return {element: button, x: x + 2.9, y: 2.85, z: 7.93, count};
+    return {element: button, x: x + 2.9, y: 2.85, z: 7.93, count, late};
   });
   const mapSigns = renderer ? [
     createLabel("ENTRANCE", -2.2, 1.1, 34.1),
@@ -180,7 +182,9 @@
   ] : [];
   const holdingPin = $("#map-holding");
   const holdingPinRoute = holdingPin.querySelector(".holding-route");
-  const holdingPinTime = holdingPin.querySelector("time");
+  const holdingPinSchedule = holdingPin.querySelector(".holding-time");
+  const holdingPinTime = holdingPinSchedule.querySelector("time");
+  const holdingPinLate = holdingPin.querySelector(".map-late-time");
   const holdingPinCount = holdingPin.querySelector(".holding-count");
   const holdingPinPosition = {element: holdingPin, x: holdingPosition.x, y: 6.4, z: holdingPosition.z};
   holdingPin.addEventListener("click", () => {
@@ -363,6 +367,14 @@
     time.dateTime = schedule.time;
     time.textContent = schedule.time;
     alert.textContent = schedule.message;
+  }
+
+  function paintMapDelay(button, label, schedule) {
+    const message = schedule?.urgency === "late" ? schedule.message : "";
+    button.dataset.takeoff = message ? "late" : "";
+    label.hidden = !message;
+    if (label.textContent !== message) label.textContent = message;
+    return message ? ", " + message : "";
   }
 
   function flightStatus(flight) {
@@ -760,27 +772,32 @@
     $("#view-report").hidden = !complete;
 
     const gate = selectedGate();
-    mapPins.forEach(({element, count}, index) => {
+    mapPins.forEach(({element, count, late}, index) => {
       const flight = flightAtGate(index);
       const waiting = occupancy.gates[index].length;
+      const schedule = flight?.stage === "inbound" ? null : takeoffSchedule(flight);
+      const delay = paintMapDelay(element, late, schedule);
       count.textContent = waiting;
       element.dataset.state = flight?.stage || "free";
       element.setAttribute("aria-pressed", String(gate === index));
       element.setAttribute("aria-label", "Gate " + gates[index].name + ", " +
-        (flight ? flightStatus(flight) : "available") + ", " + waiting + " waiting");
+        (flight ? flightStatus(flight) : "available") + ", " + waiting + " waiting" + delay);
     });
     const waiting = holdingFlights();
     const holding = flightAtHoldingPoint(waiting);
     if (holding) {
       const route = holding.id + " to " + holding.destination;
-      const {time} = takeoffSchedule(holding);
+      const schedule = takeoffSchedule(holding);
+      const delay = paintMapDelay(holdingPin, holdingPinLate, schedule);
+      const {time} = schedule;
       holdingPinRoute.textContent = route;
+      holdingPinSchedule.hidden = Boolean(delay);
       holdingPinTime.dateTime = time;
       holdingPinTime.textContent = time;
       holdingPin.setAttribute("aria-pressed", String(holding.id === state.selected));
       holdingPinCount.hidden = waiting.length === 1;
       holdingPinCount.textContent = waiting.length;
-      holdingPin.setAttribute("aria-label", waiting.length + " awaiting taxi-in. " + route + ". Takeoff at " + time);
+      holdingPin.setAttribute("aria-label", waiting.length + " awaiting taxi-in. " + route + ". Takeoff at " + time + delay);
     }
     for (const {count, section} of mapSigns) {
       if (count) count.textContent = occupancy[section].length;
@@ -1062,6 +1079,7 @@
   }
 
   const aircraftSelection = $("#aircraft-selection");
+  const aircraftDelayPins = new Map();
   function showAircraftSelection(aircraft) {
     if (!aircraft) {
       aircraftSelection.hidden = true;
@@ -1078,12 +1096,49 @@
     aircraftSelection.style.height = (bottom - top + padding * 2) + "px";
   }
 
+  function drawAircraftDelays(aircraft) {
+    const active = new Set();
+    for (const object of aircraft) {
+      const {flight} = object;
+      const movement = state.movements.get(flight);
+      if (!movement || (flight.stage === "outbound" && movementElapsed(movement) < movement.pushbackEnd)) continue;
+      const schedule = takeoffSchedule(flight);
+      if (schedule?.urgency !== "late") continue;
+
+      active.add(flight.id);
+      let pin = aircraftDelayPins.get(flight.id);
+      if (!pin) {
+        pin = document.createElement("button");
+        pin.type = "button";
+        pin.className = "map-gate map-aircraft-delay";
+        pin.dataset.takeoff = "late";
+        pin.addEventListener("click", () => selectFromMap(flight.id));
+        $("#map-labels").append(pin);
+        aircraftDelayPins.set(flight.id, pin);
+      }
+      const text = flight.id + " · " + schedule.message;
+      if (pin.textContent !== text) pin.textContent = text;
+      pin.setAttribute("aria-pressed", String(flight.id === state.selected));
+      const {left, right, top} = renderer.projectBounds(object);
+      const x = (left + right) / 2;
+      pin.hidden = x < 18 || x > renderer.view.width - 18 || top < 30 || top > renderer.view.height;
+      pin.style.left = Math.max(70, Math.min(renderer.view.width - 70, x)) + "px";
+      pin.style.top = (top - 6) + "px";
+    }
+    for (const [id, pin] of aircraftDelayPins) {
+      if (active.has(id)) continue;
+      pin.remove();
+      aircraftDelayPins.delete(id);
+    }
+  }
+
   function draw() {
     if (!renderer || (mobileLayout.matches && game.dataset.mobileView === "operations")) return;
     const holding = flightAtHoldingPoint();
-    const moving = state.flights.filter(flight => !isArriving(flight) || flight.stage === "inbound" || flight === holding)
-      .map(flight => ({mesh: planes[flight.airline], ...aircraftPosition(flight), flightId: flight.id}));
-    const selectedAircraft = moving.find(object => object.flightId === state.selected);
+    const aircraft = state.flights.filter(flight => !isArriving(flight) || flight.stage === "inbound" || flight === holding)
+      .map(flight => ({mesh: planes[flight.airline], ...aircraftPosition(flight), flightId: flight.id, flight}));
+    const moving = aircraft.slice();
+    const selectedAircraft = aircraft.find(object => object.flightId === state.selected);
     const carTravel = state.now * 2.4;
     for (const vehicle of scene.traffic) {
       const direction = Math.sign(vehicle.angle);
@@ -1105,6 +1160,7 @@
     if (gate) moving.push({mesh: scene.highlight, x: gate.x, castShadow: false});
     renderer.render([...scene.fixed, ...moving, ...people]);
     showAircraftSelection(selectedAircraft);
+    drawAircraftDelays(aircraft);
     for (const {x, y, z, element, decorative} of [...mapPins, ...mapSigns, holdingPinPosition]) {
       const [left, top] = renderer.project(x, y, z);
       element.style.left = left + "px";
