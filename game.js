@@ -14,6 +14,7 @@
   const passengerFare = 41;
   const startMinutes = 8 * 60 + 42;
   const secondsPerMinute = 3.4;
+  const fastForwardSpeed = 4;
   const minutesFromBoardingToTakeoff = 30;
   const earliestPassengerArrival = 70;
   const latestPassengerArrival = 40;
@@ -728,10 +729,9 @@
     $("#pause-icon").setAttribute("href", state.paused ? "#play" : "#pause");
     $("#pause-toggle").setAttribute("aria-label", state.paused ? "Resume simulation" : "Pause simulation");
     $("#pause-toggle").disabled = complete;
-    document.querySelectorAll("[data-speed]").forEach(button => {
-      button.disabled = complete;
-      button.setAttribute("aria-pressed", String(!complete && !state.paused && state.speed === Number(button.dataset.speed)));
-    });
+    const fastForward = $("#fast-forward-toggle");
+    fastForward.disabled = complete;
+    fastForward.setAttribute("aria-pressed", String(!complete && state.speed === fastForwardSpeed));
     const terminalOpen = state.view === "terminal";
     const scheduleOpen = state.view === "schedule";
     const flightsOpen = state.view === "flights";
@@ -1235,12 +1235,9 @@
   }
   const flightUpgrade = $("#flight-upgrade");
   flightUpgrade.addEventListener("click", () => changeStaffing("security", "open"));
-  document.querySelectorAll("[data-speed]").forEach(button => {
-    button.addEventListener("click", () => {
-      state.speed = Number(button.dataset.speed);
-      state.paused = false;
-      paint();
-    });
+  $("#fast-forward-toggle").addEventListener("click", () => {
+    state.speed = state.speed === fastForwardSpeed ? 1 : fastForwardSpeed;
+    paint();
   });
   function zoom(factor, anchor) {
     if (!renderer) return;

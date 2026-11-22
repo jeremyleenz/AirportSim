@@ -9,7 +9,7 @@
   <script defer src="renderer.js"></script>
   <script defer src="airport.js?v=5"></script>
   <script defer src="passengers.js?v=12"></script>
-  <script defer src="game.js?v=23"></script>
+  <script defer src="game.js?v=24"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -23,6 +23,7 @@
     <symbol id="focus" viewBox="0 0 24 24"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/><circle cx="12" cy="12" r="2"/></symbol>
     <symbol id="pause" viewBox="0 0 24 24"><path d="M9 5v14m6-14v14" stroke-width="3"/></symbol>
     <symbol id="play" viewBox="0 0 24 24"><path d="m9 5 11 7-11 7z" fill="currentColor"/></symbol>
+    <symbol id="fast-forward" viewBox="0 0 24 24"><path d="M3 5l8 7-8 7zm10 0 8 7-8 7z" fill="currentColor" stroke="none"/></symbol>
     <symbol id="tower" viewBox="0 0 24 24"><path d="M9 22h6m-3-1v-8M7 7h10l-2 6H9zm-2 0h14m-7 0V3m-3 1h6"/></symbol>
     <symbol id="target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/></symbol>
     <symbol id="terminal" viewBox="0 0 24 24"><path d="M4 21V8l8-5 8 5v13M2 21h20M8 21v-6h8v6M8 10h.01m4 0h.01m4 0h.01"/></symbol>
@@ -173,12 +174,9 @@
       <button id="show-map" type="button" aria-controls="map" aria-pressed="true">Map</button>
       <button id="show-operations" type="button" aria-label="Operations" aria-controls="operations" aria-pressed="false">Ops</button>
     </div>
-    <div class="time-controls" role="group" aria-label="Simulation speed">
+    <div class="time-controls" role="group" aria-label="Simulation time controls">
       <button type="button" id="pause-toggle" aria-label="Pause simulation" title="Pause or resume (Space)"><svg class="icon"><use id="pause-icon" href="#pause"/></svg></button>
-      <button type="button" data-speed="1" aria-pressed="true">1×</button>
-      <button type="button" data-speed="2" aria-pressed="false">2×</button>
-      <button type="button" data-speed="4" aria-pressed="false">4×</button>
-      <button type="button" data-speed="12" aria-pressed="false">12×</button>
+      <button type="button" id="fast-forward-toggle" aria-label="Fast-forward" aria-pressed="false" title="Fast-forward"><svg class="icon" aria-hidden="true"><use href="#fast-forward"/></svg></button>
     </div>
     <div class="event"><svg class="icon"><use href="#info"/></svg><span id="event" role="status">Boarding underway at A01.</span></div>
   </footer>
