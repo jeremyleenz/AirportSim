@@ -203,6 +203,7 @@ button, h1, h2, h3, p { margin: 0; }
 .secondary span { margin-left: 5px; font: .76rem var(--mono); }
 .boarding-cutoff { color: var(--amber); }
 .detail-copy { color: var(--muted); font-size: .84rem; line-height: 1.4; }
+.departure-delay { margin-top: 10px; color: var(--amber); }
 .objective { display: grid; align-items: start; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 10px; padding: 10px 11px; margin-bottom: 13px; background: #152a2a; border: 1px solid #34534a; border-radius: 9px; }
 #view-report { margin: 0 0 13px; }
 .objective .icon { color: var(--mint); margin-top: 2px; }
@@ -254,6 +255,7 @@ button, h1, h2, h3, p { margin: 0; }
 .report-metrics > div { display: grid; align-content: space-between; gap: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 9px; }
 .report-metrics dt { color: var(--muted); font-size: .79rem; }
 .report-metrics dd { margin: 0; color: var(--mint); font: 700 clamp(.86rem, 3.6vw, 1.22rem) var(--mono); }
+#report-delays { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .report-flights { width: 100%; margin-top: 15px; border-collapse: collapse; text-align: left; }
 .report-flights caption { padding-bottom: 8px; text-align: left; font-weight: 650; }
 .report-flights th, .report-flights td { padding: 8px 4px; border-top: 1px solid var(--line); font: .82rem var(--mono); }

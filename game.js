@@ -19,6 +19,8 @@
   const latestPassengerArrival = 40;
   const lateNoticeMinutes = 12;
   const takeoffWarningMinutes = 10;
+  const departureGraceMinutes = 5;
+  const finePerLateMinute = 25;
   const taxiSpeed = 4;
   const pushbackSpeed = 2.5;
   const taxiSeparation = 24;
@@ -295,6 +297,7 @@
 
   const flightElements = new Map();
   const flightDetail = $("#flight-detail");
+  const delayNotice = $("#departure-delay-notice");
   const gatePicker = $("#gate-picker");
   const gateOptions = gates.map(({name}, index) => {
     const label = document.createElement("label");
@@ -344,7 +347,7 @@
     const scheduledMinute = clockMinutes(flight.takeoffAt);
     const remaining = scheduledMinute - clockMinutes(state.now);
     const time = formatTime(scheduledMinute);
-    if (remaining < 0) return {time, urgency: "late", message: -remaining + " min late"};
+    if (remaining < 0) return {time, urgency: "late", lateMinutes: -remaining, message: -remaining + " min late"};
     if (remaining === 0) return {time, urgency: "due", message: "Due now"};
     if (remaining <= takeoffWarningMinutes) return {time, urgency: "due", message: remaining + " min to go"};
     return {time, urgency: "", message: ""};
@@ -554,6 +557,10 @@
     return '<div class="detail-stat"><span>' + label + '</span><b>' + value + '</b></div>';
   }
 
+  function departureFine(lateMinutes) {
+    return Math.max(0, lateMinutes - departureGraceMinutes) * finePerLateMinute;
+  }
+
   function paintDetail() {
     const flight = state.flights.find(item => item.id === state.selected);
     const gate = selectedGate();
@@ -564,7 +571,7 @@
     const host = flightElements.get(flight?.id)?.card ?? $("#flight-view");
     if (flightDetail.parentNode !== host) host.append(flightDetail);
     paintGatePicker(flight, gate);
-    close.hidden = upgrade.hidden = lateNotice.hidden = true;
+    close.hidden = upgrade.hidden = lateNotice.hidden = delayNotice.hidden = true;
     flightDetail.hidden = !flight && gate < 0;
     if (flightDetail.hidden) return;
     $("#stand-heading").hidden = Boolean(flight);
@@ -606,7 +613,16 @@
         stat("Passengers in terminal", (passengers - counts.outside) + " / " + passengers) + '</div>');
     }
     const {lateOutside, lateInTerminal} = counts;
-    if (notifiedLatePassengers(flight)) {
+    const lateWaiting = notifiedLatePassengers(flight);
+    const schedule = takeoffSchedule(flight);
+    delayNotice.hidden = !lateWaiting && !schedule?.urgency;
+    if (!delayNotice.hidden) {
+      const fine = departureFine(schedule?.lateMinutes ?? 0);
+      const rate = currency.format(finePerLateMinute) + "/min";
+      delayNotice.textContent = "Late fine · " + (fine ? currency.format(fine) + " so far (+" + rate + ")"
+        : rate + " after " + departureGraceMinutes + " min late");
+    }
+    if (lateWaiting) {
       lateNotice.hidden = false;
       lateNotice.innerHTML = (lateOutside ? stat("Late passengers yet to arrive", lateOutside) : "") +
         (lateInTerminal ? stat("Late passengers in terminal", lateInTerminal) : "");
@@ -946,10 +962,13 @@
     const revenue = 3800 + boarded * passengerFare;
     const liftoffMinute = clockMinutes(start + liftoff);
     const due = clockMinutes(flight.takeoffAt);
-    state.delayMinutes += Math.max(0, liftoffMinute - due);
-    state.cash += revenue - handlingCost;
+    const lateMinutes = Math.max(0, liftoffMinute - due);
+    const fine = departureFine(lateMinutes);
+    const net = revenue - handlingCost - fine;
+    state.delayMinutes += lateMinutes;
+    state.cash += net;
     state.results.push({id: flight.id, destination: flight.destination, due, takeoff: liftoffMinute,
-      missed: flight.passengers - boarded, revenue});
+      missed: flight.passengers - boarded, revenue, fine});
     state.flights = state.flights.filter(item => item !== flight);
     if (state.selected === flight.id) state.selected = state.flights[0]?.id || "gate-" + flight.gate;
     if (shiftComplete()) {
@@ -958,7 +977,8 @@
       paint();
       showShiftReport();
     } else {
-      announce(flight.id + " airborne with " + boarded + " passengers. " + currency.format(revenue - handlingCost) + " net.");
+      const fineMessage = fine ? " (" + currency.format(fine) + " late fine)" : "";
+      announce(flight.id + " airborne with " + boarded + " passengers. " + currency.format(net) + " net" + fineMessage + ".");
     }
   }
 
@@ -1021,19 +1041,23 @@
     const results = state.results.slice().sort((a, b) => a.due - b.due);
     const onTime = results.filter(({due, takeoff}) => takeoff <= due).length;
     const revenue = results.reduce((total, flight) => total + flight.revenue, 0);
+    const fines = results.reduce((total, flight) => total + flight.fine, 0);
     const handling = results.length * handlingCost;
     const checkIn = staffingCost("checkIn");
     const security = staffingCost("security");
     $("#report-on-time").textContent = onTime + " / " + results.length;
     $("#report-missed").textContent = results.reduce((total, flight) => total + flight.missed, 0);
-    $("#report-profit").textContent = currency.format(revenue - handling - checkIn - security);
+    $("#report-profit").textContent = currency.format(revenue - handling - checkIn - security - fines);
+    $("#report-delays").innerHTML = stat("Total departure delay", state.delayMinutes + " min");
     $("#report-finances").innerHTML = stat("Flight revenue", currency.format(revenue)) +
       stat("Ground handling", currency.format(-handling)) + stat("Extra check-in staffing", currency.format(0 - checkIn)) +
-      stat("Extra security staffing", currency.format(0 - security));
-    $("#report-flights").innerHTML = results.map(({id, destination, due, takeoff, missed}) =>
-      '<tr><th scope="row">' + id + '<span>' + destination + '</span></th><td>' + formatTime(due) +
-      '</td><td>' + formatTime(takeoff) + (takeoff > due ? '<span class="report-late">+' + (takeoff - due) + ' min</span>' : '') +
-      '</td><td>' + missed + '</td></tr>').join("");
+      stat("Extra security staffing", currency.format(0 - security)) + stat("Late takeoff fines", currency.format(0 - fines));
+    $("#report-flights").innerHTML = results.map(({id, destination, due, takeoff, missed, fine}) => {
+      const fineLabel = fine ? " · " + currency.format(fine) + " fine" : "";
+      const lateLabel = takeoff > due ? '<span class="report-late">+' + (takeoff - due) + ' min' + fineLabel + '</span>' : "";
+      return '<tr><th scope="row">' + id + '<span>' + destination + '</span></th><td>' + formatTime(due) +
+        '</td><td>' + formatTime(takeoff) + lateLabel + '</td><td>' + missed + '</td></tr>';
+    }).join("");
     report.showModal();
   }
 
