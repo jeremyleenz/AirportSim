@@ -693,7 +693,7 @@
       $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
         stat("Passengers in terminal", (passengers - counts.outside) + " / " + passengers) + '</div>');
     }
-    if (flight.carousel !== null) {
+    if (flight.carousel !== null && (arriving || stage === "deplaning")) {
       $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
         stat("Baggage claim", "Carousel " + (flight.carousel + 1)) + '</div>');
     }
