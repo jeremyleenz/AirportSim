@@ -214,6 +214,13 @@ button, h1, h2, h3, p { margin: 0; }
 .terminal-stat h3 { font-size: .95rem; margin-bottom: 7px; }
 .staffing-card + .section-head { margin-top: 18px; }
 .staffing-card h3 { margin: 0; color: var(--light); font-size: .88rem; }
+.staffing-lanes { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin: 8px 0; padding: 0; }
+.staffing-lanes li { display: grid; gap: 3px; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: #19262b; }
+.staffing-lanes li span { color: var(--muted); font-size: .71rem; }
+.staffing-lanes li strong { font: 700 .73rem var(--mono); }
+.staffing-lanes li[data-status="open"] { color: var(--mint); background: #1e3a31; border-color: #3e6754; }
+.staffing-lanes li[data-status="closing"] { color: var(--amber); background: #403329; border-color: #795b3a; }
+.staffing-lanes li[data-status="closed"] { color: #ffc0b8; background: #402a2e; border-color: #764c4d; }
 .staffing-rate { margin-top: 5px; color: var(--muted); font-size: .75rem; }
 .staffing-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .bottom-bar { position: relative; z-index: 3; display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; flex: 0 0 53px; padding: 0 24px; border-top: 1px solid #314349; background: #111d23; }

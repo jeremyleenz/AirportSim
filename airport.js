@@ -358,13 +358,6 @@ const airport = (() => {
     for (const x of checkInQueue.centers) queue(mesh, x, checkInQueue);
     for (const x of [-34.5, -12.8, 12.4, 35.6]) planter(mesh, x, floor, 26.95, 1.3);
 
-    for (const x of [-8.3, -3.6, 3.6, 8.3]) {
-      mesh.box(x, .05, 29.81, .24, 2.93, .28, frame);
-      mesh.box(x, .05, 28.28, .25, 2.93, .27, frame);
-    }
-    mesh.box(0, 2.95, 29.2, 18.95, .27, 2.85, "#dbe7d8");
-    mesh.box(0, 2.82, 30.68, 18.99, .24, .13, teal);
-    for (let x = -8.7; x < 9; x += 1.48) mesh.box(x, 3.218, 29.24, .095, .055, 2.69, "#a8bbb2");
     return mesh;
   }
 

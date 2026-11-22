@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=11">
+  <link rel="stylesheet" href="styles.css?v=12">
   <script defer src="renderer.js"></script>
-  <script defer src="airport.js?v=4"></script>
+  <script defer src="airport.js?v=5"></script>
   <script defer src="passengers.js?v=10"></script>
-  <script defer src="game.js?v=16"></script>
+  <script defer src="game.js?v=17"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -124,6 +124,7 @@
           <div class="section-head"><h2>Staffing</h2></div>
           <div id="staffing-checkIn" class="terminal-stat staffing-card">
             <div class="detail-stat"><h3 tabindex="-1">Check-in</h3><b class="staffing-count"></b></div>
+            <ul class="staffing-lanes" aria-label="Check-in station status"></ul>
             <p class="staffing-rate"></p>
             <div class="staffing-actions">
               <button type="button" data-staffing="open" class="secondary">Open station</button>
@@ -132,6 +133,7 @@
           </div>
           <div id="staffing-security" class="terminal-stat staffing-card">
             <div class="detail-stat"><h3 tabindex="-1">Security</h3><b class="staffing-count"></b></div>
+            <ul class="staffing-lanes" aria-label="Security lane status"></ul>
             <p class="staffing-rate"></p>
             <div class="staffing-actions">
               <button type="button" data-staffing="open" class="secondary">Open lane</button>

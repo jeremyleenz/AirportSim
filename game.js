@@ -9,6 +9,7 @@
   const startingCash = 124500;
   const staffingRates = {checkIn: 10, security: 15};
   const counterNames = {checkIn: "Check-in station", security: "Security lane"};
+  const counterStatus = {open: "Open", closing: "Closing", closed: "Closed"};
   const handlingCost = 2000;
   const passengerFare = 41;
   const startMinutes = 8 * 60 + 42;
@@ -92,26 +93,39 @@
   let occupancyDirty = false;
 
   let renderer, scene;
-  let planes, counterBarriers;
+  let planes, counterMarkers;
   try {
     renderer = world.createRenderer($("#scene"));
     scene = airport.scene();
     planes = airlines.map(airline => airport.aircraft(airline.symbol));
-    const {checkIn, security, queueRows, queueSpacing} = airport.terminalPaths;
-    counterBarriers = {
-      checkIn: closedCounterBarrier(checkIn.width, checkIn.front + (queueRows - 1) * queueSpacing + .4),
-      security: closedCounterBarrier(security.portalWidth, security.checkpointZ + .6)
+    const {checkIn, security} = airport.terminalPaths;
+    counterMarkers = {
+      checkIn: queueEntranceMarkers(checkIn),
+      security: queueEntranceMarkers(security)
     };
   } catch (error) {
     console.error(error);
     $("#map-error").hidden = false;
   }
 
-  function closedCounterBarrier(width, z) {
-    return new world.Mesh()
-      .box(0, floor + .50, z, width + .18, .07, .105, "#b97054")
-      .box(-width / 2, floor, z, .08, .56, .1, "#536b6c")
-      .box(width / 2, floor, z, .08, .56, .1, "#536b6c");
+  function queueEntranceMarkers({width, front}) {
+    const {queueRows, queueSpacing} = airport.terminalPaths;
+    const z = front + (queueRows - 1) * queueSpacing + .48;
+    const y = floor + .035;
+    const paint = "#f9f2e1";
+    const pad = color => new world.Mesh().rect(0, y, z, width - .12, 1.25, color);
+    const open = pad("#377e57")
+      .line([0, z + .39], [0, z - .37], .2, y + .003, paint)
+      .path([[-.62, z + .08], [0, z - .37], [.62, z + .08]], .2, y + .003, paint);
+    const closing = pad("#a4722f").rect(0, y + .003, z, 1.32, .24, paint);
+    const closed = pad("#8c4a46")
+      .box(0, floor + .46, z, width, .30, .19, "#c35f54")
+      .box(-width / 2, floor, z, .14, .79, .19, "#536b6c")
+      .box(width / 2, floor, z, .14, .79, .19, "#536b6c");
+    for (const fraction of [-.36, -.12, .12, .36]) {
+      closed.box(width * fraction, floor + .46, z, width * .10, .30, .20, paint);
+    }
+    return {open, closing, closed};
   }
 
   function createLabel(text, x, y, z, section) {
@@ -153,12 +167,12 @@
     return {element: button, x: x + 2.9, y: 2.85, z: 7.93, count};
   });
   const mapSigns = renderer ? [
-    createLabel("ENTRANCE", 0, 2.65, 31.4),
+    createLabel("ENTRANCE", -2.2, 1.1, 34.1),
     createLabel("ARRIVALS EXIT", airport.terminalPaths.airsideExit.x, 1.2, 30.9),
     createLabel("CAFÉ", -26, 1.84, 19.05, "cafe"),
-    createLabel("SHARED SEATS", -12.5, .8, 19.2, "sharedSeats"),
+    createLabel("SHARED SEATS", -12.5, 1, 16.55, "sharedSeats"),
     createLabel("SECURITY", -.7, 2.75, 19.1, "security"),
-    createLabel("CHECK-IN", 25, 1.95, 23.1, "checkIn"),
+    createLabel("CHECK-IN", 25, 4.6, 21.2, "checkIn"),
     createLabel("DEPARTURES", 13.3, 1.65, 16.9, "concourse"),
     createLabel("RWY 09 / 27", -22, .05, runwayZ - 9.4)
   ] : [];
@@ -624,6 +638,13 @@
   function paintStaffing(type) {
     const panel = $("#staffing-" + type);
     const banks = flow[type];
+    const indicators = panel.querySelector(".staffing-lanes").children;
+    banks.forEach((bank, index) => {
+      const indicator = indicators[index];
+      if (indicator.dataset.status === bank.status) return;
+      indicator.dataset.status = bank.status;
+      indicator.querySelector("strong").textContent = counterStatus[bank.status];
+    });
     const open = banks.filter(bank => bank.status === "open").length;
     const closing = banks.filter(bank => bank.status === "closing").length;
     panel.querySelector(".staffing-count").textContent = open + " / " + banks.length + " open" +
@@ -1030,10 +1051,9 @@
       const [x, y, z] = person.position;
       moving.push({mesh: scene.securityHighlight, x, y, z, castShadow: false});
     }
-    for (const type of Object.keys(counterBarriers)) {
-      const offset = airport.terminalPaths[type].portalOffsetX ?? 0;
+    for (const type of Object.keys(counterMarkers)) {
       for (const bank of flow[type]) {
-        if (bank.status === "closed") moving.push({mesh: counterBarriers[type], x: bank.x + offset});
+        moving.push({mesh: counterMarkers[type][bank.status], x: bank.x, castShadow: bank.status === "closed"});
       }
     }
     const gate = gates[selectedGate()];
@@ -1102,6 +1122,12 @@
   }
   for (const type of Object.keys(staffingRates)) {
     const panel = $("#staffing-" + type);
+    const indicators = panel.querySelector(".staffing-lanes");
+    flow[type].forEach((_, index) => {
+      const indicator = document.createElement("li");
+      indicator.innerHTML = "<span>" + (type === "checkIn" ? "Station " : "Lane ") + (index + 1) + "</span><strong></strong>";
+      indicators.append(indicator);
+    });
     panel.querySelector(".staffing-rate").textContent = currency.format(staffingRates[type] * 60) + "/hr per extra station";
     for (const action of ["open", "close"]) {
       panel.querySelector('[data-staffing="' + action + '"]').addEventListener("click", () => changeStaffing(type, action));
