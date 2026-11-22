@@ -212,6 +212,9 @@ button, h1, h2, h3, p { margin: 0; }
 #goal-bar { width: 0; }
 .terminal-stat { border: 1px solid var(--line); background: #192930; border-radius: 8px; margin-top: 8px; padding: 12px; }
 .terminal-stat h3 { font-size: .95rem; margin-bottom: 7px; }
+.staffing-summary { display: grid; gap: 6px; }
+.staffing-summary .detail-stat b, .secondary .staffing-action-rate { color: var(--amber); }
+.staffing-summary p { color: var(--muted); font-size: .75rem; line-height: 1.4; }
 .staffing-card + .section-head { margin-top: 18px; }
 .staffing-card h3 { margin: 0; color: var(--light); font-size: .88rem; }
 .staffing-lanes { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin: 8px 0; padding: 0; }
@@ -221,8 +224,8 @@ button, h1, h2, h3, p { margin: 0; }
 .staffing-lanes li[data-status="open"] { color: var(--mint); background: #1e3a31; border-color: #3e6754; }
 .staffing-lanes li[data-status="closing"] { color: var(--amber); background: #403329; border-color: #795b3a; }
 .staffing-lanes li[data-status="closed"] { color: #ffc0b8; background: #402a2e; border-color: #764c4d; }
-.staffing-rate { margin-top: 5px; color: var(--muted); font-size: .75rem; }
 .staffing-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.staffing-actions .staffing-action-rate { display: block; margin: 3px 0 0; }
 .bottom-bar { position: relative; z-index: 3; display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; flex: 0 0 53px; padding: 0 24px; border-top: 1px solid #314349; background: #111d23; }
 .clock { display: grid; justify-items: center; gap: 3px; padding: 4px 16px; white-space: nowrap; background: #192b2d; border: 1px solid #345048; border-radius: 9px; }
 .clock-meta { display: flex; align-items: center; gap: 9px; }

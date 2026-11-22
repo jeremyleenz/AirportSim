@@ -633,6 +633,19 @@
     close.hidden = stage !== "boarding" || waiting === 0;
     if (!close.hidden) close.textContent = "Close boarding · " + waiting + (waiting === 1 ? " empty seat" : " empty seats");
     upgrade.hidden = counts.security === 0 || flow.security.every(bank => bank.status === "open");
+    if (!upgrade.hidden) paintOpenStaffing(upgrade, "security", counterNames.security.toLowerCase());
+  }
+
+  function formatHourlyRate(perMinute) {
+    return currency.format(perMinute * 60) + "/hr";
+  }
+
+  function paintOpenStaffing(button, type, unit) {
+    const action = flow[type].some(bank => bank.status === "closing") ? "Reopen" : "Open";
+    if (button.dataset.action === action) return;
+    button.dataset.action = action;
+    button.innerHTML = action + " " + unit + (action === "Open"
+      ? ' <span class="staffing-action-rate">+' + formatHourlyRate(staffingRates[type]) + "</span>" : "");
   }
 
   function paintStaffing(type) {
@@ -649,8 +662,15 @@
     const closing = banks.filter(bank => bank.status === "closing").length;
     panel.querySelector(".staffing-count").textContent = open + " / " + banks.length + " open" +
       (closing ? " · " + closing + " closing" : "");
-    panel.querySelector('[data-staffing="open"]').disabled = shiftComplete() || open === banks.length;
+    const openButton = panel.querySelector('[data-staffing="open"]');
+    paintOpenStaffing(openButton, type, type === "checkIn" ? "station" : "lane");
+    openButton.disabled = shiftComplete() || open === banks.length;
     panel.querySelector('[data-staffing="close"]').disabled = shiftComplete() || open === 1;
+  }
+
+  function activeStaffingRate(type) {
+    const extraStaffed = flow[type].filter(bank => bank.status !== "closed").length - 1;
+    return extraStaffed * staffingRates[type];
   }
 
   function staffingCost(type) {
@@ -668,7 +688,8 @@
     const dispatched = state.results.length;
     const satisfaction = Math.min(100, Math.max(55, 84 + dispatched * 2 -
       Math.floor((occupancy.security.length - 38) / 16) - Math.ceil(state.missedPassengers / 5) - Math.floor(state.delayMinutes / 5)));
-    $("#cash").textContent = currency.format(state.cash - staffingCost("checkIn") - staffingCost("security"));
+    const staffingSpent = staffingCost("checkIn") + staffingCost("security");
+    $("#cash").textContent = currency.format(state.cash - staffingSpent);
     $("#passengers").textContent = occupancy.total;
     $("#satisfaction").textContent = satisfaction + "%";
     $(".clock-day").textContent = "DAY " + String(1 + Math.floor(minutes / 1440)).padStart(2, "0");
@@ -698,6 +719,8 @@
     paintLateAlert();
     if (scheduleOpen) paintSchedule();
     if (terminalOpen) {
+      $("#staffing-hourly").textContent = formatHourlyRate(complete ? 0 : activeStaffingRate("checkIn") + activeStaffingRate("security"));
+      $("#staffing-spent").textContent = currency.format(staffingSpent);
       $("#check-in-count").textContent = occupancy.checkIn.length - occupancy.processing.checkIn;
       $("#check-in-processing").textContent = occupancy.processing.checkIn;
       $("#landside-count").textContent = occupancy.landside.length;
@@ -943,8 +966,7 @@
   function advanceShift(simDelta) {
     state.now += simDelta;
     for (const type of Object.keys(staffingRates)) {
-      const extraStaffed = flow[type].filter(bank => bank.status !== "closed").length - 1;
-      state.staffingCosts[type] += extraStaffed * staffingRates[type] * simDelta / secondsPerMinute;
+      state.staffingCosts[type] += activeStaffingRate(type) * simDelta / secondsPerMinute;
     }
     const changed = passengerFlow.advance(state.flights, flow, state.now, simDelta,
       flight => {
@@ -1128,13 +1150,11 @@
       indicator.innerHTML = "<span>" + (type === "checkIn" ? "Station " : "Lane ") + (index + 1) + "</span><strong></strong>";
       indicators.append(indicator);
     });
-    panel.querySelector(".staffing-rate").textContent = currency.format(staffingRates[type] * 60) + "/hr per extra station";
     for (const action of ["open", "close"]) {
       panel.querySelector('[data-staffing="' + action + '"]').addEventListener("click", () => changeStaffing(type, action));
     }
   }
   const flightUpgrade = $("#flight-upgrade");
-  flightUpgrade.innerHTML = "Open security lane <span>" + currency.format(staffingRates.security * 60) + "/hr</span>";
   flightUpgrade.addEventListener("click", () => changeStaffing("security", "open"));
   document.querySelectorAll("[data-speed]").forEach(button => {
     button.addEventListener("click", () => {
