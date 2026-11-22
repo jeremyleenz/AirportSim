@@ -15,6 +15,7 @@
   const startMinutes = 8 * 60 + 42;
   const secondsPerMinute = 3.4;
   const fastForwardSpeed = 4;
+  const scheduleVariationMinutes = 6;
   const minutesFromBoardingToTakeoff = 30;
   const earliestPassengerArrival = 70;
   const latestPassengerArrival = 40;
@@ -37,20 +38,27 @@
     ["Melbourne", 96], ["Brisbane", 90], ["Auckland", 110],
     ["Hobart", 86], ["Adelaide", 102], ["Wellington", 94]
   ];
-  // Times are minutes after the shift opens at 08:42.
-  const timetable = [
+  // Times are minutes after opening. The afternoon arrivals overlap the preceding departures.
+  const scheduleSlots = [
     [0, 0, 214, null, 13], [1, 1, 507, null, 46], [2, 2, 318, 0, 70],
-    [3, 3, 126, 20, 84], [4, 0, 435, 25, 97],
-    [5, 1, 201, 115, 171], [0, 2, 216, 124, 184], [1, 3, 509, 135, 196], [2, 0, 320, 150, 215],
-    [3, 1, 128, 255, 311], [4, 2, 437, 260, 323], [5, 3, 203, 270, 339],
-    [0, 0, 218, 410, 465], [1, 1, 511, 423, 482], [2, 2, 322, 480, 550], [3, 3, 130, 580, 644]
-  ].map(([route, airline, number, arrivalMinute, takeoffMinute]) => {
-    const [destination, passengers] = routes[route];
-    const arrivalAt = arrivalMinute === null ? null : arrivalMinute * secondsPerMinute;
-    const boardingAt = Math.max(0, takeoffMinute - minutesFromBoardingToTakeoff) * secondsPerMinute;
-    const takeoffAt = takeoffMinute * secondsPerMinute;
-    return {id: airlines[airline].code + number, destination, airline, passengers, arrivalAt, boardingAt, takeoffAt};
-  });
+    [3, 3, 126, 20, 84], [4, 0, 435, 25, 107],
+    [5, 1, 201, 79, 158], [0, 2, 216, 121, 184], [1, 3, 509, 135, 200], [2, 0, 320, 158, 225],
+    [3, 1, 128, 197, 276], [4, 2, 437, 248, 326], [5, 3, 203, 292, 355],
+    [0, 0, 218, 326, 416], [1, 1, 511, 388, 478], [2, 2, 322, 450, 538], [3, 3, 130, 510, 602]
+  ];
+
+  function createTimetable() {
+    return scheduleSlots.map(([route, airline, number, arrivalMinute, takeoffMinute]) => {
+      const [destination, passengers] = routes[route];
+      // Offset arrival and takeoff together to preserve each flight's turnaround time.
+      const offset = arrivalMinute > 0 ? Math.floor(Math.random() * (2 * scheduleVariationMinutes + 1)) - scheduleVariationMinutes : 0;
+      const arrivalAt = arrivalMinute === null ? null : (arrivalMinute + offset) * secondsPerMinute;
+      const departureMinute = takeoffMinute + offset;
+      const boardingAt = Math.max(0, departureMinute - minutesFromBoardingToTakeoff) * secondsPerMinute;
+      const takeoffAt = departureMinute * secondsPerMinute;
+      return {id: airlines[airline].code + number, destination, airline, passengers, arrivalAt, boardingAt, takeoffAt};
+    }).sort((a, b) => a.takeoffAt - b.takeoffAt);
+  }
 
   function lateArrivalTimes(takeoffAt) {
     if (Math.random() >= .25) return [];
@@ -79,9 +87,10 @@
   }
 
   function createShift() {
+    const timetable = createTimetable();
     return {cash: startingCash, now: 0, speed: 1, paused: false, missedPassengers: 0, delayMinutes: 0,
       staffingCosts: {checkIn: 0, security: 0},
-      flights: timetable.map(makeFlight), results: [], selected: "SA507", view: "flights",
+      timetable, flights: timetable.map(makeFlight), results: [], selected: "SA507", view: "flights",
       movements: new Map(), taxiQueue: [], nextDeparture: null};
   }
 
@@ -282,7 +291,7 @@
   }
 
   function shiftComplete() {
-    return state.results.length === timetable.length;
+    return state.results.length === state.timetable.length;
   }
 
   function availableGate() {
@@ -389,27 +398,33 @@
     return '<time datetime="' + time + '">' + time + '</time>';
   }
 
-  const scheduleRows = timetable.map(({id, destination, arrivalAt, boardingAt, takeoffAt}) => {
-    const row = document.createElement("tr");
-    const arrival = arrivalAt === null ? '<span class="schedule-initial">At gate</span>' : scheduleTime(arrivalAt);
-    row.innerHTML = '<th scope="row"><button type="button" class="schedule-flight">' + destination +
-      '</button><span class="schedule-destination" hidden>' + destination + '</span><span class="schedule-id">' +
-      id + '<span class="schedule-gate"></span></span></th><td>' + arrival + '</td><td>' + scheduleTime(boardingAt) +
-      '</td><td>' + scheduleTime(takeoffAt) + '<span class="schedule-status"></span></td>';
-    const button = row.querySelector("button");
-    button.setAttribute("aria-label", "Open " + destination + " " + id + " on flight board");
-    button.addEventListener("click", () => {
-      const flight = state.flights.find(item => item.id === id);
-      if (!flight) return;
-      if (flight.stage === "scheduled") $("#upcoming").open = true;
-      select(id);
-      revealFlight();
+  function buildScheduleRows() {
+    const {timetable} = state;
+    const rows = timetable.map(({id, destination, arrivalAt, boardingAt, takeoffAt}) => {
+      const row = document.createElement("tr");
+      const arrival = arrivalAt === null ? '<span class="schedule-initial">At gate</span>' : scheduleTime(arrivalAt);
+      row.innerHTML = '<th scope="row"><button type="button" class="schedule-flight">' + destination +
+        '</button><span class="schedule-destination" hidden>' + destination + '</span><span class="schedule-id">' +
+        id + '<span class="schedule-gate"></span></span></th><td>' + arrival + '</td><td>' + scheduleTime(boardingAt) +
+        '</td><td>' + scheduleTime(takeoffAt) + '<span class="schedule-status"></span></td>';
+      const button = row.querySelector("button");
+      button.setAttribute("aria-label", "Open " + destination + " " + id + " on flight board");
+      button.addEventListener("click", () => {
+        const flight = state.flights.find(item => item.id === id);
+        if (!flight) return;
+        if (flight.stage === "scheduled") $("#upcoming").open = true;
+        select(id);
+        revealFlight();
+      });
+      return {id, row, button, destinationLabel: row.querySelector(".schedule-destination"),
+        gateLabel: row.querySelector(".schedule-gate"), status: row.querySelector(".schedule-status")};
     });
-    $("#schedule-rows").append(row);
-    return {id, row, button, destinationLabel: row.querySelector(".schedule-destination"),
-      gateLabel: row.querySelector(".schedule-gate"), status: row.querySelector(".schedule-status")};
-  });
-  $("#schedule-hours").textContent = formatTime(startMinutes) + "–" + formatTime(clockMinutes(timetable.at(-1).takeoffAt));
+    $("#schedule-rows").replaceChildren(...rows.map(({row}) => row));
+    $("#schedule-hours").textContent = formatTime(startMinutes) + "–" + formatTime(clockMinutes(timetable.at(-1).takeoffAt));
+    return rows;
+  }
+
+  let scheduleRows = buildScheduleRows();
 
   function paintSchedule() {
     const active = new Map(state.flights.map(flight => [flight.id, flight]));
@@ -474,7 +489,7 @@
   function paintFlights() {
     const flightList = $("#flight-list");
     const upcomingList = $("#upcoming-list");
-    const upcoming = state.flights.filter(flight => flight.stage === "scheduled");
+    const upcoming = state.flights.filter(flight => flight.stage === "scheduled").sort((a, b) => a.arrivalAt - b.arrivalAt);
     $("#upcoming").hidden = upcoming.length === 0;
     $("#upcoming-count").textContent = upcoming.length;
     $("#upcoming-next").textContent = upcoming.length ? "Next at " + formatTime(clockMinutes(upcoming[0].arrivalAt)) : "";
@@ -486,7 +501,7 @@
         flightElements.delete(id);
       }
     }
-    for (const flight of state.flights) {
+    for (const flight of [...state.flights.filter(flight => flight.stage !== "scheduled"), ...upcoming]) {
       let entry = flightElements.get(flight.id);
       if (!entry) {
         const card = document.createElement("div");
@@ -766,9 +781,10 @@
         count.textContent = occupancy.gates[index].length;
       });
     }
-    $("#goal-bar").style.width = dispatched / timetable.length * 100 + "%";
-    $("#goal-count").textContent = dispatched + " / " + timetable.length;
-    $("#objective-title").textContent = complete ? "Operating day complete" : "Dispatch " + timetable.length + " flights";
+    const flightCount = state.timetable.length;
+    $("#goal-bar").style.width = dispatched / flightCount * 100 + "%";
+    $("#goal-count").textContent = dispatched + " / " + flightCount;
+    $("#objective-title").textContent = complete ? "Operating day complete" : "Dispatch " + flightCount + " flights";
     $("#view-report").hidden = !complete;
 
     const gate = selectedGate();
@@ -1196,6 +1212,7 @@
   $("#close-report").addEventListener("click", () => report.close());
   $("#restart-shift").addEventListener("click", () => {
     state = createShift();
+    scheduleRows = buildScheduleRows();
     flow = passengerFlow.create(state.flights);
     occupancyDirty = true;
     $("#upcoming").open = false;
