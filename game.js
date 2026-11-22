@@ -2,7 +2,7 @@
 
 (() => {
   const $ = selector => document.querySelector(selector);
-  const {gates, runwayZ, taxiwayZ, floor} = airport;
+  const {gates, runwayZ, taxiwayZ, floor, baggageClaim} = airport;
   const mobileLayout = window.matchMedia("(max-width: 760px), (pointer: coarse) and (max-height: 500px)");
   const game = $(".game");
   const currency = new Intl.NumberFormat("en-US", {style: "currency", currency: "USD", maximumFractionDigits: 0});
@@ -86,7 +86,7 @@
     const manifest = passengerFlow.manifest(passengers, firstArrival, lastArrival, lateTimes);
     for (const person of manifest) person.flightId = plan.id;
     const incomingPassengers = arrivalAt === null ? 0 : Math.round(passengers * (.55 + index * 3 % 5 * .04));
-    return {...plan, stage, gate, manifest, incomingPassengers};
+    return {...plan, stage, gate, carousel: null, manifest, incomingPassengers};
   }
 
   function createShift(day = 1) {
@@ -318,17 +318,43 @@
   const flightDetail = $("#flight-detail");
   const delayNotice = $("#departure-delay-notice");
   const gatePicker = $("#gate-picker");
-  const gateOptions = gates.map(({name}, index) => {
-    const label = document.createElement("label");
-    label.className = "gate-option";
-    label.innerHTML = '<input type="radio" name="arrival-gate">' +
-      '<span class="gate-choice"><strong>' + name + '</strong><small></small></span>';
-    const input = label.querySelector("input");
-    input.value = index;
-    input.addEventListener("change", () => select(state.selected, index));
-    $("#gate-options").append(label);
-    return {input, status: label.querySelector("small")};
-  });
+  const carouselPicker = $("#carousel-picker");
+
+  function createAssignmentOptions(container, name, labels, choose) {
+    return labels.map((text, index) => {
+      const label = document.createElement("label");
+      label.className = "gate-option";
+      label.innerHTML = '<input type="radio"><span class="gate-choice"><strong></strong><small></small></span>';
+      label.querySelector("strong").textContent = text;
+      const input = label.querySelector("input");
+      input.name = name;
+      input.value = index;
+      input.addEventListener("change", () => choose(index));
+      container.append(label);
+      return {input, status: label.querySelector("small")};
+    });
+  }
+
+  const gateOptions = createAssignmentOptions($("#gate-options"), "arrival-gate", gates.map(({name}) => name),
+    index => select(state.selected, index));
+  const carouselOptions = createAssignmentOptions($("#carousel-options"), "arrival-carousel",
+    baggageClaim.carousels.map((_, index) => "Carousel " + (index + 1)), index => {
+      const flight = state.flights.find(flight => flight.id === state.selected && flight.stage === "holding");
+      if (!flight || carouselFlightId(index)) return;
+      flight.preferredCarousel = index;
+      paint();
+    });
+
+  function carouselFlightId(carousel) {
+    const inbound = state.flights.find(flight => flight.carousel === carousel &&
+      (flight.stage === "reserved" || flight.stage === "inbound"));
+    return inbound?.id ?? baggage.carouselFlightId(state.luggage, carousel);
+  }
+
+  function selectedCarousel(flight) {
+    const index = flight.preferredCarousel;
+    return carouselOptions[index] && !carouselFlightId(index) ? index : -1;
+  }
 
   function paintGatePicker(flight, gate) {
     gatePicker.hidden = flight?.stage !== "holding";
@@ -339,6 +365,17 @@
       input.checked = index === gate;
       status.textContent = !occupant ? "Open"
         : occupant.stage === "reserved" || occupant.stage === "inbound" ? "Reserved" : "Occupied";
+    });
+  }
+
+  function paintCarouselPicker(flight, carousel) {
+    carouselPicker.hidden = flight?.stage !== "holding";
+    if (carouselPicker.hidden) return;
+    carouselOptions.forEach(({input, status}, index) => {
+      const occupant = carouselFlightId(index);
+      input.disabled = Boolean(occupant);
+      input.checked = index === carousel;
+      status.textContent = occupant ?? "Open";
     });
   }
 
@@ -606,6 +643,7 @@
   function paintDetail() {
     const flight = state.flights.find(item => item.id === state.selected);
     const gate = selectedGate();
+    const carousel = flight?.stage === "holding" ? selectedCarousel(flight) : -1;
     const action = $("#flight-action");
     const close = $("#close-boarding");
     const upgrade = $("#flight-upgrade");
@@ -613,6 +651,7 @@
     const host = flightElements.get(flight?.id)?.card ?? $("#flight-view");
     if (flightDetail.parentNode !== host) host.append(flightDetail);
     paintGatePicker(flight, gate);
+    paintCarouselPicker(flight, carousel);
     close.hidden = upgrade.hidden = lateNotice.hidden = delayNotice.hidden = true;
     flightDetail.hidden = !flight && gate < 0;
     if (flightDetail.hidden) return;
@@ -627,7 +666,7 @@
     const counts = occupancy.byFlight.get(id);
     const arriving = isArriving(flight);
     if (stage === "scheduled" || stage === "holding") {
-      $("#detail-content").innerHTML = stage === "holding" ? '<p class="detail-copy">Aircraft holding for a gate.</p>' : "";
+      $("#detail-content").innerHTML = stage === "holding" ? '<p class="detail-copy">Aircraft holding for a gate and carousel.</p>' : "";
     } else if (stage === "reserved") {
       $("#detail-content").innerHTML = '<p class="detail-copy">Gate ' + gates[flight.gate].name +
         ' is reserved. Taxi-in starts when the taxiway clears.</p>';
@@ -654,6 +693,10 @@
       $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
         stat("Passengers in terminal", (passengers - counts.outside) + " / " + passengers) + '</div>');
     }
+    if (flight.carousel !== null) {
+      $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
+        stat("Baggage claim", "Carousel " + (flight.carousel + 1)) + '</div>');
+    }
     const {lateOutside, lateInTerminal} = counts;
     const lateWaiting = notifiedLatePassengers(flight);
     const schedule = takeoffSchedule(flight);
@@ -679,18 +722,20 @@
       : nextDeparture ? "Take " + nextDeparture.id + "’s runway slot"
       : departure && !canStartTaxi(departure) ? "Reserve next takeoff slot"
       : "Clear for departure";
+    const arrivalAction = gate < 0 ? (availableGate() >= 0 ? "Choose an open gate" : "No open gates")
+      : carousel < 0 ? (carouselOptions.every(({input}) => input.disabled) ? "No free carousels" : "Choose a carousel")
+        : "Assign " + gates[gate].name + " · Carousel " + (carousel + 1);
     const labels = {
       parked: beforeBoarding ? "Boarding opens at " + formatTime(clockMinutes(flight.boardingAt)) : "Start boarding",
       closing: "Finishing boarding",
       ready: readyAction,
-      holding: gate >= 0 ? "Assign gate " + gates[gate].name
-        : availableGate() >= 0 ? "Choose an open gate" : "No open gates",
+      holding: arrivalAction,
       reserved: "Waiting for taxi clearance",
       inbound: "Taxiing to gate", outbound: "Departure in progress"
     };
     action.textContent = labels[stage] ?? "";
     action.disabled = beforeBoarding || pastLastCall || (stage !== "parked" && stage !== "ready" &&
-      !(stage === "holding" && gate >= 0));
+      !(stage === "holding" && gate >= 0 && carousel >= 0));
     close.hidden = stage !== "boarding" || waiting === 0;
     if (!close.hidden) close.textContent = "Close boarding · " + waiting + (waiting === 1 ? " empty seat" : " empty seats");
     upgrade.hidden = counts.security === 0 || flow.security.every(bank => bank.status === "open");
@@ -1011,8 +1056,10 @@
       }
     } else if (flight.stage === "holding") {
       const gate = selectedGate();
-      if (gate < 0) return;
+      const carousel = selectedCarousel(flight);
+      if (gate < 0 || carousel < 0) return;
       flight.gate = gate;
+      flight.carousel = carousel;
       flight.stage = "reserved";
       state.taxiQueue.push(flight);
       releaseTaxiIn();
@@ -1093,7 +1140,7 @@
       },
       flight => {
         flight.stage = "parked";
-        announce(flight.id + " finished deplaning. Boarding can begin.");
+        announce(flight.id + " finished deplaning. Baggage claim at Carousel " + (flight.carousel + 1) + ".");
       }, person => {
         const flight = state.flights.find(item => item.id === person.flightId);
         baggage.checkedIn(state.luggage, flight, person, state.now);

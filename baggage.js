@@ -77,17 +77,22 @@ const baggage = (() => {
 
   function arrived(animation, flight) {
     const count = Math.round(flight.incomingPassengers * (.55 + Math.random() * .1));
-    const carousel = flight.gate;
+    const {carousel} = flight;
     const colors = airport.baggageColors.length;
     const indices = Array.from({length: flight.incomingPassengers}, (_, index) => index);
     const byPassenger = new Map();
     for (let i = 0; i < count; i++) {
       const j = i + Math.floor(Math.random() * (indices.length - i));
       [indices[i], indices[j]] = [indices[j], indices[i]];
-      byPassenger.set(indices[i], {color: Math.floor(Math.random() * colors), carousel});
+      byPassenger.set(indices[i], {color: Math.floor(Math.random() * colors), carousel, flightId: flight.id});
     }
     if (count) animation.arrivals.push({flight, bags: [...byPassenger.values()], firstTrip: true});
     return byPassenger;
+  }
+
+  function carouselFlightId(animation, carousel) {
+    const pending = animation.arrivals.find(({flight}) => flight.carousel === carousel && atGate.has(flight.stage));
+    return pending?.flight.id ?? animation.claimBags.find(bag => bag.carousel === carousel && !bag.claimed && !bag.cancelled)?.flightId;
   }
 
   function isActive(bag, now) {
@@ -118,7 +123,7 @@ const baggage = (() => {
   }
 
   function collect(animation, flight, bags, now) {
-    const {gate} = flight;
+    const {gate, carousel} = flight;
     const route = tugRoutes[gate];
     const arrival = route[1].time;
     const {transfer, foot, hatch} = loaderRoutes[gate];
@@ -140,7 +145,7 @@ const baggage = (() => {
       bag.transferPath = timedPath([slot, transfer], unloadAt, 4.5);
       leaveDepotAt = Math.max(leaveDepotAt, bag.transferPath.at(-1).time + .28);
       const feedAt = Math.max(bag.transferPath.at(-1).time + 2.6, animation.nextFeedAt);
-      bag.feedPath = timedPath(carousels[gate].feed, feedAt, claimSpeed);
+      bag.feedPath = timedPath(carousels[carousel].feed, feedAt, claimSpeed);
       animation.nextFeedAt = feedAt + .37;
       animation.claimBags.push(bag);
     }
@@ -273,5 +278,5 @@ const baggage = (() => {
     return moving;
   }
 
-  return {create, checkedIn, arrived, advance, actors};
+  return {create, checkedIn, arrived, carouselFlightId, advance, actors};
 })();
