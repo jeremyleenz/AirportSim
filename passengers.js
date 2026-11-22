@@ -16,15 +16,11 @@ const passengerFlow = (() => {
   const deplaneInterval = .32;
   const point = (x, z) => [x, floor, z];
 
-  function manifest(capacity, initial, arrivalStart, arrivalEnd, lateTimes = []) {
+  function manifest(capacity, arrivalStart, arrivalEnd, lateTimes = []) {
     const people = [];
-    for (const [zone, count] of Object.entries(initial ?? {})) {
-      for (let i = 0; i < count; i++) people.push(makePerson(people.length, zone));
-    }
-    const outside = capacity - people.length;
-    const regular = outside - lateTimes.length;
-    for (let i = 0; i < outside; i++) {
-      const person = makePerson(people.length, "outside");
+    const regular = capacity - lateTimes.length;
+    for (let i = 0; i < capacity; i++) {
+      const person = makePerson(i, "outside");
       if (i < regular) {
         const fraction = (i + .2 + (i * 7 % 13) / 20) / regular;
         person.arrivalAt = arrivalStart + (arrivalEnd - arrivalStart) * fraction;
@@ -41,7 +37,7 @@ const passengerFlow = (() => {
     return {index, zone, position: null, angle: Math.PI, distance: 0, moving: false, route: null};
   }
 
-  function create(flights) {
+  function create() {
     function banks(layout) {
       return layout.centers.map((x, index) => ({
         x, front: layout.front, cursor: 0, service: null, status: index ? "closed" : "open",
@@ -59,34 +55,6 @@ const passengerFlow = (() => {
       nextEntry: 0, entrancesUsed: 0
     };
     flow.guestSeats = flow.boarding.flatMap(queue => queue.spots.seats);
-    for (const flight of flights) {
-      for (const person of flight.manifest) {
-        if (person.zone === "gate" || person.zone === "cafe") {
-          const spot = person.zone === "gate"
-            ? reserveLounge(person, flow.boarding[flight.gate])
-            : reserveCafe(person, flight, flow, 0);
-          person.position = spot.position;
-          settle(person);
-        }
-        if (person.zone === "gateQueue") {
-          const queue = flow.boarding[flight.gate];
-          const offset = queue.line.length * boardingSpacing;
-          person.position = positionOnLine(queue, offset);
-          queue.line.push({person, offset});
-        }
-        if (person.zone === "checkIn" || person.zone === "security") {
-          const selected = findLine(flow[person.zone]);
-          person.position = queueSpot(selected.bank, selected.line, selected.line.people.length);
-          selected.line.people.push(person);
-        }
-        if (person.zone === "concourse") {
-          const exit = securityLayout.centers[0] + securityLayout.portalOffsetX;
-          person.position = point(exit + (person.index % 3 - 1) * .38, securityLayout.exitZ - person.index % 4 * .39);
-          afterSecurity(person, flight, flow, 0);
-          follow(person, (person.index % 12) * .09);
-        }
-      }
-    }
     return flow;
   }
 

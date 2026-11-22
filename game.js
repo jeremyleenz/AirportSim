@@ -38,20 +38,20 @@
     ["Melbourne", 96], ["Brisbane", 90], ["Auckland", 110],
     ["Hobart", 86], ["Adelaide", 102], ["Wellington", 94]
   ];
-  // Times are minutes after opening. The afternoon arrivals overlap the preceding departures.
+  // Times are minutes after opening. One aircraft is parked overnight and the first inbound is due in eight minutes.
   const scheduleSlots = [
-    [0, 0, 214, null, 13], [1, 1, 507, null, 46], [2, 2, 318, 0, 70],
-    [3, 3, 126, 20, 84], [4, 0, 435, 25, 107],
-    [5, 1, 201, 79, 158], [0, 2, 216, 121, 184], [1, 3, 509, 135, 200], [2, 0, 320, 158, 225],
-    [3, 1, 128, 197, 276], [4, 2, 437, 248, 326], [5, 3, 203, 292, 355],
+    [0, 0, 214, null, 74], [1, 1, 507, 8, 92], [2, 2, 318, 29, 101],
+    [3, 3, 126, 61, 118], [4, 0, 435, 76, 137],
+    [5, 1, 201, 108, 171], [0, 2, 216, 124, 190], [1, 3, 509, 142, 207], [2, 0, 320, 166, 230],
+    [3, 1, 128, 202, 278], [4, 2, 437, 248, 326], [5, 3, 203, 292, 355],
     [0, 0, 218, 326, 416], [1, 1, 511, 388, 478], [2, 2, 322, 450, 538], [3, 3, 130, 510, 602]
   ];
 
   function createTimetable() {
-    return scheduleSlots.map(([route, airline, number, arrivalMinute, takeoffMinute]) => {
+    return scheduleSlots.map(([route, airline, number, arrivalMinute, takeoffMinute], index) => {
       const [destination, passengers] = routes[route];
       // Offset arrival and takeoff together to preserve each flight's turnaround time.
-      const offset = arrivalMinute > 0 ? Math.floor(Math.random() * (2 * scheduleVariationMinutes + 1)) - scheduleVariationMinutes : 0;
+      const offset = index < 2 ? 0 : Math.floor(Math.random() * (2 * scheduleVariationMinutes + 1)) - scheduleVariationMinutes;
       const arrivalAt = arrivalMinute === null ? null : (arrivalMinute + offset) * secondsPerMinute;
       const departureMinute = takeoffMinute + offset;
       const boardingAt = Math.max(0, departureMinute - minutesFromBoardingToTakeoff) * secondsPerMinute;
@@ -74,14 +74,11 @@
   function makeFlight(plan, index) {
     const {arrivalAt, takeoffAt, passengers} = plan;
     const gate = arrivalAt === null ? index : null;
-    const stage = arrivalAt === null ? (gate === 0 ? "boarding" : "parked")
-      : arrivalAt === 0 ? "holding" : "scheduled";
+    const stage = gate === null ? "scheduled" : "parked";
     const lateTimes = lateArrivalTimes(takeoffAt);
-    const initialPassengers = gate === 0 ? {boarded: 68, gateQueue: 8, gate: 20 - lateTimes.length}
-      : gate === 1 ? {gate: 19, cafe: 5, concourse: 12, security: 32, checkIn: 22 - lateTimes.length} : null;
-    const manifest = passengerFlow.manifest(passengers, initialPassengers,
-      takeoffAt - earliestPassengerArrival * secondsPerMinute,
-      takeoffAt - latestPassengerArrival * secondsPerMinute, lateTimes);
+    const firstArrival = gate === null ? Math.max(0, takeoffAt - earliestPassengerArrival * secondsPerMinute) : 0;
+    const lastArrival = Math.max(0, takeoffAt - latestPassengerArrival * secondsPerMinute);
+    const manifest = passengerFlow.manifest(passengers, firstArrival, lastArrival, lateTimes);
     const incomingPassengers = arrivalAt === null ? 0 : Math.round(passengers * (.55 + index * 3 % 5 * .04));
     return {...plan, stage, gate, manifest, incomingPassengers};
   }
@@ -90,7 +87,7 @@
     const timetable = createTimetable();
     return {cash: startingCash, now: 0, speed: 1, paused: false, missedPassengers: 0, delayMinutes: 0,
       staffingCosts: {checkIn: 0, security: 0},
-      timetable, flights: timetable.map(makeFlight), results: [], selected: "SA507", view: "flights",
+      timetable, flights: timetable.map(makeFlight), results: [], selected: timetable[0].id, view: "flights",
       movements: new Map(), taxiQueue: [], nextDeparture: null};
   }
 
@@ -100,7 +97,7 @@
     parked: "At gate", deplaning: "Deplaning", boarding: "Boarding", closing: "Boarding closed", ready: "Ready", holding: "Holding",
     reserved: "Gate reserved", inbound: "Taxiing in", outbound: "Departing"
   };
-  let flow = passengerFlow.create(state.flights);
+  let flow = passengerFlow.create();
   let occupancy = passengerFlow.snapshot(state.flights, flow);
   let occupancyDirty = false;
 
@@ -1219,14 +1216,14 @@
   $("#restart-shift").addEventListener("click", () => {
     state = createShift();
     scheduleRows = buildScheduleRows();
-    flow = passengerFlow.create(state.flights);
+    flow = passengerFlow.create();
     occupancyDirty = true;
     $("#upcoming").open = false;
     report.close();
     $(".panel-body").scrollTop = 0;
     showMobileView("map");
     fit();
-    announce("Operating day started. Boarding underway at A01.");
+    announce("Terminal open. Passengers are arriving.");
     paint();
     (mobileLayout.matches ? $("#show-operations") : $("#flights-tab")).focus({preventScroll: true});
   });
