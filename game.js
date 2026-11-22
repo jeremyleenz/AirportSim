@@ -42,14 +42,14 @@
     ["Melbourne", 96], ["Brisbane", 90], ["Auckland", 110],
     ["Hobart", 86], ["Adelaide", 102], ["Wellington", 94]
   ];
-  // Times are minutes after opening. One aircraft is parked overnight and the first inbound is due in eight minutes.
+  // Times are minutes after opening. One aircraft is parked overnight and Brisbane is the first inbound.
   const scheduleSlots = [
     [0, 0, 214, null, 74], [1, 1, 507, 8, 104], [2, 2, 318, 54, 126],
-    [3, 3, 126, 89, 146], [4, 0, 435, 108, 163],
+    [3, 3, 126, 89, 146],
     [5, 1, 201, 130, 176], [0, 2, 216, 150, 190], [1, 3, 509, 165, 207], [2, 0, 320, 178, 230],
     [3, 1, 128, 198, 265], [4, 2, 437, 232, 306], [5, 3, 203, 267, 344],
-    [0, 0, 218, 305, 384], [1, 1, 511, 349, 432], [2, 2, 322, 397, 480],
-    [5, 1, 204, 473, 516], [3, 3, 130, 445, 530]
+    [0, 0, 218, 305, 384], [4, 0, 435, 358, 413], [1, 1, 511, 349, 432],
+    [5, 1, 204, 415, 458], [2, 2, 322, 397, 480], [3, 3, 130, 445, 530]
   ];
 
   function createTimetable() {
@@ -671,6 +671,7 @@
     }
     const waiting = passengers - counts.boarded - counts.boarding - counts.missed;
     const nextDeparture = state.nextDeparture;
+    const beforeBoarding = stage === "parked" && state.now < flight.boardingAt;
     const departure = stage === "ready" ? outboundMovement(flight) : null;
     const pastLastCall = departure && !fitsCurfew(departure);
     const readyAction = pastLastCall ? "Too late for curfew"
@@ -679,7 +680,7 @@
       : departure && !canStartTaxi(departure) ? "Reserve next takeoff slot"
       : "Clear for departure";
     const labels = {
-      parked: "Start boarding",
+      parked: beforeBoarding ? "Boarding opens at " + formatTime(clockMinutes(flight.boardingAt)) : "Start boarding",
       closing: "Finishing boarding",
       ready: readyAction,
       holding: gate >= 0 ? "Assign gate " + gates[gate].name
@@ -688,7 +689,7 @@
       inbound: "Taxiing to gate", outbound: "Departure in progress"
     };
     action.textContent = labels[stage] ?? "";
-    action.disabled = pastLastCall || (stage !== "parked" && stage !== "ready" &&
+    action.disabled = beforeBoarding || pastLastCall || (stage !== "parked" && stage !== "ready" &&
       !(stage === "holding" && gate >= 0));
     close.hidden = stage !== "boarding" || waiting === 0;
     if (!close.hidden) close.textContent = "Close boarding · " + waiting + (waiting === 1 ? " empty seat" : " empty seats");
@@ -988,6 +989,7 @@
     const flight = state.flights.find(item => item.id === state.selected);
     if (!flight || $("#flight-action").disabled) return;
     if (flight.stage === "parked") {
+      if (state.now < flight.boardingAt) return;
       flight.stage = "boarding";
       announce("Boarding started at " + gates[flight.gate].name + ".");
     } else if (flight.stage === "ready") {
