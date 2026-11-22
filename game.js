@@ -93,7 +93,7 @@
     const timetable = createTimetable();
     return {day, cash: startingCash, now: 0, speed: 1, paused: false, closedAtCurfew: false, missedPassengers: 0, delayMinutes: 0,
       staffingCosts: {checkIn: 0, security: 0},
-      timetable, flights: timetable.map(makeFlight), results: [], selected: timetable[0].id, view: "flights",
+      timetable, flights: timetable.map(makeFlight), results: [], selected: timetable[0].id, view: "flights", staffingFocus: null,
       movements: new Map(), taxiQueue: [], nextDeparture: null, luggage: baggage.create()};
   }
 
@@ -216,6 +216,7 @@
     if (arrival && stand !== null && !flightAtGate(stand)) arrival.preferredGate = stand;
     state.selected = id;
     state.view = "flights";
+    state.staffingFocus = null;
     paint();
     requestDraw = true;
   }
@@ -242,18 +243,18 @@
     revealFlight(mobileLayout.matches);
   }
 
-  function notifyTab(view) {
-    if (state.view !== view) $(".panel-body").scrollTop = 0;
+  function notifyTab(view, staffingFocus = null) {
+    if (state.view !== view || state.staffingFocus !== staffingFocus) $(".panel-body").scrollTop = 0;
     state.view = view;
+    state.staffingFocus = staffingFocus;
     paint();
   }
 
   function revealStaffing(type) {
-    notifyTab("terminal");
     if (mobileLayout.matches) showMobileView("operations");
-    const panel = $("#staffing-" + type);
-    panel.scrollIntoView({block: "nearest"});
-    panel.querySelector("h3").focus({preventScroll: true});
+    notifyTab("terminal", type);
+    $("#terminal-view").scrollIntoView({block: "start", inline: "nearest"});
+    $("#staffing-" + type + " h3").focus({preventScroll: true});
   }
 
   function flightAtGate(gate) {
@@ -758,6 +759,7 @@
 
   function paintStaffing(type) {
     const panel = $("#staffing-" + type);
+    panel.hidden = state.staffingFocus !== null && state.staffingFocus !== type;
     const banks = flow[type];
     const indicators = panel.querySelector(".staffing-lanes").children;
     banks.forEach((bank, index) => {
@@ -771,7 +773,7 @@
     panel.querySelector(".staffing-count").textContent = open + " / " + banks.length + " open" +
       (closing ? " · " + closing + " closing" : "");
     const openButton = panel.querySelector('[data-staffing="open"]');
-    paintOpenStaffing(openButton, type, type === "checkIn" ? "station" : "lane");
+    paintOpenStaffing(openButton, type, counterNames[type].toLowerCase());
     openButton.disabled = shiftComplete() || open === banks.length;
     panel.querySelector('[data-staffing="close"]').disabled = shiftComplete() || open === 1;
   }
@@ -834,6 +836,7 @@
     paintLateAlert();
     if (scheduleOpen) paintSchedule();
     if (terminalOpen) {
+      $("#all-staffing").hidden = state.staffingFocus === null;
       $("#staffing-hourly").textContent = formatHourlyRate(complete ? 0 : activeStaffingRate("checkIn") + activeStaffingRate("security"));
       $("#staffing-spent").textContent = currency.format(staffingSpent);
       $("#check-in-count").textContent = occupancy.checkIn.length - occupancy.processing.checkIn;
@@ -1333,6 +1336,10 @@
   $("#flights-tab").addEventListener("click", () => notifyTab("flights"));
   $("#schedule-tab").addEventListener("click", () => notifyTab("schedule"));
   $("#terminal-tab").addEventListener("click", () => notifyTab("terminal"));
+  $("#all-staffing").addEventListener("click", () => {
+    notifyTab("terminal");
+    $("#terminal-title").focus();
+  });
   $("#late-flight-alert").addEventListener("click", () => {
     const id = $("#late-flight-alert").dataset.flight;
     if (!id) return;

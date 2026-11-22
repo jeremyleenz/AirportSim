@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="styles.css?v=21">
   <script defer src="renderer.js"></script>
   <script defer src="airport.js?v=15"></script>
   <script defer src="passengers.js?v=22"></script>
   <script defer src="baggage.js?v=10"></script>
-  <script defer src="game.js?v=47"></script>
+  <script defer src="game.js?v=48"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -129,29 +129,32 @@
           </table>
         </section>
         <section id="terminal-view" aria-labelledby="terminal-title" hidden>
-          <div class="section-head"><h2>Staffing</h2></div>
-          <div class="terminal-stat staffing-summary">
-            <div class="detail-stat"><span>Extra staffing rate</span><b id="staffing-hourly"></b></div>
-            <div class="detail-stat"><span>Spent this shift</span><b id="staffing-spent"></b></div>
-            <p>One check-in station and one security lane are included. Extra staffing reduces operating profit.</p>
+          <div class="section-head">
+            <h2 id="terminal-title" tabindex="-1">Staffing</h2>
+            <button type="button" id="all-staffing" class="secondary" hidden>All staffing</button>
           </div>
           <div id="staffing-checkIn" class="terminal-stat staffing-card">
             <div class="detail-stat"><h3 tabindex="-1">Check-in</h3><b class="staffing-count"></b></div>
             <ul class="staffing-lanes" aria-label="Check-in station status"></ul>
             <div class="staffing-actions">
-              <button type="button" data-staffing="open" class="secondary">Open station</button>
-              <button type="button" data-staffing="close" class="secondary">Close station</button>
+              <button type="button" data-staffing="open" class="secondary">Open check-in station</button>
+              <button type="button" data-staffing="close" class="secondary">Close check-in station</button>
             </div>
           </div>
           <div id="staffing-security" class="terminal-stat staffing-card">
             <div class="detail-stat"><h3 tabindex="-1">Security</h3><b class="staffing-count"></b></div>
             <ul class="staffing-lanes" aria-label="Security lane status"></ul>
             <div class="staffing-actions">
-              <button type="button" data-staffing="open" class="secondary">Open lane</button>
-              <button type="button" data-staffing="close" class="secondary">Close lane</button>
+              <button type="button" data-staffing="open" class="secondary">Open security lane</button>
+              <button type="button" data-staffing="close" class="secondary">Close security lane</button>
             </div>
           </div>
-          <div class="section-head"><h2 id="terminal-title">Passenger flow</h2></div>
+          <div class="terminal-stat staffing-summary">
+            <div class="detail-stat"><span>Extra staffing rate</span><b id="staffing-hourly"></b></div>
+            <div class="detail-stat"><span>Spent this shift</span><b id="staffing-spent"></b></div>
+            <p>One check-in station and one security lane are included. Extra staffing reduces operating profit.</p>
+          </div>
+          <div class="section-head"><h2>Passenger flow</h2></div>
           <div class="terminal-stat flow-stats">
             <div class="detail-stat"><span>Check-in queue</span><b id="check-in-count"></b></div>
             <div class="detail-stat"><span>At check-in desks</span><b id="check-in-processing"></b></div>

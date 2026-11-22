@@ -221,10 +221,12 @@ button, h1, h2, h3, p { margin: 0; }
 #goal-bar { width: 0; }
 .terminal-stat { border: 1px solid var(--line); background: #192930; border-radius: 8px; margin-top: 8px; padding: 12px; }
 .terminal-stat h3 { font-size: .95rem; margin-bottom: 7px; }
+#terminal-view { scroll-margin-top: 10px; }
+#all-staffing { width: auto; margin: 0; }
 .staffing-summary { display: grid; gap: 6px; }
 .staffing-summary .detail-stat b, .secondary .staffing-action-rate { color: var(--amber); }
 .staffing-summary p { color: var(--muted); font-size: .75rem; line-height: 1.4; }
-.staffing-card + .section-head { margin-top: 18px; }
+.staffing-summary + .section-head { margin-top: 18px; }
 .staffing-card h3 { margin: 0; color: var(--light); font-size: .88rem; }
 .staffing-lanes { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin: 8px 0; padding: 0; }
 .staffing-lanes li { display: grid; gap: 3px; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: #19262b; }
