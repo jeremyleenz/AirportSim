@@ -874,7 +874,13 @@
 
   function pathsConflict(candidate, active) {
     const start = candidate.start - active.start;
-    const duration = Math.min(candidate.duration, active.duration - start);
+    const candidateDeparts = candidate.runwayEntry !== undefined;
+    const activeDeparts = active.runwayEntry !== undefined;
+    const mixedTraffic = candidateDeparts !== activeDeparts;
+    // Arrivals stay on the taxiway. A departure only shares pavement with them before it enters the runway.
+    const candidateEnd = mixedTraffic && candidateDeparts ? candidate.runwayEntry : candidate.duration;
+    const activeEnd = mixedTraffic && activeDeparts ? active.runwayEntry : active.duration;
+    const duration = Math.min(candidateEnd, activeEnd - start);
     if (duration <= 0) return false;
 
     const times = [duration];
