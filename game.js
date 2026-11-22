@@ -84,9 +84,9 @@
     return {...plan, stage, gate, manifest, incomingPassengers};
   }
 
-  function createShift() {
+  function createShift(day = 1) {
     const timetable = createTimetable();
-    return {cash: startingCash, now: 0, speed: 1, paused: false, missedPassengers: 0, delayMinutes: 0,
+    return {day, cash: startingCash, now: 0, speed: 1, paused: false, missedPassengers: 0, delayMinutes: 0,
       staffingCosts: {checkIn: 0, security: 0},
       timetable, flights: timetable.map(makeFlight), results: [], selected: timetable[0].id, view: "flights",
       movements: new Map(), taxiQueue: [], nextDeparture: null};
@@ -337,6 +337,14 @@
 
   function clockMinutes(seconds) {
     return startMinutes + Math.floor(seconds / secondsPerMinute + 1e-9);
+  }
+
+  function operatingDay(minutes = clockMinutes(state.now)) {
+    return state.day + Math.floor(minutes / 1440);
+  }
+
+  function formatDay(day) {
+    return "Day " + String(day).padStart(2, "0");
   }
 
   function formatTime(minutes) {
@@ -733,7 +741,7 @@
     $("#cash").textContent = currency.format(state.cash - staffingSpent);
     $("#passengers").textContent = occupancy.total;
     $("#satisfaction").textContent = satisfaction + "%";
-    $(".clock-day").textContent = "DAY " + String(1 + Math.floor(minutes / 1440)).padStart(2, "0");
+    $(".clock-day").textContent = formatDay(operatingDay(minutes)).toUpperCase();
     $("#clock").textContent = time;
     $("#clock").setAttribute("datetime", time);
     const complete = shiftComplete();
@@ -1073,6 +1081,7 @@
   }
 
   const report = $("#shift-report");
+  const startNextDay = $("#restart-shift");
 
   function showShiftReport() {
     const results = state.results.slice().sort((a, b) => a.due - b.due);
@@ -1095,6 +1104,7 @@
       return '<tr><th scope="row">' + id + '<span>' + destination + '</span></th><td>' + formatTime(due) +
         '</td><td>' + formatTime(takeoff) + lateLabel + '</td><td>' + missed + '</td></tr>';
     }).join("");
+    startNextDay.textContent = "Start " + formatDay(operatingDay() + 1);
     report.showModal();
   }
 
@@ -1214,8 +1224,8 @@
   $("#pause-toggle").addEventListener("click", togglePause);
   $("#view-report").addEventListener("click", showShiftReport);
   $("#close-report").addEventListener("click", () => report.close());
-  $("#restart-shift").addEventListener("click", () => {
-    state = createShift();
+  startNextDay.addEventListener("click", () => {
+    state = createShift(operatingDay() + 1);
     scheduleRows = buildScheduleRows();
     flow = passengerFlow.create();
     occupancyDirty = true;
