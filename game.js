@@ -20,7 +20,9 @@
   const curfewUrgentMinutes = 10;
   const fastForwardSpeed = 4;
   const scheduleVariationMinutes = 6;
-  const minutesFromBoardingToTakeoff = 30;
+  const boardingLeadMinutes = 40;
+  const largeFlightBoardingLeadMinutes = 45;
+  const largeFlightCapacity = 110;
   const earliestPassengerArrival = 70;
   const latestPassengerArrival = 40;
   const lateNoticeMinutes = 12;
@@ -46,10 +48,10 @@
   const scheduleSlots = [
     [0, 0, 214, null, 74], [1, 1, 507, 8, 104], [2, 2, 318, 54, 126],
     [3, 3, 126, 89, 146],
-    [5, 1, 201, 130, 176], [0, 2, 216, 150, 190], [1, 3, 509, 165, 207], [2, 0, 320, 178, 230],
+    [5, 1, 201, 120, 176], [0, 2, 216, 134, 190], [1, 3, 509, 151, 207], [2, 0, 320, 169, 230],
     [3, 1, 128, 198, 265], [4, 2, 437, 232, 306], [5, 3, 203, 267, 344],
     [0, 0, 218, 305, 384], [4, 0, 435, 358, 413], [1, 1, 511, 349, 432],
-    [5, 1, 204, 415, 458], [2, 2, 322, 397, 480], [3, 3, 130, 445, 530]
+    [5, 1, 204, 402, 458], [2, 2, 322, 397, 480], [3, 3, 130, 445, 530]
   ];
 
   function createTimetable() {
@@ -59,7 +61,8 @@
       const offset = index < 2 ? 0 : Math.floor(Math.random() * (2 * scheduleVariationMinutes + 1)) - scheduleVariationMinutes;
       const arrivalAt = arrivalMinute === null ? null : (arrivalMinute + offset) * secondsPerMinute;
       const departureMinute = takeoffMinute + offset;
-      const boardingAt = Math.max(0, departureMinute - minutesFromBoardingToTakeoff) * secondsPerMinute;
+      const lead = passengers >= largeFlightCapacity ? largeFlightBoardingLeadMinutes : boardingLeadMinutes;
+      const boardingAt = Math.max(0, departureMinute - lead) * secondsPerMinute;
       const takeoffAt = departureMinute * secondsPerMinute;
       return {id: airlines[airline].code + number, destination, airline, passengers, arrivalAt, boardingAt, takeoffAt};
     }).sort((a, b) => a.takeoffAt - b.takeoffAt);
@@ -378,6 +381,13 @@
     const time = container.querySelector("time");
     time.dateTime = formatTime(clockMinutes(flight.boardingAt));
     time.textContent = time.dateTime;
+    const open = boardingOpen(flight);
+    container.toggleAttribute("data-open", open);
+    container.querySelector(".boarding-label").textContent = open ? "Boarding open" : "Boarding time";
+  }
+
+  function boardingOpen(flight) {
+    return flight.stage === "parked" && state.now >= flight.boardingAt;
   }
 
   function takeoffSchedule(flight) {
@@ -514,6 +524,22 @@
     alert.dataset.flight = flight.id;
   }
 
+  function paintBoardingAlert() {
+    const alert = $("#boarding-open-alert");
+    const flights = shiftComplete() ? [] : state.flights.filter(boardingOpen);
+    const flight = flights[0];
+    alert.hidden = !flight;
+    if (!flight) {
+      delete alert.dataset.flight;
+      return;
+    }
+    const label = "Boarding open · " + flight.id + " · " + gates[flight.gate].name;
+    const summary = flights.length > 1 ? label + " · +" + (flights.length - 1) + " flights" : label;
+    if (alert.textContent !== summary) alert.textContent = summary;
+    if (alert.dataset.flight !== flight.id) announce(flight.id + " can start boarding at " + gates[flight.gate].name + ".");
+    alert.dataset.flight = flight.id;
+  }
+
   function paintFlights() {
     const flightList = $("#flight-list");
     const upcomingList = $("#upcoming-list");
@@ -581,10 +607,6 @@
       badge.dataset.stage = flight === state.nextDeparture ? "queued" : flight.stage;
       badge.textContent = flightStatus(flight);
       paintFlightProgress(button, flight);
-      if (!boarding.hidden) {
-        boarding.querySelector(".boarding-label").textContent = state.now >= flight.boardingAt
-          ? "Boarding due" : "Boarding time";
-      }
     }
     $("#flight-view").querySelector(".empty-board").hidden = shiftComplete() || upcoming.length !== state.flights.length;
     const occupied = gates.filter((_, index) => flightAtGate(index)).length;
@@ -689,7 +711,7 @@
     }
     const waiting = passengers - counts.boarded - counts.boarding - counts.missed;
     const nextDeparture = state.nextDeparture;
-    const beforeBoarding = stage === "parked" && state.now < flight.boardingAt;
+    const beforeBoarding = stage === "parked" && !boardingOpen(flight);
     const departure = stage === "ready" ? outboundMovement(flight) : null;
     const pastLastCall = departure && !fitsCurfew(departure);
     const readyAction = pastLastCall ? "Too late for curfew"
@@ -832,6 +854,7 @@
     $("#flight-view").hidden = !flightsOpen || complete;
     paintFlights();
     paintDetail();
+    paintBoardingAlert();
     paintLateAlert();
     if (scheduleOpen) paintSchedule();
     if (terminalOpen) {
@@ -1045,7 +1068,7 @@
     const flight = state.flights.find(item => item.id === state.selected);
     if (!flight || $("#flight-action").disabled) return;
     if (flight.stage === "parked") {
-      if (state.now < flight.boardingAt) return;
+      if (!boardingOpen(flight)) return;
       flight.stage = "boarding";
       announce("Boarding started at " + gates[flight.gate].name + ".");
     } else if (flight.stage === "ready") {
@@ -1350,13 +1373,15 @@
     notifyTab("terminal");
     $("#terminal-title").focus();
   });
-  $("#late-flight-alert").addEventListener("click", () => {
-    const id = $("#late-flight-alert").dataset.flight;
-    if (!id) return;
-    select(id);
-    if (mobileLayout.matches) showMobileView("operations");
-    revealFlight();
-  });
+  for (const alert of $("#flight-alerts").querySelectorAll("button")) {
+    alert.addEventListener("click", () => {
+      const id = alert.dataset.flight;
+      if (!id) return;
+      select(id);
+      if (mobileLayout.matches) showMobileView("operations");
+      revealFlight();
+    });
+  }
   $("#show-map").addEventListener("click", () => showMobileView("map"));
   $("#show-operations").addEventListener("click", () => showMobileView("operations"));
   $("#flight-action").addEventListener("click", command);

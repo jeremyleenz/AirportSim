@@ -172,6 +172,7 @@ button, h1, h2, h3, p { margin: 0; }
 .flight-stages:empty { display: none; }
 .flight-stages .flight-late-passengers { color: var(--amber); font-weight: 650; }
 .flight-boarding { display: grid; justify-items: end; gap: 3px; white-space: nowrap; color: var(--amber); }
+.flight-boarding[data-open] { color: var(--mint); }
 .boarding-label { font-size: .76rem; font-weight: 650; color: inherit; }
 .flight-boarding time { font: 700 1.25rem/1 var(--mono); }
 .flight-detail { background: #1a2b32; border: 1px solid #33484d; border-radius: 10px; margin-top: 14px; padding: 13px; }
@@ -244,7 +245,7 @@ button, h1, h2, h3, p { margin: 0; }
 .staffing-lanes li[data-status="closed"] { color: #ffc0b8; background: #402a2e; border-color: #764c4d; }
 .staffing-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .staffing-actions .staffing-action-rate { display: block; margin: 3px 0 0; }
-.bottom-bar { position: relative; z-index: 3; display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; flex: 0 0 53px; padding: 0 24px; border-top: 1px solid #314349; background: #111d23; }
+.bottom-bar { position: relative; z-index: 3; display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; flex: 0 0 auto; min-height: 53px; padding: 4px 24px; border-top: 1px solid #314349; background: #111d23; }
 .clock { display: grid; justify-items: center; gap: 3px; padding: 4px 16px; white-space: nowrap; background: #192b2d; border: 1px solid #345048; border-radius: 9px; }
 .clock-meta { display: flex; align-items: center; gap: 9px; }
 .clock-day { font: 650 .72rem/1 var(--mono); color: var(--muted); letter-spacing: .09em; }
@@ -264,8 +265,12 @@ button, h1, h2, h3, p { margin: 0; }
 .time-controls .icon { width: 15px; height: 15px; }
 .event { display: flex; gap: 10px; align-items: center; justify-content: end; color: var(--muted); font-size: .81rem; }
 .event .icon { color: var(--mint); width: 15px; height: 15px; }
-.late-flight-alert { grid-area: 1 / 1; justify-self: start; padding: 7px 10px; border: 1px solid #826845; border-radius: 6px; background: #493c30; color: var(--amber); font-size: .8rem; font-weight: 700; text-align: left; }
-.late-flight-alert:hover { background: #584933; }
+.flight-alerts { grid-area: 1 / 1; display: flex; flex-wrap: wrap; gap: 4px; }
+.flight-alerts:not(:has(button:not([hidden]))) { display: none; }
+.flight-alert { padding: 7px 10px; border: 1px solid #826845; border-radius: 6px; background: #493c30; color: var(--amber); font-size: .8rem; font-weight: 700; text-align: left; }
+.flight-alert:hover { background: #584933; }
+#boarding-open-alert { border-color: #679982; background: #244039; color: #d0f8df; }
+#boarding-open-alert:hover { background: #34564b; }
 #shift-report { width: min(550px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 0; overflow: hidden; border: 1px solid #436257; border-radius: 13px; color: var(--light); background: var(--panel); box-shadow: 0 18px 60px #0b1518a8; }
 #shift-report[open] { display: flex; flex-direction: column; }
 #shift-report::backdrop { background: #0b151bc8; }
@@ -355,7 +360,8 @@ button, h1, h2, h3, p { margin: 0; }
   .bottom-bar { flex: 0 0 auto; grid-template-columns: auto 1fr; gap: 4px 6px; padding: 4px max(8px, env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
   .event { grid-area: 1 / 1 / 2 / -1; justify-content: start; min-height: 16px; font-size: .75rem; }
   .event .icon { width: 13px; height: 13px; }
-  .late-flight-alert { grid-area: 3 / 1 / 4 / -1; justify-self: stretch; min-height: 44px; }
+  .flight-alerts { grid-area: 3 / 1 / 4 / -1; }
+  .flight-alert { flex: 1 1 auto; min-height: 44px; }
   .time-controls { grid-area: 2 / 2; justify-self: end; }
   .mobile-views { grid-area: 2 / 1; display: flex; gap: 2px; padding: 2px; background: #1a2a30; border: 1px solid #2f4146; border-radius: 7px; }
   .mobile-views button { display: grid; place-items: center; padding: 0 8px; background: transparent; border: 0; border-radius: 5px; font-weight: 700; }

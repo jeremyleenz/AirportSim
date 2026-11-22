@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=22">
+  <link rel="stylesheet" href="styles.css?v=23">
   <script defer src="renderer.js"></script>
   <script defer src="airport.js?v=16"></script>
   <script defer src="passengers.js?v=23"></script>
   <script defer src="baggage.js?v=12"></script>
-  <script defer src="game.js?v=50"></script>
+  <script defer src="game.js?v=51"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -183,7 +183,10 @@
     </aside>
   </main>
   <footer class="bottom-bar">
-    <button type="button" id="late-flight-alert" class="late-flight-alert" title="Open flight" hidden></button>
+    <div id="flight-alerts" class="flight-alerts" role="group" aria-label="Flight alerts">
+      <button type="button" id="boarding-open-alert" class="flight-alert" title="Open flight" hidden></button>
+      <button type="button" id="late-flight-alert" class="flight-alert" title="Open flight" hidden></button>
+    </div>
     <div class="mobile-views" role="group" aria-label="Game view">
       <button id="show-map" type="button" aria-controls="map" aria-pressed="true">Map</button>
       <button id="show-operations" type="button" aria-label="Operations" aria-controls="operations" aria-pressed="false">Ops</button>
