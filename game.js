@@ -213,10 +213,7 @@
 
   function select(id, stand = null) {
     const arrival = state.flights.find(flight => flight.id === id && flight.stage === "holding");
-    if (arrival) {
-      const choice = stand ?? arrival.preferredGate ?? availableGate();
-      if (choice >= 0 && !flightAtGate(choice)) arrival.preferredGate = choice;
-    }
+    if (arrival && stand !== null && !flightAtGate(stand)) arrival.preferredGate = stand;
     state.selected = id;
     state.view = "flights";
     paint();
@@ -308,8 +305,8 @@
     if (flight?.stage === "outbound" && flightAtGate(flight.gate) !== flight) return -1;
     if (flight?.gate != null) return flight.gate;
     if (flight?.stage === "holding") {
-      if (flight.preferredGate === undefined) return availableGate();
-      return flightAtGate(flight.preferredGate) ? -1 : flight.preferredGate;
+      const {preferredGate} = flight;
+      return preferredGate !== undefined && !flightAtGate(preferredGate) ? preferredGate : -1;
     }
     return state.selected?.startsWith("gate-") ? Number(state.selected.slice(5)) : -1;
   }
@@ -352,8 +349,17 @@
   }
 
   function selectedCarousel(flight) {
-    const index = flight.preferredCarousel;
-    return carouselOptions[index] && !carouselFlightId(index) ? index : -1;
+    const {preferredCarousel} = flight;
+    return preferredCarousel !== undefined && !carouselFlightId(preferredCarousel) ? preferredCarousel : -1;
+  }
+
+  function arrivalAssignmentLabel(gate, carousel) {
+    if (gate < 0 && availableGate() < 0) return "No open gates";
+    if (carousel < 0 && baggageClaim.carousels.every((_, index) => carouselFlightId(index))) return "No free carousels";
+    if (gate < 0 && carousel < 0) return "Choose a gate and carousel";
+    if (gate < 0) return "Choose an open gate";
+    if (carousel < 0) return "Choose an open carousel";
+    return "Assign " + gates[gate].name + " · Carousel " + (carousel + 1);
   }
 
   function paintGatePicker(flight, gate) {
@@ -722,18 +728,14 @@
       : nextDeparture ? "Take " + nextDeparture.id + "’s runway slot"
       : departure && !canStartTaxi(departure) ? "Reserve next takeoff slot"
       : "Clear for departure";
-    const arrivalAction = gate < 0 ? (availableGate() >= 0 ? "Choose an open gate" : "No open gates")
-      : carousel < 0 ? (carouselOptions.every(({input}) => input.disabled) ? "No free carousels" : "Choose a carousel")
-        : "Assign " + gates[gate].name + " · Carousel " + (carousel + 1);
     const labels = {
       parked: beforeBoarding ? "Boarding opens at " + formatTime(clockMinutes(flight.boardingAt)) : "Start boarding",
       closing: "Finishing boarding",
       ready: readyAction,
-      holding: arrivalAction,
       reserved: "Waiting for taxi clearance",
       inbound: "Taxiing to gate", outbound: "Departure in progress"
     };
-    action.textContent = labels[stage] ?? "";
+    action.textContent = stage === "holding" ? arrivalAssignmentLabel(gate, carousel) : labels[stage] ?? "";
     action.disabled = beforeBoarding || pastLastCall || (stage !== "parked" && stage !== "ready" &&
       !(stage === "holding" && gate >= 0 && carousel >= 0));
     close.hidden = stage !== "boarding" || waiting === 0;
