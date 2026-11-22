@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=17">
+  <link rel="stylesheet" href="styles.css?v=19">
   <script defer src="renderer.js"></script>
   <script defer src="airport.js?v=14"></script>
   <script defer src="passengers.js?v=21"></script>
   <script defer src="baggage.js?v=9"></script>
-  <script defer src="game.js?v=38"></script>
+  <script defer src="game.js?v=41"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -42,6 +42,7 @@
     <div class="clock" role="group" aria-label="Simulation clock">
       <time id="clock" datetime="08:42">08:42</time>
       <div class="clock-meta"><span class="clock-day">DAY 01</span><span id="run-label" class="run-label">Running</span></div>
+      <span id="curfew-countdown" hidden></span>
     </div>
     <div class="header-status">
       <div class="metrics" aria-label="Airport metrics">
@@ -84,7 +85,7 @@
       <div class="panel-body">
         <div class="objective">
           <svg class="icon"><use href="#target"/></svg>
-          <div><p>Operating day</p><strong id="objective-title">Dispatch 16 flights</strong><div class="objective-progress"><div id="goal-bar"></div></div></div>
+          <div><p id="objective-curfew"></p><strong id="objective-title"></strong><div class="objective-progress"><div id="goal-bar"></div></div></div>
           <span id="goal-count">0 / 16</span>
         </div>
         <button type="button" id="view-report" class="primary" hidden>View shift report</button>
@@ -187,6 +188,7 @@
       <button type="button" id="close-report" aria-label="Close shift report">×</button>
     </div>
     <div class="report-body">
+      <p id="report-closure" hidden></p>
       <dl class="report-metrics">
         <div><dt>On-time departures</dt><dd id="report-on-time"></dd></div>
         <div><dt>Passengers left behind</dt><dd id="report-missed"></dd></div>

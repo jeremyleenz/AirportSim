@@ -14,6 +14,10 @@
   const passengerFare = 41;
   const startMinutes = 8 * 60 + 42;
   const secondsPerMinute = 3.4;
+  const curfewMinutes = 19 * 60;
+  const curfewAt = (curfewMinutes - startMinutes) * secondsPerMinute;
+  const curfewWarningMinutes = 30;
+  const curfewUrgentMinutes = 10;
   const fastForwardSpeed = 4;
   const scheduleVariationMinutes = 6;
   const minutesFromBoardingToTakeoff = 30;
@@ -87,7 +91,7 @@
 
   function createShift(day = 1) {
     const timetable = createTimetable();
-    return {day, cash: startingCash, now: 0, speed: 1, paused: false, missedPassengers: 0, delayMinutes: 0,
+    return {day, cash: startingCash, now: 0, speed: 1, paused: false, closedAtCurfew: false, missedPassengers: 0, delayMinutes: 0,
       staffingCosts: {checkIn: 0, security: 0},
       timetable, flights: timetable.map(makeFlight), results: [], selected: timetable[0].id, view: "flights",
       movements: new Map(), taxiQueue: [], nextDeparture: null, luggage: baggage.create()};
@@ -233,6 +237,7 @@
   }
 
   function selectFromMap(id, stand = null) {
+    if (shiftComplete()) return;
     select(id, stand);
     if (mobileLayout.matches) {
       showMobileView("operations");
@@ -428,7 +433,7 @@
         gateLabel: row.querySelector(".schedule-gate"), status: row.querySelector(".schedule-status")};
     });
     $("#schedule-rows").replaceChildren(...rows.map(({row}) => row));
-    $("#schedule-hours").textContent = formatTime(startMinutes) + "–" + formatTime(clockMinutes(timetable.at(-1).takeoffAt));
+    $("#schedule-hours").textContent = "Curfew " + formatTime(curfewMinutes);
     return rows;
   }
 
@@ -436,17 +441,18 @@
 
   function paintSchedule() {
     const active = new Map(state.flights.map(flight => [flight.id, flight]));
-    const departed = new Map(state.results.map(result => [result.id, result]));
+    const results = new Map(state.results.map(result => [result.id, result]));
     for (const {id, row, button, destinationLabel, gateLabel, status} of scheduleRows) {
-      const flight = active.get(id);
-      const result = departed.get(id);
+      const result = results.get(id);
+      const flight = result ? null : active.get(id);
+      const cancelled = result?.takeoff === null;
       const gate = flight && gates[flight.gate];
       button.hidden = !flight;
       destinationLabel.hidden = Boolean(flight);
       gateLabel.textContent = gate ? " · " + gate.name : "";
-      row.dataset.stage = flight?.stage ?? "departed";
+      row.dataset.stage = flight?.stage ?? (cancelled ? "cancelled" : "departed");
       row.dataset.late = result && result.takeoff > result.due ? "true" : "false";
-      status.textContent = result ? "Left " + formatTime(result.takeoff) : flightStatus(flight);
+      status.textContent = cancelled ? "Cancelled at curfew" : result ? "Left " + formatTime(result.takeoff) : flightStatus(flight);
       status.hidden = flight?.stage === "scheduled";
     }
   }
@@ -480,7 +486,7 @@
 
   function paintLateAlert() {
     const alert = $("#late-flight-alert");
-    const flights = state.flights.filter(notifiedLatePassengers);
+    const flights = shiftComplete() ? [] : state.flights.filter(notifiedLatePassengers);
     const flight = flights.at(-1);
     alert.hidden = !flight;
     if (!flight) {
@@ -665,9 +671,12 @@
     }
     const waiting = passengers - counts.boarded - counts.boarding - counts.missed;
     const nextDeparture = state.nextDeparture;
-    const readyAction = flight === nextDeparture ? "Release next takeoff slot"
+    const departure = stage === "ready" ? outboundMovement(flight) : null;
+    const pastLastCall = departure && !fitsCurfew(departure);
+    const readyAction = pastLastCall ? "Too late for curfew"
+      : flight === nextDeparture ? "Release next takeoff slot"
       : nextDeparture ? "Take " + nextDeparture.id + "’s runway slot"
-      : stage === "ready" && !canStartTaxi(outboundMovement(flight)) ? "Reserve next takeoff slot"
+      : departure && !canStartTaxi(departure) ? "Reserve next takeoff slot"
       : "Clear for departure";
     const labels = {
       parked: "Start boarding",
@@ -679,8 +688,8 @@
       inbound: "Taxiing to gate", outbound: "Departure in progress"
     };
     action.textContent = labels[stage] ?? "";
-    action.disabled = stage !== "parked" && stage !== "ready" &&
-      !(stage === "holding" && gate >= 0);
+    action.disabled = pastLastCall || (stage !== "parked" && stage !== "ready" &&
+      !(stage === "holding" && gate >= 0));
     close.hidden = stage !== "boarding" || waiting === 0;
     if (!close.hidden) close.textContent = "Close boarding · " + waiting + (waiting === 1 ? " empty seat" : " empty seats");
     upgrade.hidden = counts.security === 0 || flow.security.every(bank => bank.status === "open");
@@ -736,7 +745,7 @@
     }
     const minutes = clockMinutes(state.now);
     const time = formatTime(minutes);
-    const dispatched = state.results.length;
+    const dispatched = state.results.filter(({takeoff}) => takeoff !== null).length;
     const satisfaction = Math.min(100, Math.max(55, 84 + dispatched * 2 -
       Math.floor((occupancy.security.length - 38) / 16) - Math.ceil(state.missedPassengers / 5) - Math.floor(state.delayMinutes / 5)));
     const staffingSpent = staffingCost("checkIn") + staffingCost("security");
@@ -747,8 +756,16 @@
     $("#clock").textContent = time;
     $("#clock").setAttribute("datetime", time);
     const complete = shiftComplete();
-    $("#run-label").textContent = complete ? "Complete" : state.paused ? "Paused" : "Running";
-    $("#run-label").classList.toggle("paused", state.paused && !complete);
+    const remaining = curfewMinutes - minutes;
+    const warnCurfew = !complete && remaining <= curfewWarningMinutes;
+    const clock = $(".clock");
+    if (warnCurfew) clock.dataset.curfew = remaining <= curfewUrgentMinutes ? "urgent" : "soon";
+    else delete clock.dataset.curfew;
+    const countdown = $("#curfew-countdown");
+    countdown.hidden = !warnCurfew;
+    if (warnCurfew) countdown.textContent = "Curfew in " + remaining + " min";
+    $("#run-label").textContent = state.closedAtCurfew ? "Curfew" : complete ? "Complete" : state.paused ? "Paused" : "Running";
+    $("#run-label").classList.toggle("paused", state.closedAtCurfew || (state.paused && !complete));
     $("#pause-icon").setAttribute("href", state.paused ? "#play" : "#pause");
     $("#pause-toggle").setAttribute("aria-label", state.paused ? "Resume simulation" : "Pause simulation");
     $("#pause-toggle").disabled = complete;
@@ -792,23 +809,25 @@
     const flightCount = state.timetable.length;
     $("#goal-bar").style.width = dispatched / flightCount * 100 + "%";
     $("#goal-count").textContent = dispatched + " / " + flightCount;
-    $("#objective-title").textContent = complete ? "Operating day complete" : "Dispatch " + flightCount + " flights";
+    $("#objective-title").textContent = state.closedAtCurfew ? "Curfew reached"
+      : complete ? "Operating day complete" : "Dispatch " + flightCount + " flights";
     $("#view-report").hidden = !complete;
 
     const gate = selectedGate();
     mapPins.forEach(({element, count, late}, index) => {
       const flight = flightAtGate(index);
       const waiting = occupancy.gates[index].length;
-      const schedule = flight?.stage === "inbound" ? null : takeoffSchedule(flight);
+      const schedule = complete || flight?.stage === "inbound" ? null : takeoffSchedule(flight);
       const delay = paintMapDelay(element, late, schedule);
       count.textContent = waiting;
+      element.disabled = complete;
       element.dataset.state = flight?.stage || "free";
       element.setAttribute("aria-pressed", String(gate === index));
       element.setAttribute("aria-label", "Gate " + gates[index].name + ", " +
         (flight ? flightStatus(flight) : "available") + ", " + waiting + " waiting" + delay);
     });
     const waiting = holdingFlights();
-    const holding = flightAtHoldingPoint(waiting);
+    const holding = complete ? null : flightAtHoldingPoint(waiting);
     if (holding) {
       const route = holding.id + " to " + holding.destination;
       const schedule = takeoffSchedule(holding);
@@ -868,6 +887,10 @@
 
   function outboundMovement(flight) {
     return {flight, start: state.now, ...outboundRoutes[flight.gate]};
+  }
+
+  function fitsCurfew({start, liftoff}) {
+    return start + liftoff <= curfewAt;
   }
 
   function positionAlongPath(movement, elapsed = movementElapsed(movement)) {
@@ -961,6 +984,7 @@
   }
 
   function command() {
+    if (shiftComplete()) return;
     const flight = state.flights.find(item => item.id === state.selected);
     if (!flight || $("#flight-action").disabled) return;
     if (flight.stage === "parked") {
@@ -972,6 +996,10 @@
         announce(flight.id + " released the next takeoff slot.");
       } else {
         const movement = outboundMovement(flight);
+        if (!fitsCurfew(movement)) {
+          paint();
+          return;
+        }
         if (canStartTaxi(movement)) {
           startTaxi(movement);
         } else {
@@ -994,6 +1022,7 @@
   }
 
   function closeSelectedBoarding() {
+    if (shiftComplete()) return;
     const flight = state.flights.find(item => item.id === state.selected);
     if (flight?.stage !== "boarding" || $("#close-boarding").hidden) return;
     const missed = passengerFlow.closeBoarding(flight, flow);
@@ -1016,20 +1045,41 @@
     state.cash += net;
     state.results.push({id: flight.id, destination: flight.destination, due, takeoff: liftoffMinute,
       missed: flight.passengers - boarded, revenue, fine});
+    state.movements.delete(flight);
     state.flights = state.flights.filter(item => item !== flight);
     if (state.selected === flight.id) state.selected = state.flights[0]?.id || "gate-" + flight.gate;
-    if (shiftComplete()) {
-      state.paused = true;
-      announce("Operating day complete. Your shift report is ready.");
-      paint();
-      showShiftReport();
-    } else {
-      const fineMessage = fine ? " (" + currency.format(fine) + " late fine)" : "";
-      announce(flight.id + " airborne with " + boarded + " passengers. " + currency.format(net) + " net" + fineMessage + ".");
+    const fineMessage = fine ? " (" + currency.format(fine) + " late fine)" : "";
+    announce(flight.id + " airborne with " + boarded + " passengers. " + currency.format(net) + " net" + fineMessage + ".");
+  }
+
+  function finishShift() {
+    state.paused = true;
+    occupancyDirty = true;
+    announce(state.closedAtCurfew ? "Curfew reached. Your shift report is ready."
+      : "Operating day complete. Your shift report is ready.");
+    paint();
+    showShiftReport();
+  }
+
+  function closeAtCurfew() {
+    for (const movement of state.movements.values()) {
+      if (movement.flight.stage === "outbound" && fitsCurfew(movement)) finishDeparture(movement);
     }
+    state.closedAtCurfew = !shiftComplete();
+    for (const flight of state.flights) {
+      const alreadyMissed = flight.manifest.filter(person => person.zone === "missed").length;
+      state.missedPassengers += flight.passengers - alreadyMissed;
+      state.results.push({id: flight.id, destination: flight.destination, due: clockMinutes(flight.takeoffAt),
+        takeoff: null, missed: flight.passengers, revenue: 0, fine: 0});
+    }
+    // Freeze grounded aircraft and passengers in place for the end-of-day view.
+    state.selected = null;
+    state.nextDeparture = null;
+    finishShift();
   }
 
   function advanceShift(simDelta) {
+    simDelta = Math.min(simDelta, curfewAt - state.now);
     state.now += simDelta;
     for (const type of Object.keys(staffingRates)) {
       state.staffingCosts[type] += activeStaffingRate(type) * simDelta / secondsPerMinute;
@@ -1050,20 +1100,28 @@
     baggage.advance(state.luggage, state.now, simDelta);
     for (const [flight, movement] of state.movements) {
       if (movementElapsed(movement) < movement.duration) continue;
-      state.movements.delete(flight);
       occupancyDirty = true;
       if (flight.stage === "inbound") {
+        state.movements.delete(flight);
         flight.stage = "deplaning";
         passengerFlow.startDeplaning(flight, state.now, baggage.arrived(state.luggage, flight));
         announce(flight.id + " deplaning at " + gates[flight.gate].name + ".");
       } else {
         finishDeparture(movement);
-        if (shiftComplete()) return;
+        if (shiftComplete()) {
+          finishShift();
+          return;
+        }
       }
+    }
+    if (state.now >= curfewAt) {
+      closeAtCurfew();
+      return;
     }
     if (state.nextDeparture) {
       const movement = outboundMovement(state.nextDeparture);
-      if (canStartTaxi(movement)) startTaxi(movement);
+      if (!fitsCurfew(movement)) state.nextDeparture = null;
+      else if (canStartTaxi(movement)) startTaxi(movement);
     }
     releaseTaxiIn();
     for (const flight of state.flights) {
@@ -1091,12 +1149,18 @@
 
   function showShiftReport() {
     const results = state.results.slice().sort((a, b) => a.due - b.due);
-    const onTime = results.filter(({due, takeoff}) => takeoff <= due).length;
+    const departed = results.filter(({takeoff}) => takeoff !== null);
+    const cancelled = results.length - departed.length;
+    const onTime = departed.filter(({due, takeoff}) => takeoff <= due).length;
     const revenue = results.reduce((total, flight) => total + flight.revenue, 0);
     const fines = results.reduce((total, flight) => total + flight.fine, 0);
-    const handling = results.length * handlingCost;
+    const handling = departed.length * handlingCost;
     const checkIn = staffingCost("checkIn");
     const security = staffingCost("security");
+    const closure = $("#report-closure");
+    closure.hidden = cancelled === 0;
+    closure.textContent = formatTime(curfewMinutes) + " curfew · " + cancelled +
+      (cancelled === 1 ? " flight cancelled" : " flights cancelled");
     $("#report-on-time").textContent = onTime + " / " + results.length;
     $("#report-missed").textContent = results.reduce((total, flight) => total + flight.missed, 0);
     $("#report-profit").textContent = currency.format(revenue - handling - checkIn - security - fines);
@@ -1107,8 +1171,9 @@
     $("#report-flights").innerHTML = results.map(({id, destination, due, takeoff, missed, fine}) => {
       const fineLabel = fine ? " · " + currency.format(fine) + " fine" : "";
       const lateLabel = takeoff > due ? '<span class="report-late">+' + (takeoff - due) + ' min' + fineLabel + '</span>' : "";
+      const outcome = takeoff === null ? '<span class="report-cancelled">Cancelled</span>' : formatTime(takeoff) + lateLabel;
       return '<tr><th scope="row">' + id + '<span>' + destination + '</span></th><td>' + formatTime(due) +
-        '</td><td>' + formatTime(takeoff) + lateLabel + '</td><td>' + missed + '</td></tr>';
+        '</td><td>' + outcome + '</td><td>' + missed + '</td></tr>';
     }).join("");
     startNextDay.textContent = "Start " + formatDay(operatingDay() + 1);
     report.showModal();
@@ -1197,14 +1262,14 @@
     const luggage = baggage.actors(state.luggage, scene.luggage, scene.baggageLoader, scene.baggageTrain, state.now);
     renderer.render([...scene.fixed, ...moving, ...people, ...luggage]);
     showAircraftSelection(selectedAircraft);
-    drawAircraftDelays(aircraft);
+    drawAircraftDelays(shiftComplete() ? [] : aircraft);
     for (const {x, y, z, element, decorative} of [...mapPins, ...mapSigns, holdingPinPosition]) {
       const [left, top] = renderer.project(x, y, z);
       element.style.left = left + "px";
       element.style.top = top + "px";
       element.hidden = left < 18 || top < 19 || left > renderer.view.width - 18 || top > renderer.view.height - 18 ||
         (decorative && renderer.view.width < 520) ||
-        (element === holdingPin && (!holding || left < 90 || left > renderer.view.width - 90));
+        (element === holdingPin && (shiftComplete() || !holding || left < 90 || left > renderer.view.width - 90));
     }
   }
 
@@ -1411,6 +1476,7 @@
   }
   // Updating the scene once on paused commands keeps gate highlights and the checkpoint in sync.
   document.addEventListener("click", () => { requestDraw = true; });
+  $("#objective-curfew").textContent = "Operating day · Curfew " + formatTime(curfewMinutes);
   paint();
   requestAnimationFrame(frame);
 })();

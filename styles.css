@@ -121,6 +121,7 @@ button, h1, h2, h3, p { margin: 0; }
 .day-schedule td:last-child > time { font-weight: 700; }
 .day-schedule [data-stage="departed"] .schedule-status { color: var(--mint); }
 .day-schedule [data-late="true"] .schedule-status { color: var(--amber); }
+.day-schedule [data-stage="cancelled"] .schedule-status, .report-flights .report-cancelled { color: #ffb1a9; }
 .flight-list { display: grid; gap: 7px; }
 .runway-strip { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 10px; margin-bottom: 10px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: #102028; }
 .runway-strip div { min-width: 0; display: grid; gap: 4px; }
@@ -240,6 +241,13 @@ button, h1, h2, h3, p { margin: 0; }
 .clock time { font: 750 2.4rem/1 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: .015em; color: #e2f8eb; }
 .run-label { display: flex; gap: 5px; align-items: center; color: var(--mint); font-size: .75rem; line-height: 1; }
 .run-label.paused { color: var(--amber); }
+.clock[data-curfew] { grid-template-columns: auto auto; column-gap: 10px; }
+.clock[data-curfew] time { grid-column: 1 / -1; }
+#curfew-countdown { font: 650 .72rem/1 var(--mono); }
+.clock[data-curfew="soon"] { border-color: #a57b4b; background: #352b24; }
+.clock[data-curfew="soon"] #curfew-countdown { color: var(--amber); }
+.clock[data-curfew="urgent"] { border-color: #bc7772; background: #41292c; }
+.clock[data-curfew="urgent"] #curfew-countdown { color: #ffb1a9; }
 .time-controls { grid-column: 2; justify-self: center; display: flex; gap: 2px; padding: 2px; background: #1a2a30; border: 1px solid #2f4146; border-radius: 7px; }
 .time-controls button { font: 700 .8rem var(--mono); min-height: 28px; }
 .time-controls button[aria-pressed="true"] { background: #34564b; color: #d0f8df; }
@@ -257,6 +265,7 @@ button, h1, h2, h3, p { margin: 0; }
 .report-head h2 { margin: 3px 0 0; font-size: 1.55rem; letter-spacing: -.035em; }
 #close-report { border: 1px solid var(--line); background: var(--card); border-radius: 7px; min-width: 44px; min-height: 44px; font-size: 1.45rem; }
 .report-body { padding: 16px 18px; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+#report-closure { margin: 0 0 12px; color: var(--amber); font-size: .87rem; font-weight: 650; }
 .report-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin: 0 0 15px; }
 .report-metrics > div { display: grid; align-content: space-between; gap: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 9px; }
 .report-metrics dt { color: var(--muted); font-size: .79rem; }
@@ -308,6 +317,7 @@ button, h1, h2, h3, p { margin: 0; }
   .wordmark { font-size: 19px; white-space: normal; }
   .brand-caption, .airport-id { display: none; }
   .clock { grid-column: 2; padding-inline: 9px; }
+  .clock[data-curfew] { grid-template-columns: 1fr; }
   .clock time { font-size: 2rem; }
   .header-status { grid-column: 1 / -1; }
   .metrics { width: 100%; justify-content: space-between; gap: 12px; }
