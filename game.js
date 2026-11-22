@@ -605,11 +605,10 @@
       $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
         stat("Passengers in terminal", (passengers - counts.outside) + " / " + passengers) + '</div>');
     }
-    const {lateOutside, lateInTerminal, nextLateArrival} = counts;
+    const {lateOutside, lateInTerminal} = counts;
     if (notifiedLatePassengers(flight)) {
       lateNotice.hidden = false;
-      lateNotice.innerHTML = (lateOutside ? stat("Late passengers yet to arrive", lateOutside) +
-        stat("Next terminal arrival", state.now < nextLateArrival ? scheduleTime(nextLateArrival) : "At entrance") : "") +
+      lateNotice.innerHTML = (lateOutside ? stat("Late passengers yet to arrive", lateOutside) : "") +
         (lateInTerminal ? stat("Late passengers in terminal", lateInTerminal) : "");
     }
     const waiting = passengers - counts.boarded - counts.boarding - counts.missed;

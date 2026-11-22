@@ -738,14 +738,13 @@ const passengerFlow = (() => {
     for (const flight of flights) {
       const counts = {outside: 0, checkIn: 0, landside: 0, security: 0, concourse: 0, cafe: 0,
         sharedSeats: 0, otherGate: 0, gate: 0, gateQueue: 0, boarding: 0, boarded: 0, missed: 0,
-        regularUnboarded: 0, lateOutside: 0, lateInTerminal: 0, nextLateArrival: null};
+        regularUnboarded: 0, lateOutside: 0, lateInTerminal: 0};
       byFlight.set(flight.id, counts);
       for (const person of flight.manifest) {
         counts[person.zone]++;
         if (person.lateArrival) {
           if (person.zone === "outside") {
             counts.lateOutside++;
-            counts.nextLateArrival ??= person.arrivalAt;
           } else if (!["boarding", "boarded", "missed"].includes(person.zone)) {
             counts.lateInTerminal++;
           }
