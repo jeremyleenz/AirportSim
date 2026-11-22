@@ -80,6 +80,7 @@
     const firstArrival = gate === null ? Math.max(0, takeoffAt - earliestPassengerArrival * secondsPerMinute) : 0;
     const lastArrival = Math.max(0, takeoffAt - latestPassengerArrival * secondsPerMinute);
     const manifest = passengerFlow.manifest(passengers, firstArrival, lastArrival, lateTimes);
+    for (const person of manifest) person.flightId = plan.id;
     const incomingPassengers = arrivalAt === null ? 0 : Math.round(passengers * (.55 + index * 3 % 5 * .04));
     return {...plan, stage, gate, manifest, incomingPassengers};
   }
@@ -89,7 +90,7 @@
     return {day, cash: startingCash, now: 0, speed: 1, paused: false, missedPassengers: 0, delayMinutes: 0,
       staffingCosts: {checkIn: 0, security: 0},
       timetable, flights: timetable.map(makeFlight), results: [], selected: timetable[0].id, view: "flights",
-      movements: new Map(), taxiQueue: [], nextDeparture: null};
+      movements: new Map(), taxiQueue: [], nextDeparture: null, luggage: baggage.create()};
   }
 
   let state = createShift();
@@ -1040,8 +1041,12 @@
       flight => {
         flight.stage = "parked";
         announce(flight.id + " finished deplaning. Boarding can begin.");
+      }, person => {
+        const flight = state.flights.find(item => item.id === person.flightId);
+        baggage.checkedIn(state.luggage, flight, person, state.now);
       });
     occupancyDirty ||= changed;
+    baggage.advance(state.luggage, state.now, simDelta);
     for (const [flight, movement] of state.movements) {
       if (movementElapsed(movement) < movement.duration) continue;
       state.movements.delete(flight);
@@ -1188,7 +1193,8 @@
     }
     const gate = gates[selectedGate()];
     if (gate) moving.push({mesh: scene.highlight, x: gate.x, castShadow: false});
-    renderer.render([...scene.fixed, ...moving, ...people]);
+    const luggage = baggage.actors(state.luggage, scene.luggage, scene.baggageLoader, scene.baggageTrain, state.now);
+    renderer.render([...scene.fixed, ...moving, ...people, ...luggage]);
     showAircraftSelection(selectedAircraft);
     drawAircraftDelays(aircraft);
     for (const {x, y, z, element, decorative} of [...mapPins, ...mapSigns, holdingPinPosition]) {

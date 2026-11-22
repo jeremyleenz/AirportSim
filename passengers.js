@@ -573,7 +573,7 @@ const passengerFlow = (() => {
     return changed;
   }
 
-  function advance(flights, flow, now, dt, onReady, onDeplaned) {
+  function advance(flights, flow, now, dt, onReady, onDeplaned, onCheckedIn) {
     let changed = advanceArrivals(flights, flow, now, dt, onDeplaned);
     for (let i = flow.exiting.length - 1; i >= 0; i--) {
       const {person} = flow.exiting[i];
@@ -658,6 +658,7 @@ const passengerFlow = (() => {
     }, (person, bank) => {
       const queue = findLine(flow.security);
       if (!queue) return false;
+      onCheckedIn?.(person);
       const sideX = bank.x - 2.85;
       person.zone = "landside";
       queue.line.people.push(person);

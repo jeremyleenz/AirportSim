@@ -18,6 +18,9 @@ const airport = (() => {
   const airsideExit = {x: -14.48, z: terminalFrontZ + .7, thresholdZ: terminalFrontZ, width: 1.4};
   const checkInQueue = {centers: [18, 25.2, 32.5], front: 22.14, width: 4.95, deskZ: 21.25};
   const checkInDesks = Array.from({length: 6}, (_, index) => 15.8 + index * 3.43);
+  const sortingBeltZ = 20.14;
+  const sortingBeltY = floor + .39;
+  const baggageTransfer = [39.2, .22, 6.15];
   const securityQueue = {centers: [-7.2, -.7, 5.8], front: 23.25, width: 4.3,
     checkpointZ: 20.7, portalOffsetX: 1.05, portalWidth: .88, exitZ: 19.10};
   const queueRows = 9;
@@ -46,6 +49,18 @@ const airport = (() => {
   function bridgePath(x) {
     return [[x - 4.7, floor, 8.18], [x - 4.7, floor, 7.5],
       [x - 3.35, 1.45, 3.3], [x - 1.05, 1.45, 1.2], [x - .60, 1.45, 1.2]];
+  }
+
+  function luggageFromDesk(x) {
+    return [[x - .22, floor + .754, checkInQueue.deskZ], [x - .22, sortingBeltY, sortingBeltZ],
+      [baggageTransfer[0], sortingBeltY, sortingBeltZ], [baggageTransfer[0], sortingBeltY, 15.6],
+      [baggageTransfer[0], baggageTransfer[1], 8.1], baggageTransfer];
+  }
+
+  function luggageToAircraft(gate) {
+    const {x} = gates[gate];
+    const [, height, apronZ] = baggageTransfer;
+    return [baggageTransfer, [x + 4.45, height, apronZ], [x + 3.05, height, .45], [x + 1.08, 1.21, -.58]];
   }
 
   function boardingPath(x) {
@@ -501,6 +516,80 @@ const airport = (() => {
     return mesh;
   }
 
+  function baggageBelt() {
+    const mesh = new Mesh();
+    const drawBelt = (from, to) => {
+      const [x, y, z] = from;
+      const [nextX, nextY, nextZ] = to;
+      const length = Math.hypot(nextX - x, nextZ - z);
+      const dx = .29 * (nextZ - z) / length;
+      const dz = .29 * (x - nextX) / length;
+      const a = [x + dx, y - .02, z + dz], b = [x - dx, y - .02, z - dz];
+      const c = [nextX - dx, nextY - .02, nextZ - dz], d = [nextX + dx, nextY - .02, nextZ + dz];
+      const below = ([px, py, pz]) => [px, py - .095, pz];
+      mesh.face([a, b, c, d], "#667b7a", [0, 1, 0]);
+      mesh.face([a, d, below(d), below(a)], "#acb8ae");
+      mesh.face([b, below(b), below(c), c], "#acb8ae");
+    };
+    const main = luggageFromDesk(checkInDesks[0]);
+    for (let i = 2; i < main.length; i++) drawBelt(main[i - 1], main[i]);
+    for (const x of checkInDesks) {
+      const [deskTop, merge] = luggageFromDesk(x);
+      drawBelt(deskTop, merge);
+      mesh.box(merge[0], floor, merge[2], .23, .36, .4, "#9cab9e");
+    }
+    for (const z of [19.2, 15.6, 12, 8.1]) {
+      const y = z >= 15.6 ? sortingBeltY : sortingBeltY + (baggageTransfer[1] - sortingBeltY) * (15.6 - z) / 7.5;
+      mesh.box(baggageTransfer[0], .04, z, .36, y - .13, .37, "#9cab9e");
+    }
+    return mesh;
+  }
+
+  function suitcase(color) {
+    return new Mesh().box(0, 0, 0, .47, .31, .52, color)
+      .box(0, .31, 0, .46, .025, .105, "#a2aaa3")
+      .box(0, .335, 0, .17, .053, .075, ink);
+  }
+
+  function baggageTrain() {
+    const yellow = "#e7ab53";
+    const tug = new Mesh().box(0, .18, 0, 1.2, .35, 1.85, yellow)
+      .box(0, .53, -.26, .82, .23, .66, "#4b6c73")
+      .box(0, .76, -.26, .86, .055, .7, yellow)
+      .box(0, .2, -1.02, .25, .1, .31, ink);
+    const trailer = new Mesh().box(0, .17, 0, 1.18, .26, 1.70, "#a78550")
+      .box(0, .29, .96, .16, .11, .46, ink)
+      .box(0, .29, -.96, .18, .11, .3, ink);
+    for (const side of [-1, 1]) {
+      for (const z of [-.57, .57]) {
+        tug.box(side * .57, .02, z, .21, .34, .34, ink);
+        trailer.box(side * .5, .02, z, .21, .32, .30, ink);
+      }
+      trailer.box(side * .55, .42, 0, .07, .17, 1.7, yellow);
+    }
+    return {tug, trailer};
+  }
+
+  function baggageLoader() {
+    const [foot, hatch] = luggageToAircraft(0).slice(-2);
+    const length = Math.hypot(hatch[0] - foot[0], hatch[2] - foot[2]);
+    const yellow = "#e7ab53";
+    const truck = new Mesh().box(0, .10, length / 2, 1.12, .16, length + .45, yellow)
+      .box(.55, .26, length * .68, .46, .31, .59, "#4c6d75")
+      .box(.55, .57, length * .68, .49, .07, .63, yellow)
+      .box(0, .23, length * .72, .54, .49, .19, "#81918b");
+    const lower = foot[1] - .022, upper = hatch[1] - .022;
+    truck.face([[-.36, lower, 0], [-.36, upper, length], [.36, upper, length], [.36, lower, 0]], "#344e54");
+    for (const side of [-1, 1]) {
+      for (const z of [.23, length - .22]) truck.box(side * .54, .025, z, .19, .29, .32, ink);
+      const x = side * .36;
+      truck.face([[x, lower - .085, 0], [x, upper - .085, length], [x, upper + .095, length],
+        [x, lower + .095, 0]], "#d3dcd2", [side, 0, 0]);
+    }
+    const roller = new Mesh().box(0, 0, 0, .69, .027, .068, "#7f9696");
+    return {truck, roller};
+  }
+
   function traveler(tint, skin, stride = 0) {
     const mesh = new Mesh();
     mesh.ring(0, -.014, 0, .22, .22, .019, "#a8b2a9", 6);
@@ -549,21 +638,20 @@ const airport = (() => {
     const fixed = [
       {mesh: ground(), castShadow: false},
       {mesh: terminal()},
-      {mesh: details()}
+      {mesh: details()},
+      {mesh: baggageBelt()}
     ];
-    const vans = [
-      vehicle("#e2e9dc", true), vehicle("#e4b260", true), vehicle("#7da5ad"),
+    const cars = [
+      vehicle("#7da5ad"),
       vehicle("#e0e4d6"), vehicle("#bb7e6c"), vehicle("#719692")
     ];
-    const fleet = gates.flatMap(({x}, i) => [
-      {mesh: vans[i % 2], x: x + 9, z: 2.0, angle: 1.2},
-      {mesh: vans[1], x: x - 8.8, z: -.4, angle: -.24}
-    ]);
+    const serviceVan = vehicle("#e4b260", true);
+    const fleet = gates.map(({x}) => ({mesh: serviceVan, x: x - 8.8, z: -.4, angle: -.24}));
     for (let i = 0; i < 12; i++) {
-      if (i % 4 !== 2) fleet.push({mesh: vans[2 + i % 4], x: -42.6 + i * 2.6, z: 47.8, angle: Math.PI});
+      if (i % 4 !== 2) fleet.push({mesh: cars[i % cars.length], x: -42.6 + i * 2.6, z: 47.8, angle: Math.PI});
     }
     const traffic = Array.from({length: 5}, (_, i) => ({
-      mesh: vans[2 + i % 4], z: i < 3 ? 34.55 : 37.65, angle: (i < 3 ? 1 : -1) * Math.PI / 2,
+      mesh: cars[i % cars.length], z: i < 3 ? 34.55 : 37.65, angle: (i < 3 ? 1 : -1) * Math.PI / 2,
       offset: i * 22
     }));
     const outfits = ["#b66e5e", "#4b807e", "#c9a354", "#ece1ce", "#556e89", "#81936c", "#906d81"]
@@ -575,8 +663,10 @@ const airport = (() => {
     const highlight = new Mesh().path([[-10.7, 5.45], [-10.7, -11.3], [-8.8, -15],
       [8.8, -15], [10.7, -11.3], [10.7, 5.45]], .23, .05, "#b6e0b3");
     const securityHighlight = new Mesh().ring(0, .036, 0, .31, .31, .018, "#89c995", 10);
-    return {fixed: [...fixed, ...fleet], traffic, outfits, highlight, securityHighlight};
+    const luggage = ["#c96445", "#376582", "#cf9d45", "#586a52"].map(suitcase);
+    return {fixed: [...fixed, ...fleet], traffic, outfits, highlight, securityHighlight, luggage,
+      baggageLoader: baggageLoader(), baggageTrain: baggageTrain()};
   }
 
-  return {gates, aircraft, scene, passengerActors, terminalPaths, floor, runwayZ, taxiwayZ};
+  return {gates, aircraft, scene, passengerActors, terminalPaths, floor, runwayZ, taxiwayZ, luggageFromDesk, luggageToAircraft};
 })();

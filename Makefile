@@ -1,4 +1,4 @@
-STATIC_FILES = index.html styles.css renderer.js airport.js passengers.js game.js
+STATIC_FILES = index.html styles.css renderer.js airport.js passengers.js baggage.js game.js
 
 .PHONY: build package
 build:
