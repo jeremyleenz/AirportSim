@@ -362,24 +362,19 @@ const passengerFlow = (() => {
 
   function callFromLounge(flight, queue, now) {
     if (!hasRoom(queue) || now < queue.nextCall) return;
+    const waiting = flight.manifest.filter(person => person.zone === "gate" && !person.route &&
+      !queue.approaching.some(entry => entry.person === person) && wantsToQueue(person, flight, now));
+    if (!waiting.length) return;
+
+    const person = waiting[Math.floor(Math.random() * waiting.length)];
     const {position, offset} = boardingEntry(queue);
-    let first = null;
-    for (const person of flight.manifest) {
-      if (person.zone !== "gate" || person.route || queue.approaching.some(entry => entry.person === person) ||
-        !wantsToQueue(person, flight, now)) continue;
-      const row = seatAisle(person.spot);
-      const aisleX = person.spot.aisleX;
-      const points = [point(person.position[0], row), point(aisleX, row)];
-      if (aisleX !== position[0]) points.push(point(aisleX, 15.36), point(position[0], 15.36));
-      points.push(position);
-      const duration = travelTime(person.position, points);
-      const arrival = duration + (person.index * 7 % 9) * .055;
-      if (!first || arrival < first.arrival) first = {person, points, offset, duration, arrival};
-    }
-    if (first) {
-      approachLine(first.person, queue, first, now + .13);
-      queue.nextCall = now + .25;
-    }
+    const row = seatAisle(person.spot);
+    const aisleX = person.spot.aisleX;
+    const points = [point(person.position[0], row), point(aisleX, row)];
+    if (aisleX !== position[0]) points.push(point(aisleX, 15.36), point(position[0], 15.36));
+    points.push(position);
+    approachLine(person, queue, {points, offset, duration: travelTime(person.position, points)}, now + .13);
+    queue.nextCall = now + .25;
   }
 
   function advanceGateQueue(flight, queue, now, dt) {
