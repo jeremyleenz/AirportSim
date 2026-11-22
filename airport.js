@@ -49,9 +49,20 @@ const airport = (() => {
       feed: [[right + 1.85, height + .48, z - radius], [right + .55, height, z - radius], loop[0]]};
   }
 
+  const claimBenchRows = [{z: 15.32, direction: 1}, {z: 21.67, direction: -1}];
+  const claimBenches = [{x: -49.35, tint: "#698c7e"}, {x: -45.55, tint: "#557b88"}];
+  const claimSeats = claimBenchRows.flatMap(({z, direction}) => claimBenches.flatMap(({x}) =>
+    benchSeats(x, z, direction === 1 ? 0 : Math.PI, x).map(spot => ({...spot, aisleZ: z + direction * .65}))));
+  const claimStanding = Array.from({length: 54}, (_, index) => {
+    const row = Math.floor(index / 9);
+    const x = -50.4 + index % 9 * .77 + (row % 2) * .23;
+    const z = (row < 2 ? 16.22 + row * .55 : 18.6 + (row - 2) * .54) + (index * 7 % 5 - 2) * .06;
+    return {position: [x, floor, z], aisleZ: claimRoom.doorZ, angle: index * 2.4, seated: false};
+  });
   const baggageClaim = {
     entranceZ: claimRoom.doorZ,
-    carousels: [25.05, 18.7, 12.35].map(claimCarousel),
+    carousels: [25.05, 12.35].map(claimCarousel),
+    claimSeats, claimStanding,
     label: [claimRoom.left + 3.8, .85, claimRoom.front + 3.1]
   };
   const queueRows = 9;
@@ -619,10 +630,9 @@ const airport = (() => {
     mesh.face([[exitLeft, floor, front], [exitLeft, .04, airsideExit.z],
       [exitRight, .04, airsideExit.z], [exitRight, floor, front]], concrete, [0, 1, 0]);
 
-    for (const seatZ of [15.32, 21.67]) {
+    for (const {z: seatZ, direction} of claimBenchRows) {
       mesh.rect(-47.55, floor + .031, seatZ, 8.28, 1.42, "#cbbda4");
-      bench(mesh, -49.35, seatZ, "#698c7e", -1);
-      bench(mesh, -45.55, seatZ, "#557b88", -1);
+      for (const {x, tint} of claimBenches) bench(mesh, x, seatZ, tint, direction);
       mesh.ring(-47.45, floor, seatZ, .16, .12, .35, frame, 8);
       mesh.ring(-47.45, floor + .35, seatZ, .41, .41, .075, "#e4cba1", 12);
       planter(mesh, -51.6, floor, seatZ, 1.35);
@@ -654,12 +664,10 @@ const airport = (() => {
     mesh.rect((foot[0] + right) / 2, height - .012, feedZ, foot[0] - right, .58, "#526769");
 
     const digits = [[[-.14, -.12], [0, -.28], [0, .28]],
-      [[-.18, -.28], [.18, -.28], [.18, -.02], [-.18, -.02], [-.18, .28], [.18, .28]],
-      [[-.18, -.28], [.18, -.28], [.18, .28], [-.18, .28]]];
+      [[-.18, -.28], [.18, -.28], [.18, -.02], [-.18, -.02], [-.18, .28], [.18, .28]]];
     const signZ = z + 1.55;
     mesh.rect(centerX, floor + .029, signZ, .83, .9, teal);
     mesh.path(digits[index].map(([x, z]) => [centerX + x, signZ + z]), .062, floor + .03, white);
-    if (index === 2) mesh.line([centerX - .18, signZ], [centerX + .18, signZ], .062, floor + .03, white);
     return mesh;
   }
 

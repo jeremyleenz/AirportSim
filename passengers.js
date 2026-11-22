@@ -58,6 +58,8 @@ const passengerFlow = (() => {
       sharedSeats: sharedSeats.map(spot => ({...spot})),
       cafe: cafeSeats.map(spot => ({...spot})),
       claimSpots: baggageClaim.carousels.map(({waitingSpots}) => waitingSpots.map(spot => ({...spot}))),
+      claimSeats: baggageClaim.claimSeats.map(spot => ({...spot})),
+      claimStanding: baggageClaim.claimStanding.map(spot => ({...spot})),
       exiting: [], arrivals: [],
       nextEntry: 0, entrancesUsed: 0
     };
@@ -545,26 +547,53 @@ const passengerFlow = (() => {
       door: bridge[0], bridgeWaypoints: bridge.length - 1, path, arrivalBags};
   }
 
-  function advancePickup(person) {
+  function claimAisle(spot) {
+    return spot ? [point(spot.position[0], spot.aisleZ), point(airsideExit.x, spot.aisleZ)] : [];
+  }
+
+  function exitClaim(person) {
+    const spot = leaveSpot(person);
+    person.arrivalBag = null;
+    walk(person, [...claimAisle(spot), ...arrivalExitPath]);
+  }
+
+  function advancePickup(person, flow) {
     const bag = person.arrivalBag;
-    const {pickup, aisleZ, angle} = person.spot;
+    const waiting = person.spot;
+    if (bag.cancelled) {
+      exitClaim(person);
+      return;
+    }
+    if (!waiting?.pickup) {
+      const {carousel} = bag.flight;
+      if (carousel !== null) {
+        const spot = reserve(person, flow.claimSpots[carousel], 37);
+        if (!spot) return;
+        if (waiting) waiting.owner = null;
+        person.seated = false;
+        walk(person, [...claimAisle(waiting), point(airsideExit.x, spot.aisleZ),
+          point(spot.position[0], spot.aisleZ), spot.position]);
+      } else if (!waiting) {
+        const spot = (person.index % 2 === 0 && reserve(person, flow.claimSeats, 7)) ||
+          reserve(person, flow.claimStanding, 37) || reserve(person, flow.claimSeats, 7);
+        if (!spot) return;
+        walk(person, [point(airsideExit.x, spot.aisleZ), point(spot.position[0], spot.aisleZ), spot.position]);
+      }
+      return;
+    }
+    const {pickup, angle} = waiting;
     const pose = bag.claimPose;
     person.angle = angle;
-    if (!bag.cancelled) {
-      if (!pose) return;
-      const distance = Math.hypot(pose.x - pickup[0], pose.z - pickup[2]);
-      if (person.position !== pickup) {
-        if (distance < 2) walk(person, [pickup]);
-        return;
-      }
-      if (distance >= .86) return;
-      person.claimedBag = bag.color;
-      bag.claimed = true;
+    if (!pose) return;
+    const distance = Math.hypot(pose.x - pickup[0], pose.z - pickup[2]);
+    if (person.position !== pickup) {
+      if (distance < 2) walk(person, [pickup]);
+      return;
     }
-    person.arrivalBag = null;
-    const [x] = person.position;
-    leaveSpot(person);
-    walk(person, [point(x, aisleZ), point(airsideExit.x, aisleZ), ...arrivalExitPath]);
+    if (distance >= .86) return;
+    person.claimedBag = bag.color;
+    bag.claimed = true;
+    exitClaim(person);
   }
 
   function advanceArrivals(flights, flow, now, dt, onDeplaned) {
@@ -580,7 +609,7 @@ const passengerFlow = (() => {
         if (arrival.remaining === 0 && arrival.onBridge === 0) onDeplaned(flight);
         changed = true;
       }
-      if (!person.route && person.arrivalBag) advancePickup(person);
+      if (!person.route && person.arrivalBag) advancePickup(person, flow);
       if (!person.route && !person.arrivalBag) {
         flow.arrivals.splice(i, 1);
         changed = true;
@@ -594,15 +623,8 @@ const passengerFlow = (() => {
       const person = makePerson(flight.passengers + index, "deplaning");
       person.position = arrival.door;
       const bag = arrival.arrivalBags?.get(index);
-      const spot = bag && !bag.cancelled && reserve(person, flow.claimSpots[bag.carousel], 37);
-      if (spot) {
-        const [waitX] = spot.position;
-        const {aisleZ} = spot;
-        person.arrivalBag = bag;
-        walk(person, [...arrival.path, point(airsideExit.x, aisleZ), point(waitX, aisleZ), spot.position]);
-      } else {
-        walk(person, [...arrival.path, ...arrivalExitPath]);
-      }
+      person.arrivalBag = bag && !bag.cancelled ? bag : null;
+      walk(person, person.arrivalBag ? arrival.path : [...arrival.path, ...arrivalExitPath]);
       flow.arrivals.push({person, flight});
       arrival.remaining--;
       arrival.onBridge++;

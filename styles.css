@@ -79,9 +79,10 @@ button, h1, h2, h3, p { margin: 0; }
 .map-count { border-left: 1px solid currentColor; padding-left: .43em; letter-spacing: 0; opacity: .86; }
 .map-note { position: absolute; translate: -50% -50%; font: 700 .65rem var(--mono); letter-spacing: .075em; color: #2c4441; background: #edf3e8ed; border: 1px solid #8ea89d; padding: 3px 6px; border-radius: 4px; white-space: nowrap; }
 .map-note .map-count { display: inline-block; margin-left: .48em; }
-.map-staffing { display: flex; align-items: center; min-height: 28px; pointer-events: auto; color: #1b3f34; background: #ddf4e5; border-color: #689783; }
-.map-staffing::after { content: ""; width: 5px; height: 5px; margin: 0 2px 0 6px; border-top: 1px solid; border-right: 1px solid; rotate: 45deg; }
-.map-staffing:hover { background: #b6e9ca; }
+.map-shortcut { display: flex; align-items: center; min-height: 28px; pointer-events: auto; color: #1b3f34; background: #ddf4e5; border-color: #689783; }
+.map-shortcut::after { content: ""; width: 5px; height: 5px; margin: 0 2px 0 6px; border-top: 1px solid; border-right: 1px solid; rotate: 45deg; }
+.map-shortcut:hover { background: #b6e9ca; }
+.map-shortcut[data-action-needed] { color: #583818; background: #ffda9f; border-color: #ab783e; }
 .map-controls { display: flex; gap: 10px; align-items: center; position: absolute; left: 24px; bottom: 22px; }
 .zoom-group { display: flex; background: #14252cef; border: 1px solid #9adbc246; border-radius: 8px; padding: 3px; box-shadow: 0 5px 12px #14251b20; }
 .zoom-group button, .time-controls button { display: grid; place-items: center; background: transparent; border: 0; border-radius: 5px; min-width: 33px; min-height: 32px; }
@@ -223,6 +224,12 @@ button, h1, h2, h3, p { margin: 0; }
 .terminal-stat h3 { font-size: .95rem; margin-bottom: 7px; }
 #terminal-view { scroll-margin-top: 10px; }
 #all-staffing { width: auto; margin: 0; }
+#claim-alert { flex: 0 0 auto; width: auto; margin: 8px 18px 0; color: var(--amber); border-color: #a57b4b; }
+#baggage-claim { scroll-margin-top: 10px; }
+#claim-instruction { margin: 10px 0 6px; }
+#claim-flights button { display: grid; gap: 3px; margin: 0; text-align: left; }
+#claim-flights button small { color: var(--muted); font-size: .75rem; }
+#claim-flights button[aria-pressed="true"] { border-color: var(--mint); background: #244039; }
 .staffing-summary { display: grid; gap: 6px; }
 .staffing-summary .detail-stat b, .secondary .staffing-action-rate { color: var(--amber); }
 .staffing-summary p { color: var(--muted); font-size: .75rem; line-height: 1.4; }
@@ -362,9 +369,9 @@ button, h1, h2, h3, p { margin: 0; }
   .wordmark { font-size: 17px; }
 }
 @media (max-width: 520px) {
-  .map-staffing { min-height: 44px; letter-spacing: 0; }
-  .map-staffing[data-staffing-type="checkIn"] { translate: calc(-50% + 19px) calc(-50% - 12px); }
-  .map-staffing[data-staffing-type="security"] { translate: calc(-50% - 19px) calc(-50% + 12px); }
+  .map-shortcut { min-height: 44px; letter-spacing: 0; }
+  .map-shortcut[data-staffing-type="checkIn"] { translate: calc(-50% + 19px) calc(-50% - 12px); }
+  .map-shortcut[data-staffing-type="security"] { translate: calc(-50% - 19px) calc(-50% + 12px); }
 }
 @media (max-width: 355px) {
   .bottom-bar { column-gap: 3px; }
