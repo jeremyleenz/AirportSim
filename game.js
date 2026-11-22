@@ -7,7 +7,8 @@
   const game = $(".game");
   const currency = new Intl.NumberFormat("en-US", {style: "currency", currency: "USD", maximumFractionDigits: 0});
   const startingCash = 124500;
-  const laneCost = 12500;
+  const staffingRates = {checkIn: 10, security: 15};
+  const counterNames = {checkIn: "Check-in station", security: "Security lane"};
   const handlingCost = 2000;
   const passengerFare = 41;
   const startMinutes = 8 * 60 + 42;
@@ -65,7 +66,7 @@
       : arrivalAt === 0 ? "holding" : "scheduled";
     const lateTimes = lateArrivalTimes(takeoffAt);
     const initialPassengers = gate === 0 ? {boarded: 68, gateQueue: 8, gate: 20 - lateTimes.length}
-      : gate === 1 ? {gate: 19, cafe: 5, concourse: 12, security: 38, checkIn: 16 - lateTimes.length} : null;
+      : gate === 1 ? {gate: 19, cafe: 5, concourse: 12, security: 32, checkIn: 22 - lateTimes.length} : null;
     const manifest = passengerFlow.manifest(passengers, initialPassengers,
       takeoffAt - earliestPassengerArrival * secondsPerMinute,
       takeoffAt - latestPassengerArrival * secondsPerMinute, lateTimes);
@@ -74,7 +75,8 @@
   }
 
   function createShift() {
-    return {cash: startingCash, now: 0, speed: 1, paused: false, lanes: 2, missedPassengers: 0, delayMinutes: 0,
+    return {cash: startingCash, now: 0, speed: 1, paused: false, missedPassengers: 0, delayMinutes: 0,
+      staffingCosts: {checkIn: 0, security: 0},
       flights: timetable.map(makeFlight), results: [], selected: "SA507", view: "flights",
       movements: new Map(), taxiQueue: [], nextDeparture: null};
   }
@@ -85,35 +87,49 @@
     parked: "At gate", deplaning: "Deplaning", boarding: "Boarding", closing: "Boarding closed", ready: "Ready", holding: "Holding",
     reserved: "Gate reserved", inbound: "Taxiing in", outbound: "Departing"
   };
-  let flow = passengerFlow.create(state.flights, state.lanes);
+  let flow = passengerFlow.create(state.flights);
   let occupancy = passengerFlow.snapshot(state.flights, flow);
   let occupancyDirty = false;
 
   let renderer, scene;
-  let planes, laneClosed;
+  let planes, counterBarriers;
   try {
     renderer = world.createRenderer($("#scene"));
     scene = airport.scene();
     planes = airlines.map(airline => airport.aircraft(airline.symbol));
-    const {centers, checkpointZ, portalOffsetX, portalWidth} = airport.terminalPaths.security;
-    const closedLaneX = centers.at(-1) + portalOffsetX;
-    const barrierZ = checkpointZ + .6;
-    laneClosed = new world.Mesh()
-      .box(closedLaneX, floor + .50, barrierZ, portalWidth + .18, .07, .105, "#b97054")
-      .box(closedLaneX - portalWidth / 2, floor, barrierZ, .08, .56, .1, "#536b6c")
-      .box(closedLaneX + portalWidth / 2, floor, barrierZ, .08, .56, .1, "#536b6c");
+    const {checkIn, security, queueRows, queueSpacing} = airport.terminalPaths;
+    counterBarriers = {
+      checkIn: closedCounterBarrier(checkIn.width, checkIn.front + (queueRows - 1) * queueSpacing + .4),
+      security: closedCounterBarrier(security.portalWidth, security.checkpointZ + .6)
+    };
   } catch (error) {
     console.error(error);
     $("#map-error").hidden = false;
   }
 
+  function closedCounterBarrier(width, z) {
+    return new world.Mesh()
+      .box(0, floor + .50, z, width + .18, .07, .105, "#b97054")
+      .box(-width / 2, floor, z, .08, .56, .1, "#536b6c")
+      .box(width / 2, floor, z, .08, .56, .1, "#536b6c");
+  }
+
   function createLabel(text, x, y, z, section) {
-    const label = document.createElement("span");
+    const staffing = Object.hasOwn(staffingRates, section);
+    const label = document.createElement(staffing ? "button" : "span");
     label.className = "map-note";
     label.textContent = text;
     const count = section ? addMapCount(label) : null;
+    if (staffing) {
+      label.type = "button";
+      label.classList.add("map-staffing");
+      label.dataset.staffingType = section;
+      label.setAttribute("aria-controls", "staffing-" + section);
+      label.title = "Open " + text.toLowerCase() + " staffing controls";
+      label.addEventListener("click", () => revealStaffing(section));
+    }
     $("#map-labels").append(label);
-    return {element: label, x, y, z, count, section};
+    return {element: label, x, y, z, count, section, decorative: !staffing};
   }
   function addMapCount(label) {
     const count = document.createElement("span");
@@ -198,6 +214,14 @@
     if (state.view !== view) $(".panel-body").scrollTop = 0;
     state.view = view;
     paint();
+  }
+
+  function revealStaffing(type) {
+    notifyTab("terminal");
+    if (mobileLayout.matches) showMobileView("operations");
+    const panel = $("#staffing-" + type);
+    panel.scrollIntoView({block: "nearest"});
+    panel.querySelector("h3").focus({preventScroll: true});
   }
 
   function flightAtGate(gate) {
@@ -594,8 +618,22 @@
       !(stage === "holding" && gate >= 0);
     close.hidden = stage !== "boarding" || waiting === 0;
     if (!close.hidden) close.textContent = "Close boarding · " + waiting + (waiting === 1 ? " empty seat" : " empty seats");
-    upgrade.hidden = counts.security === 0 || state.lanes === 3;
-    upgrade.disabled = state.cash < laneCost;
+    upgrade.hidden = counts.security === 0 || flow.security.every(bank => bank.status === "open");
+  }
+
+  function paintStaffing(type) {
+    const panel = $("#staffing-" + type);
+    const banks = flow[type];
+    const open = banks.filter(bank => bank.status === "open").length;
+    const closing = banks.filter(bank => bank.status === "closing").length;
+    panel.querySelector(".staffing-count").textContent = open + " / " + banks.length + " open" +
+      (closing ? " · " + closing + " closing" : "");
+    panel.querySelector('[data-staffing="open"]').disabled = shiftComplete() || open === banks.length;
+    panel.querySelector('[data-staffing="close"]').disabled = shiftComplete() || open === 1;
+  }
+
+  function staffingCost(type) {
+    return Math.round(state.staffingCosts[type]);
   }
 
   function paint() {
@@ -607,9 +645,9 @@
     const minutes = clockMinutes(state.now);
     const time = formatTime(minutes);
     const dispatched = state.results.length;
-    const satisfaction = Math.min(100, Math.max(55, 84 + dispatched * 2 + (state.lanes - 2) * 4 -
+    const satisfaction = Math.min(100, Math.max(55, 84 + dispatched * 2 -
       Math.floor((occupancy.security.length - 38) / 16) - Math.ceil(state.missedPassengers / 5) - Math.floor(state.delayMinutes / 5)));
-    $("#cash").textContent = currency.format(state.cash);
+    $("#cash").textContent = currency.format(state.cash - staffingCost("checkIn") - staffingCost("security"));
     $("#passengers").textContent = occupancy.total;
     $("#satisfaction").textContent = satisfaction + "%";
     $(".clock-day").textContent = "DAY " + String(1 + Math.floor(minutes / 1440)).padStart(2, "0");
@@ -639,9 +677,11 @@
     paintLateAlert();
     if (scheduleOpen) paintSchedule();
     if (terminalOpen) {
-      $("#check-in-count").textContent = occupancy.checkIn.length;
+      $("#check-in-count").textContent = occupancy.checkIn.length - occupancy.processing.checkIn;
+      $("#check-in-processing").textContent = occupancy.processing.checkIn;
       $("#landside-count").textContent = occupancy.landside.length;
-      $("#security-count").textContent = occupancy.security.length;
+      $("#security-count").textContent = occupancy.security.length - occupancy.processing.security;
+      $("#security-processing").textContent = occupancy.processing.security;
       $("#concourse-count").textContent = occupancy.concourse.length;
       $("#shared-seats-count").textContent = occupancy.sharedSeats.length;
       $("#cafe-count").textContent = occupancy.cafe.length;
@@ -649,13 +689,11 @@
       $("#deplaning-count").textContent = occupancy.deplaning.length;
       $("#arrivals-exit-count").textContent = occupancy.arrivalsExit.length;
       $("#exiting-count").textContent = occupancy.exiting.length;
-      $("#lanes-count").textContent = state.lanes + " / 3";
+      paintStaffing("checkIn");
+      paintStaffing("security");
       $("#lounge-counts").querySelectorAll("b").forEach((count, index) => {
         count.textContent = occupancy.gates[index].length;
       });
-      const upgrade = $("#upgrade");
-      upgrade.disabled = complete || state.lanes === 3 || state.cash < laneCost;
-      upgrade.innerHTML = state.lanes === 3 ? "All lanes open" : "Open a lane <span>" + currency.format(laneCost) + "</span>";
     }
     $("#goal-bar").style.width = dispatched / timetable.length * 100 + "%";
     $("#goal-count").textContent = dispatched + " / " + timetable.length;
@@ -883,7 +921,11 @@
 
   function advanceShift(simDelta) {
     state.now += simDelta;
-    const changed = passengerFlow.advance(state.flights, flow, state.now, simDelta, state.lanes,
+    for (const type of Object.keys(staffingRates)) {
+      const extraStaffed = flow[type].filter(bank => bank.status !== "closed").length - 1;
+      state.staffingCosts[type] += extraStaffed * staffingRates[type] * simDelta / secondsPerMinute;
+    }
+    const changed = passengerFlow.advance(state.flights, flow, state.now, simDelta,
       flight => {
         flight.stage = "ready";
         announce(flight.id + " is ready for departure.");
@@ -938,12 +980,14 @@
     const onTime = results.filter(({due, takeoff}) => takeoff <= due).length;
     const revenue = results.reduce((total, flight) => total + flight.revenue, 0);
     const handling = results.length * handlingCost;
-    const security = (state.lanes - 2) * laneCost;
+    const checkIn = staffingCost("checkIn");
+    const security = staffingCost("security");
     $("#report-on-time").textContent = onTime + " / " + results.length;
     $("#report-missed").textContent = results.reduce((total, flight) => total + flight.missed, 0);
-    $("#report-profit").textContent = currency.format(revenue - handling - security);
+    $("#report-profit").textContent = currency.format(revenue - handling - checkIn - security);
     $("#report-finances").innerHTML = stat("Flight revenue", currency.format(revenue)) +
-      stat("Ground handling", currency.format(-handling)) + stat("Extra security lane", currency.format(0 - security));
+      stat("Ground handling", currency.format(-handling)) + stat("Extra check-in staffing", currency.format(0 - checkIn)) +
+      stat("Extra security staffing", currency.format(0 - security));
     $("#report-flights").innerHTML = results.map(({id, destination, due, takeoff, missed}) =>
       '<tr><th scope="row">' + id + '<span>' + destination + '</span></th><td>' + formatTime(due) +
       '</td><td>' + formatTime(takeoff) + (takeoff > due ? '<span class="report-late">+' + (takeoff - due) + ' min</span>' : '') +
@@ -986,17 +1030,22 @@
       const [x, y, z] = person.position;
       moving.push({mesh: scene.securityHighlight, x, y, z, castShadow: false});
     }
-    if (state.lanes === 2) moving.push({mesh: laneClosed});
+    for (const type of Object.keys(counterBarriers)) {
+      const offset = airport.terminalPaths[type].portalOffsetX ?? 0;
+      for (const bank of flow[type]) {
+        if (bank.status === "closed") moving.push({mesh: counterBarriers[type], x: bank.x + offset});
+      }
+    }
     const gate = gates[selectedGate()];
     if (gate) moving.push({mesh: scene.highlight, x: gate.x, castShadow: false});
     renderer.render([...scene.fixed, ...moving, ...people]);
     showAircraftSelection(selectedAircraft);
-    for (const {x, y, z, element} of [...mapPins, ...mapSigns, holdingPinPosition]) {
+    for (const {x, y, z, element, decorative} of [...mapPins, ...mapSigns, holdingPinPosition]) {
       const [left, top] = renderer.project(x, y, z);
       element.style.left = left + "px";
       element.style.top = top + "px";
       element.hidden = left < 18 || top < 19 || left > renderer.view.width - 18 || top > renderer.view.height - 18 ||
-        (element.className === "map-note" && renderer.view.width < 520) ||
+        (decorative && renderer.view.width < 520) ||
         (element === holdingPin && (!holding || left < 90 || left > renderer.view.width - 90));
     }
   }
@@ -1026,7 +1075,7 @@
   $("#close-report").addEventListener("click", () => report.close());
   $("#restart-shift").addEventListener("click", () => {
     state = createShift();
-    flow = passengerFlow.create(state.flights, state.lanes);
+    flow = passengerFlow.create(state.flights);
     occupancyDirty = true;
     $("#upcoming").open = false;
     report.close();
@@ -1042,17 +1091,25 @@
     if (mobileLayout.matches) showMobileView("operations");
     $("#view-report").focus();
   });
-  function openLane() {
-    if (shiftComplete() || state.lanes !== 2 || state.cash < laneCost) return;
-    state.lanes++;
-    state.cash -= laneCost;
-    announce("Security lane 3 is now open.");
+  function changeStaffing(type, action) {
+    if (shiftComplete()) return;
+    const bank = action === "open" ? passengerFlow.openCounter(flow, type) : passengerFlow.closeCounter(flow, type);
+    if (!bank) return;
+    const label = counterNames[type] + " " + (flow[type].indexOf(bank) + 1);
+    announce(label + (bank.status === "closing" ? " will close after its queue clears." : " is now " + bank.status + "."));
+    occupancyDirty = true;
     paint();
   }
-  $("#upgrade").addEventListener("click", openLane);
+  for (const type of Object.keys(staffingRates)) {
+    const panel = $("#staffing-" + type);
+    panel.querySelector(".staffing-rate").textContent = currency.format(staffingRates[type] * 60) + "/hr per extra station";
+    for (const action of ["open", "close"]) {
+      panel.querySelector('[data-staffing="' + action + '"]').addEventListener("click", () => changeStaffing(type, action));
+    }
+  }
   const flightUpgrade = $("#flight-upgrade");
-  flightUpgrade.innerHTML = "Open security lane 3 <span>" + currency.format(laneCost) + "</span>";
-  flightUpgrade.addEventListener("click", openLane);
+  flightUpgrade.innerHTML = "Open security lane <span>" + currency.format(staffingRates.security * 60) + "/hr</span>";
+  flightUpgrade.addEventListener("click", () => changeStaffing("security", "open"));
   document.querySelectorAll("[data-speed]").forEach(button => {
     button.addEventListener("click", () => {
       state.speed = Number(button.dataset.speed);

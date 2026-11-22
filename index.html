@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=9">
+  <link rel="stylesheet" href="styles.css?v=11">
   <script defer src="renderer.js"></script>
-  <script defer src="airport.js?v=3"></script>
-  <script defer src="passengers.js?v=8"></script>
-  <script defer src="game.js?v=13"></script>
+  <script defer src="airport.js?v=4"></script>
+  <script defer src="passengers.js?v=10"></script>
+  <script defer src="game.js?v=16"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -121,11 +121,30 @@
           </table>
         </section>
         <section id="terminal-view" aria-labelledby="terminal-title" hidden>
+          <div class="section-head"><h2>Staffing</h2></div>
+          <div id="staffing-checkIn" class="terminal-stat staffing-card">
+            <div class="detail-stat"><h3 tabindex="-1">Check-in</h3><b class="staffing-count"></b></div>
+            <p class="staffing-rate"></p>
+            <div class="staffing-actions">
+              <button type="button" data-staffing="open" class="secondary">Open station</button>
+              <button type="button" data-staffing="close" class="secondary">Close station</button>
+            </div>
+          </div>
+          <div id="staffing-security" class="terminal-stat staffing-card">
+            <div class="detail-stat"><h3 tabindex="-1">Security</h3><b class="staffing-count"></b></div>
+            <p class="staffing-rate"></p>
+            <div class="staffing-actions">
+              <button type="button" data-staffing="open" class="secondary">Open lane</button>
+              <button type="button" data-staffing="close" class="secondary">Close lane</button>
+            </div>
+          </div>
           <div class="section-head"><h2 id="terminal-title">Passenger flow</h2></div>
           <div class="terminal-stat flow-stats">
-            <div class="detail-stat"><span>Check-in</span><b id="check-in-count"></b></div>
+            <div class="detail-stat"><span>Check-in queue</span><b id="check-in-count"></b></div>
+            <div class="detail-stat"><span>At check-in desks</span><b id="check-in-processing"></b></div>
             <div class="detail-stat"><span>Check-in hall</span><b id="landside-count"></b></div>
-            <div class="detail-stat"><span>Security</span><b id="security-count"></b></div>
+            <div class="detail-stat"><span>Security queue</span><b id="security-count"></b></div>
+            <div class="detail-stat"><span>Being screened</span><b id="security-processing"></b></div>
             <div class="detail-stat"><span>Departures concourse</span><b id="concourse-count"></b></div>
             <div class="detail-stat"><span>Shared seating</span><b id="shared-seats-count"></b></div>
             <div class="detail-stat"><span>Café</span><b id="cafe-count"></b></div>
@@ -138,10 +157,6 @@
             <h3>Gate areas</h3>
             <div id="lounge-counts" class="flow-stats"></div>
           </div>
-          <div class="terminal-stat">
-            <div class="detail-stat"><span>Active security lanes</span><b id="lanes-count"></b></div>
-          </div>
-          <button type="button" id="upgrade" class="primary">Open a lane <span>$12,500</span></button>
         </section>
       </div>
     </aside>

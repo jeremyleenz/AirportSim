@@ -11,6 +11,8 @@ const passengerFlow = (() => {
   const cafeCorridorZ = 17.7;
   const boardingSpacing = .64;
   const scanTime = .43;
+  const checkInTime = .95;
+  const screeningTime = .75;
   const deplaneInterval = .32;
   const point = (x, z) => [x, floor, z];
 
@@ -39,10 +41,11 @@ const passengerFlow = (() => {
     return {index, zone, position: null, angle: Math.PI, distance: 0, moving: false, route: null};
   }
 
-  function create(flights, lanes) {
+  function create(flights) {
     function banks(layout) {
-      return layout.centers.map(x => ({
-        x, front: layout.front, cursor: 0, nextService: 0,
+      return layout.centers.map((x, index) => ({
+        x, front: layout.front, cursor: 0, service: null, status: index ? "closed" : "open",
+        desks: layout.desks?.slice(index * 2, index * 2 + 2),
         lines: [-.36, -.12, .12, .36].map(offset => ({x: x + offset * layout.width, people: []}))
       }));
     }
@@ -53,7 +56,7 @@ const passengerFlow = (() => {
       sharedSeats: sharedSeats.map(spot => ({...spot})),
       cafe: cafeSeats.map(spot => ({...spot})),
       exiting: [], arrivals: [],
-      nextEntry: 0, entrancesUsed: 0, openedLanes: lanes
+      nextEntry: 0, entrancesUsed: 0
     };
     flow.guestSeats = flow.boarding.flatMap(queue => queue.spots.seats);
     for (const flight of flights) {
@@ -72,13 +75,13 @@ const passengerFlow = (() => {
           queue.line.push({person, offset});
         }
         if (person.zone === "checkIn" || person.zone === "security") {
-          const selected = findLine(flow[person.zone], person.zone === "security" ? lanes : 3);
+          const selected = findLine(flow[person.zone]);
           person.position = queueSpot(selected.bank, selected.line, selected.line.people.length);
           selected.line.people.push(person);
         }
         if (person.zone === "concourse") {
-          const exit = securityLayout.centers[person.index % lanes] + securityLayout.portalOffsetX;
-          person.position = point(exit, securityLayout.exitZ);
+          const exit = securityLayout.centers[0] + securityLayout.portalOffsetX;
+          person.position = point(exit + (person.index % 3 - 1) * .38, securityLayout.exitZ - person.index % 4 * .39);
           afterSecurity(person, flight, flow, 0);
           follow(person, (person.index % 12) * .09);
         }
@@ -91,10 +94,11 @@ const passengerFlow = (() => {
     return point(line.x, bank.front + queueSpacing * index);
   }
 
-  function findLine(banks, active) {
+  function findLine(banks) {
     let best = null;
     let length = queueRows;
-    for (const bank of banks.slice(0, active)) {
+    for (const bank of banks) {
+      if (bank.status !== "open") continue;
       for (const line of bank.lines) {
         if (line.people.length >= length) continue;
         best = {bank, line};
@@ -447,22 +451,39 @@ const passengerFlow = (() => {
     return changed;
   }
 
-  function openSecurityLane(flow, lanes) {
-    const newBank = flow.security[lanes - 1];
+  function openCounter(flow, zone) {
+    const banks = flow[zone];
+    const reopening = banks.find(bank => bank.status === "closing");
+    const newBank = reopening ?? banks.find(bank => bank.status === "closed");
+    if (!newBank) return null;
+    newBank.status = "open";
+    if (reopening) return newBank;
     let moved = 0;
-    for (const bank of flow.security.slice(0, flow.openedLanes)) {
+    for (const bank of banks) {
+      if (bank === newBank || bank.status !== "open") continue;
       for (const line of bank.lines) {
-        const index = line.people.findLastIndex(person => person.zone === "security" && !person.route);
+        const index = line.people.findLastIndex(person => person.zone === zone && !person.route);
         if (index < 2) continue;
         const [tail] = line.people.splice(index, 1);
         const destination = newBank.lines[moved++ % newBank.lines.length];
         destination.people.push(tail);
         tail.zone = "landside";
-        walk(tail, [point(line.x, corridorZ), point(destination.x, corridorZ)], "security");
+        walk(tail, [point(line.x, corridorZ), point(destination.x, corridorZ)], zone);
       }
     }
-    flow.openedLanes = lanes;
-    return moved > 0;
+    return newBank;
+  }
+
+  function counterOccupied(bank) {
+    return bank.service || bank.lines.some(line => line.people.length);
+  }
+
+  function closeCounter(flow, zone) {
+    const opened = flow[zone].filter(bank => bank.status === "open");
+    if (opened.length < 2) return null;
+    const bank = opened.at(-1);
+    bank.status = counterOccupied(bank) ? "closing" : "closed";
+    return bank;
   }
 
   function nextPassenger(flights, now) {
@@ -517,6 +538,7 @@ const passengerFlow = (() => {
       person.zone = "missed";
     }
     for (const bank of [...flow.checkIn, ...flow.security]) {
+      if (bank.service && missed.has(bank.service.person)) bank.service = null;
       for (const line of bank.lines) line.people = line.people.filter(person => !missed.has(person));
     }
     queue.line = [];
@@ -574,7 +596,7 @@ const passengerFlow = (() => {
     return changed;
   }
 
-  function advance(flights, flow, now, dt, lanes, onReady, onDeplaned) {
+  function advance(flights, flow, now, dt, onReady, onDeplaned) {
     let changed = advanceArrivals(flights, flow, now, dt, onDeplaned);
     for (let i = flow.exiting.length - 1; i >= 0; i--) {
       const {person} = flow.exiting[i];
@@ -605,55 +627,71 @@ const passengerFlow = (() => {
         }
       }
     }
-    if (lanes > flow.openedLanes) changed = openSecurityLane(flow, lanes) || changed;
-
-    function useCounter(banks, active, interval, serve) {
-      for (const bank of banks.slice(0, active)) {
+    function useCounter(banks, duration, approach, release) {
+      for (const bank of banks) {
+        if (bank.status === "closed") continue;
         bank.lines.forEach(line => {
           line.people.forEach((person, index) => {
             if (!person.route && !person.moving) stepToward(person, queueSpot(bank, line, index), dt * pace);
           });
         });
-        if (now < bank.nextService) continue;
+        const service = bank.service;
+        if (service) {
+          if (service.person.route) continue;
+          if (service.finishesAt === null) {
+            service.finishesAt = now + duration + service.person.index % 4 * .12;
+            changed = true;
+          }
+          if (now < service.finishesAt || !release(service.person, bank)) continue;
+          bank.service = null;
+          changed = true;
+        }
         for (let i = 0; i < bank.lines.length; i++) {
           const lane = (bank.cursor + i) % bank.lines.length;
           const line = bank.lines[lane];
           const person = line.people[0];
           if (!person || person.route || person.position[2] !== bank.front) continue;
-          if (!serve(person, bank)) break;
+          approach(person, bank);
           line.people.shift();
           bank.cursor = (lane + 1) % bank.lines.length;
-          bank.nextService = now + interval;
-          changed = true;
+          bank.service = {person, finishesAt: null};
           break;
+        }
+        if (bank.status === "closing" && !counterOccupied(bank)) {
+          bank.status = "closed";
+          changed = true;
         }
       }
     }
 
-    useCounter(flow.security, lanes, .49, (person, bank) => {
+    useCounter(flow.security, screeningTime, (person, bank) => {
       const exitX = bank.x + securityLayout.portalOffsetX;
       const [x] = person.position;
       const approachZ = bank.front - .19;
-      walk(person, [point(x, approachZ), point(exitX, approachZ), point(exitX, securityLayout.exitZ)], "concourse");
+      walk(person, [point(x, approachZ), point(exitX, approachZ), point(exitX, securityLayout.checkpointZ + .55)]);
+    }, (person, bank) => {
+      walk(person, [point(bank.x + securityLayout.portalOffsetX, securityLayout.exitZ)], "concourse");
       return true;
     });
-    useCounter(flow.checkIn, 3, .4, (person, bank) => {
-      const queue = findLine(flow.security, lanes);
-      if (!queue) return false;
+    const deskFrontZ = terminalPaths.checkIn.deskZ + .57;
+    useCounter(flow.checkIn, checkInTime, (person, bank) => {
       const [x] = person.position;
-      const deskX = bank.x + (x < bank.x ? -2.0 : 1.45);
+      const deskX = bank.desks[x < bank.x ? 0 : 1];
+      walk(person, [point(x, deskFrontZ), point(deskX, deskFrontZ)]);
+    }, (person, bank) => {
+      const queue = findLine(flow.security);
+      if (!queue) return false;
       const sideX = bank.x - 2.85;
-      const deskFrontZ = terminalPaths.checkIn.deskZ + .57;
       person.zone = "landside";
       queue.line.people.push(person);
-      walk(person, [point(x, deskFrontZ), point(deskX, deskFrontZ), point(sideX, deskFrontZ),
+      walk(person, [point(sideX, deskFrontZ),
         point(sideX, corridorZ), point(queue.line.x, corridorZ)], "security");
       return true;
     });
 
     if (now >= flow.nextEntry) {
       const person = nextPassenger(flights, now);
-      const queue = person && findLine(flow.checkIn, 3);
+      const queue = person && findLine(flow.checkIn);
       if (queue) {
         const entranceX = -6 + flow.entrancesUsed++ % 4 * 4;
         person.position = point(entranceX, entranceZ);
@@ -709,8 +747,12 @@ const passengerFlow = (() => {
         people.visible.push(entry);
       }
     }
-    return {...people, byFlight, total: people.visible.length};
+    const processing = {
+      checkIn: flow.checkIn.filter(bank => bank.service?.finishesAt != null).length,
+      security: flow.security.filter(bank => bank.service?.finishesAt != null).length
+    };
+    return {...people, byFlight, processing, total: people.visible.length};
   }
 
-  return {manifest, create, startDeplaning, closeBoarding, advance, snapshot};
+  return {manifest, create, openCounter, closeCounter, startDeplaning, closeBoarding, advance, snapshot};
 })();

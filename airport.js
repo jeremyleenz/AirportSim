@@ -17,6 +17,7 @@ const airport = (() => {
   const cafeBoundaryX = -13.1;
   const airsideExit = {x: -14.48, z: terminalFrontZ + .7, thresholdZ: terminalFrontZ, width: 1.4};
   const checkInQueue = {centers: [18, 25.2, 32.5], front: 22.14, width: 4.95, deskZ: 21.25};
+  const checkInDesks = Array.from({length: 6}, (_, index) => 15.8 + index * 3.43);
   const securityQueue = {centers: [-7.2, -.7, 5.8], front: 23.25, width: 4.3,
     checkpointZ: 20.7, portalOffsetX: 1.05, portalWidth: .88, exitZ: 19.10};
   const queueRows = 9;
@@ -353,7 +354,7 @@ const airport = (() => {
     securityCheckpoint(mesh);
 
     mesh.rect(24.75, floor + .024, (checkpointZ + 26.75) / 2, 21.7, 26.75 - checkpointZ, "#d4d9ce");
-    for (let n = 0; n < 6; n++) desk(mesh, 15.8 + n * 3.43, checkInQueue.deskZ, n % 2 ? "#87a5a2" : "#6c9b91");
+    checkInDesks.forEach((x, index) => desk(mesh, x, checkInQueue.deskZ, index % 2 ? "#87a5a2" : "#6c9b91"));
     for (const x of checkInQueue.centers) queue(mesh, x, checkInQueue);
     for (const x of [-34.5, -12.8, 12.4, 35.6]) planter(mesh, x, floor, 26.95, 1.3);
 
@@ -535,7 +536,7 @@ const airport = (() => {
 
   const terminalPaths = {
     queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats, airsideExit,
-    checkIn: checkInQueue,
+    checkIn: {...checkInQueue, desks: checkInDesks},
     security: securityQueue
   };
 
