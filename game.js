@@ -181,7 +181,8 @@
   });
   const mapSigns = renderer ? [
     createLabel("ENTRANCE", -2.2, 1.1, 34.1),
-    createLabel("ARRIVALS EXIT", airport.terminalPaths.airsideExit.x, 1.2, 30.9),
+    createLabel("ARRIVALS EXIT", airport.terminalPaths.airsideExit.x, 1.2, airport.terminalPaths.airsideExit.z + 3.45),
+    createLabel("BAGGAGE CLAIM", ...airport.baggageClaim.label),
     createLabel("CAFÉ", -26, 1.84, 19.05, "cafe"),
     createLabel("SHARED SEATS", -12.5, 1, 16.55, "sharedSeats"),
     createLabel("SECURITY", -.7, 2.75, 19.1, "security"),
@@ -1053,7 +1054,7 @@
       occupancyDirty = true;
       if (flight.stage === "inbound") {
         flight.stage = "deplaning";
-        passengerFlow.startDeplaning(flight, state.now);
+        passengerFlow.startDeplaning(flight, state.now, baggage.arrived(state.luggage, flight));
         announce(flight.id + " deplaning at " + gates[flight.gate].name + ".");
       } else {
         finishDeparture(movement);
@@ -1180,7 +1181,7 @@
       const x = ((vehicle.offset + carTravel) % 110 - 55) * direction;
       moving.push({...vehicle, x});
     }
-    const people = airport.passengerActors(scene.outfits, occupancy);
+    const people = airport.passengerActors(scene.outfits, occupancy, scene.claimedLuggage);
     for (const {person, flight} of occupancy.security) {
       if (flight.id !== state.selected) continue;
       const [x, y, z] = person.position;

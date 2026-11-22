@@ -1,13 +1,12 @@
 "use strict";
 
 const passengerFlow = (() => {
-  const {gates, floor, terminalPaths} = airport;
-  const {queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats, airsideExit,
+  const {gates, floor, terminalPaths, baggageClaim} = airport;
+  const {queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats, cafeDoorX, airsideExit,
     security: securityLayout} = terminalPaths;
   const pace = 4.1;
   const entranceZ = 29;
   const corridorZ = 27.77;
-  const cafeDoorX = airsideExit.x;
   const cafeCorridorZ = 17.7;
   const boardingSpacing = .64;
   const scanTime = .43;
@@ -15,6 +14,9 @@ const passengerFlow = (() => {
   const screeningTime = .75;
   const deplaneInterval = .32;
   const point = (x, z) => [x, floor, z];
+  const arrivalsConcourse = point(airsideExit.x, baggageClaim.entranceZ);
+  const arrivalExitPath = [point(airsideExit.x, airsideExit.thresholdZ),
+    [airsideExit.x, .04, airsideExit.z], [airsideExit.x, .04, 31.6]];
 
   function manifest(capacity, arrivalStart, arrivalEnd, lateTimes = []) {
     const people = [];
@@ -51,6 +53,7 @@ const passengerFlow = (() => {
       boarding: gates.map(({x}, gate) => ({...makeBoardingLine(x), spots: makeLounge(x, gate)})),
       sharedSeats: sharedSeats.map(spot => ({...spot})),
       cafe: cafeSeats.map(spot => ({...spot})),
+      claimSpots: baggageClaim.carousels.map(({waitingSpots}) => waitingSpots.map(spot => ({...spot}))),
       exiting: [], arrivals: [],
       nextEntry: 0, entrancesUsed: 0
     };
@@ -477,8 +480,8 @@ const passengerFlow = (() => {
     if (zone === "checkIn" || zone === "landside" || (zone === "security" && z >= securityLayout.checkpointZ)) {
       return [point(x, corridorZ), point(0, corridorZ), point(0, entranceZ + .6)];
     }
-    const exit = point(airsideExit.x, airsideExit.z);
-    if (zone === "cafe") return [point(x, spot.aisleZ), point(cafeDoorX, spot.aisleZ), exit];
+    const toExit = [arrivalsConcourse, ...arrivalExitPath];
+    if (zone === "cafe") return [...cafeExit(spot), ...toExit];
 
     const path = [];
     if (zone === "gateQueue") {
@@ -498,7 +501,7 @@ const passengerFlow = (() => {
       path.push(...route.points.slice(0, route.index).reverse());
     }
     const [aisleX] = path.at(-1) ?? person.position;
-    path.push(point(aisleX, cafeCorridorZ), point(cafeDoorX, cafeCorridorZ), exit);
+    path.push(point(aisleX, cafeCorridorZ), ...toExit);
     return path;
   }
 
@@ -526,17 +529,37 @@ const passengerFlow = (() => {
     return missed.size;
   }
 
-  function startDeplaning(flight, now) {
+  function startDeplaning(flight, now, arrivalBags) {
     const {x} = gates[flight.gate];
     const bridge = bridgePath(x).reverse();
     const [doorX] = bridge.at(-1);
     const aisleX = x - 9.35;
-    const concourseZ = x < airsideExit.x ? 17.5 : 18.18;
     const path = [...bridge.slice(1), point(doorX, 8.62), point(aisleX, 8.62),
-      point(aisleX, concourseZ), point(airsideExit.x, concourseZ), point(airsideExit.x, airsideExit.thresholdZ),
-      [airsideExit.x, .04, airsideExit.z], [airsideExit.x, .04, 31.6]];
+      point(aisleX, baggageClaim.entranceZ), arrivalsConcourse];
     flight.deplaning = {remaining: flight.incomingPassengers, onBridge: 0, nextAt: now + .65,
-      door: bridge[0], bridgeWaypoints: bridge.length - 1, path};
+      door: bridge[0], bridgeWaypoints: bridge.length - 1, path, arrivalBags};
+  }
+
+  function advancePickup(person) {
+    const bag = person.arrivalBag;
+    const {pickup, aisleZ, angle} = person.spot;
+    const pose = bag.claimPose;
+    person.angle = angle;
+    if (!bag.cancelled) {
+      if (!pose) return;
+      const distance = Math.hypot(pose.x - pickup[0], pose.z - pickup[2]);
+      if (person.position !== pickup) {
+        if (distance < 2) walk(person, [pickup]);
+        return;
+      }
+      if (distance >= .86) return;
+      person.claimedBag = bag.color;
+      bag.claimed = true;
+    }
+    person.arrivalBag = null;
+    const [x] = person.position;
+    leaveSpot(person);
+    walk(person, [point(x, aisleZ), point(airsideExit.x, aisleZ), ...arrivalExitPath]);
   }
 
   function advanceArrivals(flights, flow, now, dt, onDeplaned) {
@@ -552,7 +575,8 @@ const passengerFlow = (() => {
         if (arrival.remaining === 0 && arrival.onBridge === 0) onDeplaned(flight);
         changed = true;
       }
-      if (!person.route) {
+      if (!person.route && person.arrivalBag) advancePickup(person);
+      if (!person.route && !person.arrivalBag) {
         flow.arrivals.splice(i, 1);
         changed = true;
       }
@@ -561,9 +585,19 @@ const passengerFlow = (() => {
       if (flight.stage !== "deplaning") continue;
       const arrival = flight.deplaning;
       if (!arrival.remaining || now < arrival.nextAt) continue;
-      const person = makePerson(flight.passengers + flight.incomingPassengers - arrival.remaining, "deplaning");
+      const index = flight.incomingPassengers - arrival.remaining;
+      const person = makePerson(flight.passengers + index, "deplaning");
       person.position = arrival.door;
-      walk(person, arrival.path);
+      const bag = arrival.arrivalBags?.get(index);
+      const spot = bag && !bag.cancelled && reserve(person, flow.claimSpots[bag.carousel], 37);
+      if (spot) {
+        const [waitX] = spot.position;
+        const {aisleZ} = spot;
+        person.arrivalBag = bag;
+        walk(person, [...arrival.path, point(airsideExit.x, aisleZ), point(waitX, aisleZ), spot.position]);
+      } else {
+        walk(person, [...arrival.path, ...arrivalExitPath]);
+      }
       flow.arrivals.push({person, flight});
       arrival.remaining--;
       arrival.onBridge++;
