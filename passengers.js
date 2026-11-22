@@ -457,19 +457,33 @@ const passengerFlow = (() => {
     const newBank = reopening ?? banks.find(bank => bank.status === "closed");
     if (!newBank) return null;
     newBank.status = "open";
-    if (reopening) return newBank;
-    let moved = 0;
-    for (const bank of banks) {
-      if (bank === newBank || bank.status !== "open") continue;
-      for (const line of bank.lines) {
-        const index = line.people.findLastIndex(person => person.zone === zone && !person.route);
-        if (index < 2) continue;
-        const [tail] = line.people.splice(index, 1);
-        const destination = newBank.lines[moved++ % newBank.lines.length];
-        destination.people.push(tail);
-        tail.zone = "landside";
-        walk(tail, [point(line.x, corridorZ), point(destination.x, corridorZ)], zone);
+    const open = banks.filter(bank => bank.status === "open").map(bank => ({
+      bank, waiting: bank.lines.reduce((total, line) => total + line.people.length, 0)
+    }));
+    while (true) {
+      open.sort((a, b) => a.waiting - b.waiting);
+      const shortest = open[0];
+      const longest = open.at(-1);
+      if (longest.waiting - shortest.waiting <= 1) break;
+
+      const {lines, cursor} = longest.bank;
+      let source = lines[cursor];
+      for (let offset = 1; offset < lines.length; offset++) {
+        const line = lines[(cursor + offset) % lines.length];
+        if (line.people.length >= source.people.length) source = line;
       }
+      const {line: destination} = findLine([shortest.bank]);
+      const person = source.people.pop();
+      destination.people.push(person);
+      longest.waiting--;
+      shortest.waiting++;
+
+      // Preserve the approach to the corridor when redirecting someone already on their way.
+      const waypoints = person.route
+        ? person.route.points.slice(person.route.index, -1)
+        : [point(person.position[0], corridorZ)];
+      person.zone = "landside";
+      walk(person, [...waypoints, point(destination.x, corridorZ)], zone);
     }
     return newBank;
   }
