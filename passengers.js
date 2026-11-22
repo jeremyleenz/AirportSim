@@ -39,6 +39,10 @@ const passengerFlow = (() => {
     return {index, zone, position: null, angle: Math.PI, distance: 0, moving: false, route: null};
   }
 
+  function serviceFinishAt(now, person, duration) {
+    return now + duration + person.index % 4 * .12;
+  }
+
   function create() {
     function banks(layout) {
       return layout.centers.map((x, index) => ({
@@ -509,6 +513,7 @@ const passengerFlow = (() => {
     const missed = new Set(flight.manifest.filter(person => person.zone !== "boarding" && person.zone !== "boarded"));
     const queue = flow.boarding[flight.gate];
     for (const person of missed) {
+      delete person.securityBag;
       if (person.position) {
         const path = exitPath(person, queue);
         leaveSpot(person);
@@ -633,8 +638,12 @@ const passengerFlow = (() => {
         if (wasWalking && walkTime > 0 && person.zone === "gate") leaveSpot(person);
         changed = follow(person, walkTime) || changed;
         if (wasWalking?.zone === "concourse" && !person.route) {
-          if (previousZone === "security") afterSecurity(person, flight, flow, now);
-          else goToGateOrWait(person, flight, flow, now);
+          if (previousZone === "security") {
+            delete person.securityBag;
+            afterSecurity(person, flight, flow, now);
+          } else {
+            goToGateOrWait(person, flight, flow, now);
+          }
         }
       }
     }
@@ -650,7 +659,7 @@ const passengerFlow = (() => {
         if (service) {
           if (service.person.route) continue;
           if (service.finishesAt === null) {
-            service.finishesAt = now + duration + service.person.index % 4 * .12;
+            service.finishesAt = serviceFinishAt(now, service.person, duration);
             changed = true;
           }
           if (now < service.finishesAt || !release(service.person, bank)) continue;
@@ -679,9 +688,17 @@ const passengerFlow = (() => {
       const exitX = bank.x + securityLayout.portalOffsetX;
       const [x] = person.position;
       const approachZ = bank.front - .19;
-      walk(person, [point(x, approachZ), point(exitX, approachZ), point(exitX, securityLayout.checkpointZ + .55)]);
+      const path = [point(x, approachZ), point(exitX, approachZ), point(exitX, securityLayout.checkpointZ + .55)];
+      person.securityBag = {from: airport.carryOnPosition(person), beltX: bank.x + securityLayout.belt.offsetX,
+        startAt: now, placedAt: now + .42, scannedAt: serviceFinishAt(now + travelTime(person.position, path), person, screeningTime),
+        pickupAt: Infinity};
+      walk(person, path);
     }, (person, bank) => {
-      walk(person, [point(bank.x + securityLayout.portalOffsetX, securityLayout.exitZ)], "concourse");
+      const exitX = bank.x + securityLayout.portalOffsetX;
+      const bag = person.securityBag;
+      const path = [point(exitX, securityLayout.checkpointZ - .48), point(bag.beltX + .9, securityLayout.exitZ)];
+      bag.pickupAt = now + travelTime(person.position, path);
+      walk(person, path, "concourse");
       return true;
     });
     const deskFrontZ = terminalPaths.checkIn.deskZ + .57;

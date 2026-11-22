@@ -25,8 +25,9 @@ const airport = (() => {
   const sortingBeltZ = 20.14;
   const sortingBeltY = floor + .39;
   const baggageTransfer = [39.2, .22, 6.15];
+  const securityBelt = {offsetX: -.75, surfaceY: floor + .615, entryZ: 22.61, exitZ: 19.44};
   const securityQueue = {centers: [-7.2, -.7, 5.8], front: 23.25, width: 4.3,
-    checkpointZ: 20.7, portalOffsetX: 1.05, portalWidth: .88, exitZ: 19.10};
+    checkpointZ: 20.7, portalOffsetX: 1.05, portalWidth: .88, exitZ: 19.10, belt: securityBelt};
   const baggageColors = ["#c96445", "#376582", "#cf9d45", "#586a52"];
 
   function claimCarousel(z) {
@@ -294,22 +295,32 @@ const airport = (() => {
 
   function securityCheckpoint(mesh) {
     const {centers, checkpointZ, portalOffsetX, portalWidth} = securityQueue;
+    const {offsetX, surfaceY, entryZ, exitZ} = securityBelt;
+    const beltLength = entryZ - exitZ + .57;
+    const beltZ = (entryZ + exitZ) / 2;
     const partition = (left, right) => securityPartition(mesh, (left + right) / 2, checkpointZ, right - left, true);
     let left = cafeBoundaryX;
     for (const x of centers) {
       const portalX = x + portalOffsetX;
       const leftPost = portalX - portalWidth / 2;
       const rightPost = portalX + portalWidth / 2;
-      const beltX = x - 1.2;
+      const beltX = x + offsetX;
       partition(left, beltX - .56);
       partition(beltX + .56, leftPost);
       left = rightPost;
 
-      mesh.box(beltX, floor, 21, .95, .56, 3.75, "#667e7d");
-      mesh.box(beltX, floor + .56, 21, .76, .055, 3.7, "#3e5356");
-      mesh.box(beltX, floor, checkpointZ, 1.12, 1.16, .94, "#7f9993");
+      mesh.box(beltX, floor, beltZ, .95, surfaceY - floor - .055, beltLength, "#667e7d");
+      mesh.box(beltX, surfaceY - .055, beltZ, .76, .055, beltLength, "#3e5356");
+      for (let z = exitZ - .15; z <= entryZ + .15; z += .2) {
+        mesh.rect(beltX, surfaceY + .003, z, .71, .025, "#627b7c");
+      }
+      for (const side of [-1, 1]) {
+        mesh.box(beltX + side * .49, floor, checkpointZ, .14, 1.15, .98, "#7f9993");
+      }
+      mesh.box(beltX, surfaceY, checkpointZ, .84, .53, .54, ink);
+      mesh.box(beltX, floor + 1.07, checkpointZ, 1.12, .09, .98, "#7f9993");
       mesh.box(beltX, floor + 1.14, checkpointZ, 1.16, .10, .98, "#dfe9e0");
-      mesh.box(beltX + .31, floor + .77, checkpointZ + .48, .27, .17, .025, ink);
+      mesh.box(beltX + .53, floor + .82, checkpointZ + .23, .027, .16, .25, ink);
       for (const edge of [leftPost, rightPost]) {
         mesh.box(edge, floor, checkpointZ, .14, 1.62, .34, "#dfe9e0");
         mesh.box(edge, floor, checkpointZ, .17, .19, .37, frame);
@@ -696,7 +707,20 @@ const airport = (() => {
     return {truck, roller};
   }
 
-  function traveler(tint, skin, stride = 0) {
+  const carryOnOffset = [.22, .02, -.12];
+
+  function carryOn(mesh, tint, x = 0, y = 0, z = 0) {
+    return mesh.box(x, y, z, .24, .26, .27, tint).box(x, y + .26, z, .10, .042, .055, ink);
+  }
+
+  function carryOnPosition(person) {
+    const [x, y, z] = person.position;
+    const [side, height, behind] = carryOnOffset;
+    const c = Math.cos(person.angle), s = Math.sin(person.angle);
+    return [x + side * c + behind * s, y + height, z - side * s + behind * c];
+  }
+
+  function traveler(tint, skin, stride = 0, withBag = true) {
     const mesh = new Mesh();
     mesh.ring(0, -.014, 0, .22, .22, .019, "#a8b2a9", 6);
     mesh.box(-.081, Math.max(0, stride) * .27, stride, .109, .31, .137, "#475458");
@@ -704,7 +728,7 @@ const airport = (() => {
     mesh.ring(0, .26, 0, .154, .205, .31, tint, 6);
     mesh.ring(0, .57, .013, .113, .111, .14, skin, 8);
     mesh.ring(0, .69, .005, .11, .08, .058, "#4d5146", 7);
-    mesh.box(.22, .02, -.12, .19, .235, .193, tint);
+    if (withBag) carryOn(mesh, tint, ...carryOnOffset);
     return mesh;
   }
 
@@ -718,7 +742,7 @@ const airport = (() => {
     mesh.ring(0, .326, -.044, .15, .185, .191, tint, 6);
     mesh.ring(0, .516, -.03, .113, .111, .119, skin, 8);
     mesh.ring(0, .627, -.038, .11, .08, .047, "#4d5146", 7);
-    mesh.box(.27, .01, -.17, .19, .23, .19, tint);
+    carryOn(mesh, tint, .27, .01, -.17);
     return mesh;
   }
 
@@ -728,17 +752,42 @@ const airport = (() => {
     security: securityQueue
   };
 
-  function passengerActors(outfits, occupancy, claimedLuggage) {
+  function drawSecurityBag(moving, tray, mesh, person, now) {
+    const {from, beltX, startAt, placedAt, scannedAt, pickupAt} = person.securityBag;
+    const {surfaceY, entryZ, exitZ} = securityBelt;
+    const trayHeight = .05;
+    const loading = now < placedAt;
+    const pickingUp = now >= pickupAt - .22;
+    const progress = loading ? (now - startAt) / (placedAt - startAt)
+      : pickingUp ? Math.min(1, (now - pickupAt + .22) / .22)
+        : Math.min(1, (now - placedAt) / (scannedAt - placedAt));
+    let position;
+    if (loading || pickingUp) {
+      const start = loading ? from : [beltX, surfaceY + trayHeight, exitZ];
+      const end = loading ? [beltX, surfaceY + trayHeight, entryZ] : carryOnPosition(person);
+      position = start.map((value, i) => value + (end[i] - value) * progress);
+      position[1] += .12 * Math.sin(Math.PI * progress);
+    } else {
+      position = [beltX, surfaceY + trayHeight, entryZ + (exitZ - entryZ) * progress];
+    }
+    const [x, y, z] = position;
+    if (!loading && !pickingUp) moving.push({mesh: tray, x, y: surfaceY, z, castShadow: false});
+    moving.push({mesh, x, y, z, angle: loading || pickingUp ? person.angle : Math.PI, castShadow: false});
+  }
+
+  function passengerActors(outfits, occupancy, claimedLuggage, securityTray, now) {
     const moving = [];
     for (const {person, flight} of occupancy.visible) {
       const style = person.index * 5 + flight.airline * 3;
       const outfit = outfits[style % outfits.length];
+      const walking = person.securityBag ? outfit.screening : outfit;
       const phase = person.distance / .72 % 1;
       const mesh = person.seated ? outfit.seated
-        : person.moving ? outfit.steps[Math.floor(phase * outfit.steps.length)] : outfit.idle;
+        : person.moving ? walking.steps[Math.floor(phase * walking.steps.length)] : walking.idle;
       const [x, y, z] = person.position;
       const pose = {x, y, z, angle: person.angle, castShadow: false};
       moving.push({mesh, ...pose});
+      if (person.securityBag) drawSecurityBag(moving, securityTray, outfit.carryOn, person, now);
       if (person.claimedBag !== undefined) moving.push({mesh: claimedLuggage[person.claimedBag], ...pose});
     }
     return moving;
@@ -769,17 +818,19 @@ const airport = (() => {
     const outfits = ["#b66e5e", "#4b807e", "#c9a354", "#ece1ce", "#556e89", "#81936c", "#906d81"]
       .map((tint, i) => {
         const skin = ["#e5b896", "#bb8462", "#d19d7c", "#99684f"][i % 4];
-        return {idle: traveler(tint, skin), seated: seatedTraveler(tint, skin), steps: Array.from({length: 8}, (_, phase) =>
-          traveler(tint, skin, Math.sin(phase * Math.PI / 4) * .15))};
+        const walking = withBag => ({idle: traveler(tint, skin, 0, withBag), steps: Array.from({length: 8}, (_, phase) =>
+          traveler(tint, skin, Math.sin(phase * Math.PI / 4) * .15, withBag))});
+        return {...walking(true), screening: walking(false), seated: seatedTraveler(tint, skin), carryOn: carryOn(new Mesh(), tint)};
       });
     const highlight = new Mesh().path([[-10.7, 5.45], [-10.7, -11.3], [-8.8, -15],
       [8.8, -15], [10.7, -11.3], [10.7, 5.45]], .23, .05, "#b6e0b3");
     const securityHighlight = new Mesh().ring(0, .036, 0, .31, .31, .018, "#89c995", 10);
+    const securityTray = new Mesh().box(0, 0, 0, .62, .05, .56, "#b2c9c3");
     const luggage = baggageColors.map(suitcase);
-    return {fixed: [...fixed, ...fleet], traffic, outfits, highlight, securityHighlight, luggage,
+    return {fixed: [...fixed, ...fleet], traffic, outfits, highlight, securityHighlight, securityTray, luggage,
       claimedLuggage: baggageColors.map(claimedSuitcase), baggageLoader: baggageLoader(), baggageTrain: baggageTrain()};
   }
 
-  return {gates, aircraft, scene, passengerActors, terminalPaths, floor, runwayZ, taxiwayZ, luggageFromDesk, luggageToAircraft,
+  return {gates, aircraft, scene, passengerActors, carryOnPosition, terminalPaths, floor, runwayZ, taxiwayZ, luggageFromDesk, luggageToAircraft,
     baggageClaim, baggageColors};
 })();

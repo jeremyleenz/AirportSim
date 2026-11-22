@@ -1295,7 +1295,7 @@
       const x = ((vehicle.offset + carTravel) % 110 - 55) * direction;
       moving.push({...vehicle, x});
     }
-    const people = airport.passengerActors(scene.outfits, occupancy, scene.claimedLuggage);
+    const people = airport.passengerActors(scene.outfits, occupancy, scene.claimedLuggage, scene.securityTray, state.now);
     for (const {person, flight} of occupancy.security) {
       if (flight.id !== state.selected) continue;
       const [x, y, z] = person.position;
