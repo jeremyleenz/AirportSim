@@ -2,11 +2,12 @@
 
 const airportLayouts = (() => {
   const regional = {
-    airfield: {runwayZ: -46, taxiwayZ: -23.2, standZ: -4.75},
-    terminal: {floor: .78, halfWidth: 37.95, back: 8.18, front: 28.91, cafeBoundaryX: -13.1, cafeDoorX: -14.48},
+    airfield: {runwayZ: -46, taxiwayZ: -23.2, standZ: -4.75, apronLeft: -42.5, apronRight: 42.5},
+    terminal: {floor: .78, left: -37.95, right: 37.95, back: 8.18, front: 28.91, cafeBoundaryX: -13.1, cafeDoorX: -14.48},
     gates: [{id: "A01", x: -25}, {id: "A02", x: 0}, {id: "A03", x: 25}],
     checkIn: {
-      front: 22.14, width: 4.95, deskZ: 21.25, sortingZ: 20.14, transfer: [39.2, .22, 6.15],
+      front: 22.14, width: 4.95, deskZ: 21.25, sortingZ: 20.14, beltDescent: [15.6, 8.1],
+      transfer: [39.2, .22, 6.15],
       banks: [
         {id: "check-in-1", x: 18, deskOffsets: [-2.2, 1.23]},
         {id: "check-in-2", x: 25.2, deskOffsets: [-2.54, .89]},
@@ -19,7 +20,9 @@ const airportLayouts = (() => {
       banks: [{id: "security-1", x: -7.2}, {id: "security-2", x: -.7}, {id: "security-3", x: 5.8}]
     },
     baggageClaim: {
-      left: -52.4, doorZ: 17.7, doorWidth: 2.5, exitX: -39.8, exitWidth: 1.65,
+      side: "west", outerX: -52.4, doorZ: 17.7, doorWidth: 2.5, exitX: -39.8, exitWidth: 1.65,
+      benchRows: [{z: 15.32, direction: 1}, {z: 21.67, direction: -1}],
+      standingRows: [16.22, 16.77, 18.6, 19.14, 19.68, 20.22],
       carousels: [
         {id: "carousel-1", number: 1, x: -50.6, z: 25.05},
         {id: "carousel-2", number: 2, x: -50.6, z: 12.35}
@@ -32,10 +35,28 @@ const airportLayouts = (() => {
   };
   const starter = {
     ...regional,
+    airfield: {...regional.airfield, apronRight: 26.5},
+    terminal: {...regional.terminal, right: 12.75},
     gates: regional.gates.slice(0, 2),
-    checkIn: {...regional.checkIn, banks: regional.checkIn.banks.slice(0, 2).map(bank => ({...bank, deskOffsets: [0]}))},
+    checkIn: {
+      ...regional.checkIn,
+      width: 4.5,
+      beltDescent: [19.75, 18.45],
+      transfer: [13.65, .22, 6.15],
+      banks: [{id: "check-in-1", x: 4.35, deskOffsets: [0]}, {id: "check-in-2", x: 9.8, deskOffsets: [0]}]
+    },
     security: {...regional.security, banks: regional.security.banks.slice(0, 2)},
-    baggageClaim: {...regional.baggageClaim, carousels: regional.baggageClaim.carousels.slice(0, 1)}
+    baggageClaim: {
+      ...regional.baggageClaim,
+      side: "east", outerX: 25.05, exitX: 14.1,
+      benchRows: [{z: 24.35, direction: 1}, {z: 26.6, direction: -1}],
+      standingRows: [15.45, 15.9, 16.4, 22.35, 22.8, 23.25],
+      carousels: [{...regional.baggageClaim.carousels[0], x: 15.35, z: 19.3}]
+    },
+    restrooms: {id: "concourse-restrooms", x: 19, frontZ: 11.42, roomSize: 2.85, roomCount: 4,
+      aisleX: 11.2, approachZ: 17.7, doorZ: 12.7, doorWidth: 1.55, dividerZ: 14.8},
+    sharedBenches: regional.sharedBenches.map(bench =>
+      bench.x > 0 ? {...bench, x: -12.5} : {...bench, x: -36, aisleX: -34.42})
   };
   return {regional, starter};
 })();

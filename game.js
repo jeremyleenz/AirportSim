@@ -235,10 +235,11 @@
     createLabel("ARRIVALS EXIT", airport.terminalPaths.airsideExit.x, 1.2, airport.terminalPaths.airsideExit.z + 3.45),
     createLabel("BAGGAGE CLAIM", ...airport.baggageClaim.label, "baggageClaim"),
     createLabel("CAFÉ", -26, 1.84, 19.05, "cafe"),
-    createLabel("SHARED SEATS", -12.5, 1, 16.55, "sharedSeats"),
+    createLabel("SHARED SEATS", airport.terminalPaths.sharedSeats[1].position[0], 1, 16.55, "sharedSeats"),
+    ...(airport.terminalPaths.restroomLabel ? [createLabel("TOILETS", ...airport.terminalPaths.restroomLabel)] : []),
     createLabel("SECURITY", bankCenter("security"), 2.75, airport.terminalPaths.security.exitZ, "security"),
     createLabel("CHECK-IN", bankCenter("checkIn"), 4.6, airport.terminalPaths.checkIn.deskZ, "checkIn"),
-    createLabel("DEPARTURES", 13.3, 1.65, 16.9, "concourse"),
+    createLabel("DEPARTURES", 1.7, 1.65, 15.55, "concourse"),
     createLabel("RWY 09 / 27", -22, .05, runwayZ - 9.4)
   ] : [];
   function bankCenter(type) {
@@ -1526,21 +1527,23 @@
     return labels;
   }
 
-  function placeMapButtons(labels) {
+  function placeMapLabels(labels) {
     const gap = 6;
     const {width, height} = renderer.view;
     const occupied = mapOverlays.map(element => ({
       left: element.offsetLeft, top: element.offsetTop,
       right: element.offsetLeft + element.offsetWidth, bottom: element.offsetTop + element.offsetHeight
     }));
-    const buttons = labels.filter(({element, decorative}) => !element.hidden && !decorative).map(({element, left, top}) => {
-      const w = element.offsetWidth, h = element.offsetHeight;
-      return {element, x: left - w / 2, y: top - (element.classList.contains("map-gate") ? h : h / 2), w, h};
-    });
-    for (const {element, x, y, w, h} of buttons) {
+    const visible = labels.filter(({element}) => !element.hidden)
+      .sort((a, b) => Number(Boolean(a.decorative)) - Number(Boolean(b.decorative)))
+      .map(({element, left, top, decorative}) => {
+        const w = element.offsetWidth, h = element.offsetHeight;
+        return {element, x: left - w / 2, y: top - (element.classList.contains("map-gate") ? h : h / 2), w, h, decorative};
+      });
+    for (const {element, x, y, w, h, decorative} of visible) {
       // Try the anchor and the edges of occupied space, closest to the anchor first.
-      const xs = [x, ...occupied.flatMap(box => [box.left - w - gap, box.right + gap])];
-      const ys = [y, ...occupied.flatMap(box => [box.top - h - gap, box.bottom + gap])];
+      const xs = decorative ? [x] : [x, ...occupied.flatMap(box => [box.left - w - gap, box.right + gap])];
+      const ys = decorative ? [y] : [y, ...occupied.flatMap(box => [box.top - h - gap, box.bottom + gap])];
       let best = null;
       let distance = Infinity;
       for (const candidateX of xs) {
@@ -1576,12 +1579,7 @@
         (element === holdingPin && (shiftComplete() || !holding || (!mobile && (left < 90 || left > width - 90))));
       return {element, decorative, left, top};
     }).concat(movingLabels);
-    for (const {element, decorative, left, top} of labels) {
-      if (mobile && !decorative) continue;
-      element.style.left = left + "px";
-      element.style.top = top + "px";
-    }
-    if (mobile) placeMapButtons(labels);
+    placeMapLabels(labels);
   }
 
   function draw() {
@@ -1727,7 +1725,7 @@
     return mobileLayout.matches ? 5.2 : 2.7;
   }
   function mapFitZoom() {
-    return mobileLayout.matches && window.innerHeight > window.innerWidth ? 1.45 : 1;
+    return mobileLayout.matches && window.innerHeight > window.innerWidth ? 1.82 : 1;
   }
   function fit() {
     if (renderer) Object.assign(renderer.view, {zoom: fittedZoom, x: 0, y: 0});

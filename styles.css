@@ -62,7 +62,7 @@ button, h1, h2, h3, p { margin: 0; }
 .map-heading i, .run-label::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; content: ""; }
 .map-labels { position: absolute; inset: 0; pointer-events: none; }
 .map-gate, .map-shortcut { position: absolute; pointer-events: auto; display: grid; place-items: center; border: 0; border-radius: 6px; padding: 0; background: transparent; }
-.map-gate { translate: -50% -100%; color: var(--light); font: 700 .84rem var(--mono); }
+.map-gate { color: var(--light); font: 700 .84rem var(--mono); }
 .map-gate .map-chip { display: flex; gap: 6px; align-items: center; background: #14272d; border: 1px solid #95b4b2; border-radius: 6px; padding: 6px 8px; box-shadow: 0 3px 8px #12292469; }
 .map-gate i { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
 .map-gate[data-state="boarding"] i, .map-gate[data-state="deplaning"] i, .map-gate[data-state="ready"] i { background: var(--mint); }
@@ -82,7 +82,7 @@ button, h1, h2, h3, p { margin: 0; }
 .holding-time { display: block; margin-top: 3px; font: 500 .73rem var(--mono); }
 .holding-time time { font-weight: 700; }
 .map-count { border-left: 1px solid currentColor; padding-left: .43em; letter-spacing: 0; opacity: .86; }
-.map-note { position: absolute; translate: -50% -50%; font: 700 .65rem var(--mono); letter-spacing: .075em; white-space: nowrap; }
+.map-note { position: absolute; font: 700 .65rem var(--mono); letter-spacing: .075em; white-space: nowrap; }
 .map-note:not(.map-shortcut), .map-shortcut .map-chip { padding: 3px 6px; border: 1px solid; border-radius: 4px; }
 .map-note:not(.map-shortcut) { color: #2c4441; background: #edf3e8ed; border-color: #8ea89d; }
 .map-note .map-count { display: inline-block; margin-left: .48em; }
@@ -364,7 +364,7 @@ button.flight-alert:hover { background: #584933; }
   .map-hint { line-height: 1.35; }
   .desktop-zoom-hint { display: none; }
   .touch-zoom-hint { display: inline; }
-  .map-labels > button { translate: none; min-width: 44px; min-height: 44px; }
+  .map-labels > button { min-width: 44px; min-height: 44px; }
   .map-gate { font-size: .73rem; }
   .map-gate .map-chip { gap: 4px; padding: 3px 5px; }
   .map-gate i { width: 4px; height: 4px; }
