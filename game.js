@@ -27,6 +27,7 @@
   const latestPassengerArrival = 40;
   const lateNoticeMinutes = 12;
   const takeoffWarningMinutes = 10;
+  const pushbackWarningMinutes = 5;
   const departureGraceMinutes = 5;
   const finePerLateMinute = 25;
   const taxiSpeed = 4;
@@ -508,36 +509,66 @@
     return count + (count === 1 ? " late passenger" : " late passengers");
   }
 
-  function paintLateAlert() {
-    const alert = $("#late-flight-alert");
-    const flights = shiftComplete() ? [] : state.flights.filter(notifiedLatePassengers);
-    const flight = flights.at(-1);
+  function paintFlightAlert(id, flight, message, additional) {
+    const alert = $(id);
     alert.hidden = !flight;
     if (!flight) {
       delete alert.dataset.flight;
-      return;
+      return false;
     }
-    const message = flight.id + " · " + latePassengerLabel(notifiedLatePassengers(flight));
-    const label = flights.length > 1 ? message + " · +" + (flights.length - 1) + " flights" : message;
+    const label = additional ? message + " · +" + additional + (additional === 1 ? " flight" : " flights") : message;
     if (alert.textContent !== label) alert.textContent = label;
-    if (alert.dataset.flight !== flight.id) announce(message + ". Open the flight to review boarding.");
+    const changed = alert.dataset.flight !== flight.id;
     alert.dataset.flight = flight.id;
+    return changed;
   }
 
-  function paintBoardingAlert() {
-    const alert = $("#boarding-open-alert");
-    const flights = shiftComplete() ? [] : state.flights.filter(boardingOpen);
-    const flight = flights[0];
-    alert.hidden = !flight;
-    if (!flight) {
-      delete alert.dataset.flight;
-      return;
+  function paintLateAlert(complete) {
+    const flights = complete ? [] : state.flights.filter(notifiedLatePassengers);
+    const flight = flights.at(-1);
+    const message = flight && flight.id + " · " + latePassengerLabel(notifiedLatePassengers(flight));
+    if (paintFlightAlert("#late-flight-alert", flight, message, flights.length - 1)) {
+      announce(message + ". Open the flight to review boarding.");
     }
-    const label = "Boarding open · " + flight.id + " · " + gates[flight.gate].name;
-    const summary = flights.length > 1 ? label + " · +" + (flights.length - 1) + " flights" : label;
-    if (alert.textContent !== summary) alert.textContent = summary;
-    if (alert.dataset.flight !== flight.id) announce(flight.id + " can start boarding at " + gates[flight.gate].name + ".");
-    alert.dataset.flight = flight.id;
+  }
+
+  function paintBoardingAlert(complete) {
+    const flights = complete ? [] : state.flights.filter(boardingOpen);
+    const flight = flights[0];
+    const label = flight && "Boarding open · " + flight.id + " · " + gates[flight.gate].name;
+    if (paintFlightAlert("#boarding-open-alert", flight, label, flights.length - 1)) {
+      announce(flight.id + " can start boarding at " + gates[flight.gate].name + ".");
+    }
+  }
+
+  function paintArrivalAlert(complete) {
+    const arrivals = complete ? [] : state.flights.filter(flight => flight.stage === "holding")
+      .sort((a, b) => a.arrivalAt - b.arrivalAt);
+    const gatesFull = arrivals.length > 0 && availableGate() < 0;
+    const actionable = gatesFull ? [] : arrivals.filter(flight => flight.waitedForGate);
+    const status = $("#arrival-holding-status");
+    status.hidden = !arrivals.length || actionable.length > 0;
+    status.toggleAttribute("data-gates-full", gatesFull);
+    if (!status.hidden) {
+      const count = arrivals.length + (arrivals.length === 1 ? " arrival holding" : " arrivals holding");
+      const label = gatesFull ? count + " · Gates full" : count;
+      if (status.textContent !== label) status.textContent = label;
+    }
+    const flight = actionable[0];
+    paintFlightAlert("#arrival-alert", flight, flight && flight.id + " · Choose a gate", actionable.length - 1);
+  }
+
+  function onTimePushbackAt(flight) {
+    return flight.takeoffAt - outboundRoutes[flight.gate].liftoff;
+  }
+
+  function paintDepartureAlert(complete) {
+    const warningHorizon = state.now + pushbackWarningMinutes * secondsPerMinute;
+    const flights = complete || state.nextDeparture ? [] : state.flights.filter(flight =>
+      flight.stage === "ready" && onTimePushbackAt(flight) <= warningHorizon && fitsCurfew(outboundMovement(flight)))
+      .sort((a, b) => onTimePushbackAt(a) - onTimePushbackAt(b));
+    const flight = flights[0];
+    paintFlightAlert("#departure-alert", flight, flight && "Ready for departure · " + flight.id, flights.length - 1);
   }
 
   function paintFlights() {
@@ -854,8 +885,10 @@
     $("#flight-view").hidden = !flightsOpen || complete;
     paintFlights();
     paintDetail();
-    paintBoardingAlert();
-    paintLateAlert();
+    paintArrivalAlert(complete);
+    paintBoardingAlert(complete);
+    paintDepartureAlert(complete);
+    paintLateAlert(complete);
     if (scheduleOpen) paintSchedule();
     if (terminalOpen) {
       $("#all-staffing").hidden = state.staffingFocus === null;
@@ -1205,12 +1238,14 @@
       else if (canStartTaxi(movement)) startTaxi(movement);
     }
     releaseTaxiIn();
+    const gatesFull = availableGate() < 0;
     for (const flight of state.flights) {
       if (flight.stage === "scheduled" && state.now >= flight.arrivalAt) {
         flight.stage = "holding";
         occupancyDirty = true;
         announce(flight.id + " awaiting a gate assignment.");
       }
+      if (gatesFull && flight.stage === "holding") flight.waitedForGate = true;
     }
   }
 
