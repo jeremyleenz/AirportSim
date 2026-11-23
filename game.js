@@ -180,7 +180,6 @@
   let state = savedOpening
     ? createShift(savedOpening.day, savedOpening.overnightAircraft, savedOpening.cash, savedOpening.seed)
     : createShift(1, [{gate: 0, aircraft: {airline: 0}}]);
-  if (savedOpening) state.paused = true;
   let nextOpening = null;
   let openingSaved = false;
   let mapAction = null;
@@ -2107,7 +2106,7 @@
   // Updating the scene once on paused commands keeps gate highlights and the checkpoint in sync.
   document.addEventListener("click", () => { requestDraw = true; });
   $("#objective-curfew").textContent = "Operating day · Curfew " + formatTime(curfewMinutes);
-  if (savedOpening) announce(formatDay(savedOpening.day) + " restored at opening. Resume when ready.");
+  if (savedOpening) announce(formatDay(savedOpening.day) + " restored at opening.");
   fit();
   paint();
   requestAnimationFrame(frame);

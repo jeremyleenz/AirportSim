@@ -14,7 +14,7 @@ In-game prompts guide players through gate assignment and dispatch as those acti
 
 The closing treasury carries into the next day after staffing, handling costs, and fines. The shift report shows the opening and closing balances and the time spent waiting for a free baggage carousel. At airports with two carousels, it also shows time spent waiting for the player to assign an available carousel.
 
-At the end of each shift, the game saves the next day, treasury, timetable, and overnight aircraft in the browser. Reopening resumes at the saved morning, paused.
+At the end of each shift, the game saves the next day, treasury, timetable, and overnight aircraft in the browser. Reopening starts the simulation at the saved morning.
 
 The base schedule stays available after a loss so players can earn money back through operations.
 
