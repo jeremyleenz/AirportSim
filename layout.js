@@ -69,17 +69,17 @@ const airportLayouts = (() => {
   const carouselX = starter.baggageClaim.carousels[0].x;
   const upgrades = {
     carousel: {
-      name: "Second baggage carousel", price: 62000, description: "Handle two baggage claims at once.",
+      name: "Second baggage carousel", price: 115000, description: "Handle two baggage claims at once.",
       site: {id: "near-exit", name: "Near arrivals exit", x: carouselX, z: 25.05},
       legacySite: {id: "near-belt", name: "Near Carousel 1", x: carouselX, z: 24.35}
     },
     security: {
-      name: "Third security lane", price: 78000, description: "Add a screening lane you can staff when queues build.",
+      name: "Third security lane", price: 120000, description: "Add a screening lane you can staff when queues build.",
       site: {id: "west", name: "Beside the café", bankXs: [middleLaneX, rightLaneX, leftLaneX]},
       legacySite: {id: "middle", name: "Between the lanes", bankXs: [leftLaneX, rightLaneX, middleLaneX]}
     },
     checkIn: {
-      name: "Third check-in desk", price: 56000, description: "Add a desk with its own queue and baggage belt.",
+      name: "Third check-in desk", price: 110000, description: "Add a desk with its own queue and baggage belt.",
       site: {id: "middle", name: "Between the desks", bankXs: [leftDeskX, rightDeskX, middleDeskX],
         note: "Desk 2 shifts toward baggage claim to make room."},
       legacySite: {id: "near-security", name: "Near security", bankXs: [middleDeskX, rightDeskX, leftDeskX]}

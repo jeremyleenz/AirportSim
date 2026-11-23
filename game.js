@@ -5,7 +5,7 @@
   const mobileLayout = window.matchMedia("(max-width: 760px), (pointer: coarse) and (max-height: 500px)");
   const game = $(".game");
   const currency = new Intl.NumberFormat("en-US", {style: "currency", currency: "USD", maximumFractionDigits: 0});
-  const startingCash = 124500;
+  const startingCash = 60000;
   const progressKey = "airport-ops-opening-v1";
   const staffingRates = {checkIn: 10, security: 15};
   const counterNames = {checkIn: "Check-in station", security: "Security lane"};
