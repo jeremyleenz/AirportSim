@@ -121,7 +121,7 @@
     return {day, cash: startingCash, now: 0, playTime: 0, speed: 1, paused: false, closedAtCurfew: false, missedPassengers: 0, delayMinutes: 0,
       staffingCosts: {checkIn: 0, security: 0},
       timetable, departureCount, flights: timetable.map(makeFlight), results: [], selected: overnightAircraft.length ? timetable[0].id : null,
-      view: "flights", staffingFocus: null,
+      view: "flights", terminalFocus: null,
       movements: new Map(), taxiQueue: [], nextDeparture: null, luggage: baggage.create(baggageWaitGraceMinutes * secondsPerMinute)};
   }
 
@@ -254,7 +254,7 @@
     if (arrival && stand !== null && !flightAtGate(stand)) arrival.preferredGate = stand;
     state.selected = id;
     state.view = "flights";
-    state.staffingFocus = null;
+    state.terminalFocus = null;
     paint();
     requestDraw = true;
   }
@@ -282,7 +282,19 @@
   function revealFlight(focus = true) {
     const entry = flightElements.get(state.selected);
     (entry?.card ?? flightDetail).scrollIntoView({block: "nearest"});
-    if (focus) (entry?.button ?? $("#stand-title")).focus({preventScroll: true});
+    if (!focus) return;
+    if (mobileLayout.matches && entry) {
+      const gateChoice = gatePicker.hidden ? null : gatePicker.querySelector("input:enabled");
+      const action = gateChoice ?? flightDetail.querySelector("button:not([hidden]):enabled");
+      if (action) {
+        // Keep the confirmation and gate choices in view together when there is room.
+        if (gateChoice) $("#flight-action").scrollIntoView({block: "nearest"});
+        (gateChoice ? gatePicker : action).scrollIntoView({block: "nearest"});
+        action.focus({preventScroll: true});
+        return;
+      }
+    }
+    (entry?.button ?? $("#stand-title")).focus({preventScroll: true});
   }
 
   function selectFromMap(id, stand = null) {
@@ -292,11 +304,11 @@
     revealFlight(mobileLayout.matches);
   }
 
-  function notifyTab(view, staffingFocus = null) {
+  function notifyTab(view, terminalFocus = null) {
     mapAction = null;
-    if (state.view !== view || state.staffingFocus !== staffingFocus) $(".panel-body").scrollTop = 0;
+    if (state.view !== view || state.terminalFocus !== terminalFocus) $(".panel-body").scrollTop = 0;
     state.view = view;
-    state.staffingFocus = staffingFocus;
+    state.terminalFocus = terminalFocus;
     paint();
   }
 
@@ -304,15 +316,20 @@
     notifyTab("terminal", type);
     openOperationsFromMap("staffing", type);
     $("#terminal-view").scrollIntoView({block: "start", inline: "nearest"});
-    $("#staffing-" + type + " h3").focus({preventScroll: true});
+    const panel = $("#staffing-" + type);
+    const action = mobileLayout.matches ? panel.querySelector("button:enabled") : null;
+    if (action) action.parentElement.scrollIntoView({block: "nearest"});
+    (action ?? panel.querySelector("h3")).focus({preventScroll: true});
   }
 
   function revealBaggageClaim(fromMap = false) {
-    notifyTab("terminal");
+    notifyTab("terminal", "claim");
     if (fromMap) openOperationsFromMap("claim");
     else if (mobileLayout.matches) showMobileView("operations");
     $("#baggage-claim").scrollIntoView({block: "start", inline: "nearest"});
-    $("#baggage-claim-title").focus({preventScroll: true});
+    const choice = mobileLayout.matches ? $("#claim-flights button:enabled") : null;
+    if (choice) choice.parentElement.scrollIntoView({block: "nearest"});
+    (choice ?? $("#baggage-claim-title")).focus({preventScroll: true});
   }
 
   function flightAtGate(gate) {
@@ -865,7 +882,7 @@
 
   function paintStaffing(type) {
     const panel = $("#staffing-" + type);
-    panel.hidden = state.staffingFocus !== null && state.staffingFocus !== type;
+    panel.hidden = state.terminalFocus !== null && state.terminalFocus !== type;
     const banks = flow[type];
     const indicators = panel.querySelector(".staffing-lanes").children;
     banks.forEach((bank, index) => {
@@ -963,9 +980,11 @@
     const terminalOpen = state.view === "terminal";
     const scheduleOpen = state.view === "schedule";
     const flightsOpen = state.view === "flights";
+    const claimOpen = terminalOpen && state.terminalFocus === "claim";
     const claimBoard = baggage.claimBoard(state.luggage);
     const chooseClaim = !complete && claimBoard.available > 0 && claimBoard.waiting.length > 0;
-    $("#claim-alert").hidden = !chooseClaim;
+    $("#claim-alert").hidden = !chooseClaim || claimOpen;
+    $(".objective").hidden = !flightsOpen && !complete;
     $("#terminal-tab").setAttribute("aria-pressed", String(terminalOpen));
     $("#schedule-tab").setAttribute("aria-pressed", String(scheduleOpen));
     $("#flights-tab").setAttribute("aria-pressed", String(flightsOpen));
@@ -980,7 +999,11 @@
     paintLateAlert(complete);
     if (scheduleOpen) paintSchedule();
     if (terminalOpen) {
-      $("#all-staffing").hidden = state.staffingFocus === null;
+      $("#terminal-title").textContent = claimOpen ? "Terminal" : "Staffing";
+      $("#terminal-overview").hidden = claimOpen;
+      $("#all-staffing").hidden = state.terminalFocus === null;
+      $("#show-baggage").hidden = claimOpen;
+      $("#show-baggage").toggleAttribute("data-action-needed", chooseClaim);
       $("#staffing-hourly").textContent = formatHourlyRate(complete ? 0 : activeStaffingRate("checkIn") + activeStaffingRate("security"));
       $("#staffing-spent").textContent = currency.format(staffingSpent);
       $("#check-in-count").textContent = occupancy.checkIn.length - occupancy.processing.checkIn;
@@ -1423,6 +1446,7 @@
 
   const aircraftSelection = $("#aircraft-selection");
   const aircraftDelayPins = new Map();
+  const mapOverlays = [$(".map-heading"), $(".map-controls")];
   function showAircraftSelection(aircraft) {
     if (!aircraft) {
       aircraftSelection.hidden = true;
@@ -1441,6 +1465,7 @@
 
   function drawAircraftDelays(aircraft) {
     const active = new Set();
+    const labels = [];
     for (const object of aircraft) {
       const {flight} = object;
       const movement = state.movements.get(flight);
@@ -1465,14 +1490,72 @@
       const {left, right, top} = renderer.projectBounds(object);
       const x = (left + right) / 2;
       pin.hidden = x < 18 || x > renderer.view.width - 18 || top < 30 || top > renderer.view.height;
-      pin.style.left = Math.max(70, Math.min(renderer.view.width - 70, x)) + "px";
-      pin.style.top = (top - 6) + "px";
+      labels.push({element: pin, left: Math.max(70, Math.min(renderer.view.width - 70, x)), top: top - 6});
     }
     for (const [id, pin] of aircraftDelayPins) {
       if (active.has(id)) continue;
       pin.remove();
       aircraftDelayPins.delete(id);
     }
+    return labels;
+  }
+
+  function placeMapButtons(labels) {
+    const gap = 6;
+    const {width, height} = renderer.view;
+    const occupied = mapOverlays.map(element => ({
+      left: element.offsetLeft, top: element.offsetTop,
+      right: element.offsetLeft + element.offsetWidth, bottom: element.offsetTop + element.offsetHeight
+    }));
+    const buttons = labels.filter(({element, decorative}) => !element.hidden && !decorative).map(({element, left, top}) => {
+      const w = element.offsetWidth, h = element.offsetHeight;
+      return {element, x: left - w / 2, y: top - (element.classList.contains("map-gate") ? h : h / 2), w, h};
+    });
+    for (const {element, x, y, w, h} of buttons) {
+      // Try the anchor and the edges of occupied space, closest to the anchor first.
+      const xs = [x, ...occupied.flatMap(box => [box.left - w - gap, box.right + gap])];
+      const ys = [y, ...occupied.flatMap(box => [box.top - h - gap, box.bottom + gap])];
+      let best = null;
+      let distance = Infinity;
+      for (const candidateX of xs) {
+        const left = Math.max(gap, Math.min(width - w - gap, candidateX));
+        for (const candidateY of ys) {
+          const top = Math.max(gap, Math.min(height - h - gap, candidateY));
+          const d = (left - x) ** 2 + (top - y) ** 2;
+          if (d >= distance || left + w > width - gap || top + h > height - gap) continue;
+          if (occupied.some(box => left < box.right + gap && left + w > box.left - gap &&
+              top < box.bottom + gap && top + h > box.top - gap)) continue;
+          best = {left, top, right: left + w, bottom: top + h};
+          distance = d;
+        }
+        if (distance === 0) break;
+      }
+      if (!best) {
+        element.hidden = true;
+        continue;
+      }
+      occupied.push(best);
+      element.style.left = best.left + "px";
+      element.style.top = best.top + "px";
+    }
+  }
+
+  function positionMapLabels(holding, movingLabels) {
+    const mobile = mobileLayout.matches;
+    const {width, height} = renderer.view;
+    const labels = [holdingPinPosition, ...mapPins, ...mapSigns].map(({x, y, z, element, decorative}) => {
+      const [left, top] = renderer.project(x, y, z);
+      element.hidden = left < 18 || top < 19 || left > width - 18 || top > height - 18 ||
+        (decorative && width < 520) ||
+        (element === holdingPin && (shiftComplete() || !holding || (!mobile && (left < 90 || left > width - 90))));
+      return {element, decorative, left, top};
+    }).concat(movingLabels);
+    for (const {element, decorative, left, top} of labels) {
+      if (mobile && !decorative) continue;
+      element.style.left = left + "px";
+      element.style.top = top + "px";
+    }
+    if (mobile) placeMapButtons(labels);
   }
 
   function draw() {
@@ -1504,15 +1587,7 @@
     const luggage = baggage.actors(state.luggage, scene.luggage, scene.baggageLoader, scene.baggageTrain, state.now);
     renderer.render([...scene.fixed, ...moving, ...people, ...luggage]);
     showAircraftSelection(selectedAircraft);
-    drawAircraftDelays(shiftComplete() ? [] : aircraft);
-    for (const {x, y, z, element, decorative} of [...mapPins, ...mapSigns, holdingPinPosition]) {
-      const [left, top] = renderer.project(x, y, z);
-      element.style.left = left + "px";
-      element.style.top = top + "px";
-      element.hidden = left < 18 || top < 19 || left > renderer.view.width - 18 || top > renderer.view.height - 18 ||
-        (decorative && renderer.view.width < 520) ||
-        (element === holdingPin && (shiftComplete() || !holding || left < 90 || left > renderer.view.width - 90));
-    }
+    positionMapLabels(holding, drawAircraftDelays(shiftComplete() ? [] : aircraft));
   }
 
   function togglePause() {
@@ -1525,6 +1600,7 @@
   $("#schedule-tab").addEventListener("click", () => notifyTab("schedule"));
   $("#terminal-tab").addEventListener("click", () => notifyTab("terminal"));
   $("#claim-alert").addEventListener("click", () => revealBaggageClaim());
+  $("#show-baggage").addEventListener("click", () => revealBaggageClaim());
   $("#claim-flights").addEventListener("click", event => {
     const button = event.target.closest("[data-claim-flight]");
     if (!button || shiftComplete()) return;
@@ -1542,7 +1618,7 @@
     notifyTab("terminal");
     $("#terminal-title").focus();
   });
-  for (const alert of $("#flight-alerts").querySelectorAll("button")) {
+  for (const alert of $("#flight-alerts").querySelectorAll('[title="Open flight"]')) {
     alert.addEventListener("click", () => {
       const id = alert.dataset.flight;
       if (!id) return;
@@ -1620,8 +1696,11 @@
     view.zoom = next;
     requestDraw = true;
   }
+  function mapFitZoom() {
+    return mobileLayout.matches && window.innerHeight > window.innerWidth ? 1.45 : 1;
+  }
   function fit() {
-    if (renderer) Object.assign(renderer.view, {zoom: 1, x: 0, y: 0});
+    if (renderer) Object.assign(renderer.view, {zoom: fittedZoom, x: 0, y: 0});
     requestDraw = true;
   }
   $("#zoom-in").addEventListener("click", () => zoom(1.22));
@@ -1723,9 +1802,16 @@
     if (event.key === "-") zoom(1 / 1.22);
     if (event.key === "0") fit();
   });
+  let fittedZoom = mapFitZoom();
   let requestDraw = true;
   let lastFrame = performance.now(), lastPaint = 0, lastDraw = 0;
-  window.addEventListener("resize", () => { requestDraw = true; });
+  window.addEventListener("resize", () => {
+    const {view} = renderer ?? {};
+    const wasFitted = view?.zoom === fittedZoom && view.x === 0 && view.y === 0;
+    fittedZoom = mapFitZoom();
+    if (wasFitted) fit();
+    requestDraw = true;
+  });
   function frame(timestamp) {
     update(Math.max(0, Math.min(.15, (timestamp - lastFrame) / 1000)));
     lastFrame = timestamp;
@@ -1744,6 +1830,7 @@
   // Updating the scene once on paused commands keeps gate highlights and the checkpoint in sync.
   document.addEventListener("click", () => { requestDraw = true; });
   $("#objective-curfew").textContent = "Operating day · Curfew " + formatTime(curfewMinutes);
+  fit();
   paint();
   requestAnimationFrame(frame);
 })();
