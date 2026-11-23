@@ -72,7 +72,15 @@ function createAirport(layout) {
   const queueRows = 9;
   const queueSpacing = .47;
   const loungeBenches = [-7.32, 1.28, 4.17, 7.06];
+  const toiletBowlOffset = .76;
+  const toiletSeatHeight = .30;
   const {sharedBenches, cafeTables, restrooms} = layout;
+  // Run the line along the lobby edge before taking it through the doorway.
+  const restroomQueuePath = restrooms && [
+    [claimDoorX + 4.9, floor, restrooms.doorZ + .92], [claimDoorX + .66, floor, restrooms.doorZ + .92],
+    [claimDoorX + .66, floor, restrooms.doorZ + .39], [restrooms.aisleX - .65, floor, restrooms.doorZ + .39],
+    [restrooms.aisleX - .65, floor, restrooms.dividerZ + .65]
+  ];
   const restroomStalls = Array.from({length: restrooms?.roomCount ?? 0}, (_, index) => {
     const {x, frontZ, roomSize, roomCount, aisleX, approachZ, doorZ} = restrooms;
     const left = (index - roomCount / 2) * roomSize;
@@ -80,6 +88,7 @@ function createAirport(layout) {
     const stallX = x + doorX;
     return {left, right: left + roomSize, doorX,
       position: [stallX, floor, frontZ - roomSize + 1.54],
+      seatedPosition: [stallX, floor + toiletSeatHeight - .29, frontZ - roomSize + toiletBowlOffset + .13],
       approach: [aisleX, floor, approachZ], entryPath: [
         [aisleX, floor, doorZ], [stallX, floor, doorZ], [stallX, floor, frontZ]
       ]};
@@ -735,8 +744,10 @@ function createAirport(layout) {
       mesh.ring(sinkX, floor + .733, sinkZ, .23, .23, .016, "#9bb9b5", 10);
       mesh.box(sinkX + .25, floor + .734, sinkZ, .09, .15, .08, "#7b9593");
       mesh.box(doorX, floor, back + .29, .62, .61, .42, white);
-      mesh.ring(doorX, floor, back + .76, .23, .32, .36, white, 10);
-      mesh.ring(doorX, floor + .363, back + .76, .225, .225, .024, "#a3bebe", 10);
+      const bowlZ = back + toiletBowlOffset;
+      const bowlHeight = toiletSeatHeight - .024;
+      mesh.ring(doorX, floor, bowlZ, .23, .32, bowlHeight, white, 10);
+      mesh.ring(doorX, floor + bowlHeight, bowlZ, .225, .225, .024, "#a3bebe", 10);
     }
     return mesh;
   }
@@ -839,23 +850,24 @@ function createAirport(layout) {
     return mesh;
   }
 
-  function seatedTraveler(tint, skin) {
+  function seatedTraveler(tint, skin, bend = 1, withBag = true) {
     const mesh = new Mesh();
+    const blend = (from, to) => from + (to - from) * bend;
     for (const x of [-.085, .085]) {
-      mesh.box(x, .29, .107, .12, .10, .29, "#475458");
-      mesh.box(x, .025, .244, .10, .32, .13, "#475458");
-      mesh.box(x, .018, .285, .12, .07, .18, "#3f4b50");
+      mesh.box(x, blend(.23, .29), .107 * bend, .12, .10, blend(.137, .29), "#475458");
+      mesh.box(x, .025, .244 * bend, .10, .32, .13, "#475458");
+      mesh.box(x, .018, .285 * bend, .12, .07, .18, "#3f4b50");
     }
-    mesh.ring(0, .326, -.044, .15, .185, .191, tint, 6);
-    mesh.ring(0, .516, -.03, .113, .111, .119, skin, 8);
-    mesh.ring(0, .627, -.038, .11, .08, .047, "#4d5146", 7);
-    carryOn(mesh, tint, .27, .01, -.17);
+    mesh.ring(0, blend(.26, .326), -.044 * bend, .15, .185, blend(.31, .191), tint, 6);
+    mesh.ring(0, blend(.57, .516), blend(.013, -.03), .113, .111, blend(.14, .119), skin, 8);
+    mesh.ring(0, blend(.69, .627), blend(.005, -.038), .11, .08, blend(.058, .047), "#4d5146", 7);
+    if (withBag) carryOn(mesh, tint, .27, .01, -.17);
     return mesh;
   }
 
   const terminalPaths = {
     queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats, cafeDoorX, airsideExit,
-    restroomStalls,
+    restroomStalls, restroomQueuePath,
     restroomLabel: restrooms ? [restrooms.x, floor + 2.6, restrooms.frontZ - restrooms.roomSize / 2] : null,
     concourseLeft, concourseRight,
     checkIn: checkInQueue,
@@ -885,6 +897,22 @@ function createAirport(layout) {
     moving.push({mesh, x, y, z, angle: loading || pickingUp ? person.angle : Math.PI, castShadow: false});
   }
 
+  function restroomSeatPose(outfit, person, now) {
+    const visit = person.restroomVisit;
+    if (!visit?.sits || visit.leaveAt === null || visit.leaving) return null;
+    const timeLeft = visit.leaveAt - now;
+    const elapsed = visit.duration - timeLeft;
+    const turnTime = .28;
+    const sitTime = .48;
+    const turn = Math.min(1, Math.max(0, elapsed / turnTime));
+    const progress = Math.max(0, Math.min(1, (elapsed - turnTime) / sitTime, timeLeft / sitTime));
+    const eased = progress * progress * (3 - 2 * progress);
+    const [x, y, z] = person.position.map((value, axis) => value + (visit.stall.seatedPosition[axis] - value) * eased);
+    const steps = outfit.restroomSitting;
+    const mesh = steps[Math.round(progress * (steps.length - 1))];
+    return {mesh, x, y, z, angle: Math.PI * (1 - turn), castShadow: false};
+  }
+
   function passengerActors(outfits, occupancy, claimedLuggage, securityTray, now) {
     const moving = [];
     for (const {person, flight} of occupancy.visible) {
@@ -896,7 +924,7 @@ function createAirport(layout) {
         : person.moving ? walking.steps[Math.floor(phase * walking.steps.length)] : walking.idle;
       const [x, y, z] = person.position;
       const pose = {x, y, z, angle: person.angle, castShadow: false};
-      moving.push({mesh, ...pose});
+      moving.push(restroomSeatPose(outfit, person, now) ?? {mesh, ...pose});
       if (person.securityBag) drawSecurityBag(moving, securityTray, outfit.carryOn, person, now);
       if (person.claimedBag !== undefined) moving.push({mesh: claimedLuggage[person.claimedBag], ...pose});
     }
@@ -935,7 +963,10 @@ function createAirport(layout) {
         const skin = ["#e5b896", "#bb8462", "#d19d7c", "#99684f"][i % 4];
         const walking = withBag => ({idle: traveler(tint, skin, 0, withBag), steps: Array.from({length: 8}, (_, phase) =>
           traveler(tint, skin, Math.sin(phase * Math.PI / 4) * .15, withBag))});
-        return {...walking(true), screening: walking(false), seated: seatedTraveler(tint, skin), carryOn: carryOn(new Mesh(), tint)};
+        const screening = walking(false);
+        const restroomSitting = [screening.idle, ...Array.from({length: 4}, (_, frame) =>
+          seatedTraveler(tint, skin, (frame + 1) / 4, false))];
+        return {...walking(true), screening, seated: seatedTraveler(tint, skin), restroomSitting, carryOn: carryOn(new Mesh(), tint)};
       });
     const highlight = new Mesh().path([[-10.7, 5.45], [-10.7, -11.3], [-8.8, -15],
       [8.8, -15], [10.7, -11.3], [10.7, 5.45]], .23, .05, "#b6e0b3");
