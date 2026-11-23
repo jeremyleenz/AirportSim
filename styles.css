@@ -290,6 +290,7 @@ button.flight-alert:hover { background: #584933; }
 #report-delays { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 #report-overnight-arrivals { margin-bottom: 6px; }
 #report-overnight { margin-bottom: 12px; }
+#report-baggage-waits { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .report-flights { width: 100%; margin-top: 15px; border-collapse: collapse; text-align: left; }
 .report-flights caption { padding-bottom: 8px; text-align: left; font-weight: 650; }
 .report-flights th, .report-flights td { padding: 8px 4px; border-top: 1px solid var(--line); font: .82rem var(--mono); }

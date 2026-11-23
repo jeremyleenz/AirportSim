@@ -32,8 +32,9 @@ const baggage = (() => {
       [sortingX + 1.9, 0, z], depot], 0, tugSpeed);
   });
 
-  function create() {
+  function create(claimWaitGrace = Infinity) {
     return {items: [], arrivals: [], claims: [], claimBags: [], priority: null, nextFeedAt: carousels.map(() => 0), trip: null,
+      claimWaitGrace, claimStats: {delayedPassengers: 0, fullBeltWaitSeconds: 0},
       loaders: loaderRoutes.map(() => ({docked: 0, stayUntil: 0, direction: 0, offset: 0}))};
   }
 
@@ -185,7 +186,30 @@ const baggage = (() => {
       finish: leaveDepotAt + route.at(-1).time - depotTime};
   }
 
-  function advanceClaim(animation, now) {
+  function readyForBeltAt(bag) {
+    return bag.transferPath ? bag.transferPath.at(-1).time + sortingDelay : Infinity;
+  }
+
+  function measureClaimWaits(animation, now, dt) {
+    const {claims, claimStats, claimWaitGrace} = animation;
+    const beltsFull = claims.filter(({flight}) => flight.carousel !== null).length === carousels.length;
+    for (const {flight, bags} of claims) {
+      for (const bag of bags) {
+        if (bag.claimWaitAt === undefined) continue;
+        if (!bag.longWait && now - bag.claimWaitAt > claimWaitGrace) {
+          bag.longWait = true;
+          claimStats.delayedPassengers++;
+        }
+        if (beltsFull && flight.carousel === null) {
+          const blockedSince = Math.max(now - dt, bag.claimWaitAt, readyForBeltAt(bag));
+          claimStats.fullBeltWaitSeconds += Math.max(0, now - blockedSince);
+        }
+        if (bag.claimed || bag.cancelled) delete bag.claimWaitAt;
+      }
+    }
+  }
+
+  function advanceClaim(animation, now, dt) {
     for (const bag of animation.claimBags) {
       if (!bag.feedPath || bag.claimed || bag.cancelled) continue;
       const sinceFeed = now - bag.feedPath.at(-1).time;
@@ -197,18 +221,19 @@ const baggage = (() => {
       const loop = claimLoops[bag.flight.carousel];
       bag.claimPose = poseOnPath(loop, sinceFeed % loop.at(-1).time);
     }
+    measureClaimWaits(animation, now, dt);
     const pending = bag => !bag.claimed && !bag.cancelled;
     animation.claimBags = animation.claimBags.filter(pending);
     animation.claims = animation.claims.filter(({bags}) => bags.some(pending));
     if (animation.priority && !animation.claims.includes(animation.priority)) animation.priority = null;
     for (const claim of animation.claims) {
-      claim.ready ||= claim.bags.some(bag => pending(bag) && now >= bag.transferPath?.at(-1).time + sortingDelay);
+      claim.ready ||= claim.bags.some(bag => pending(bag) && now >= readyForBeltAt(bag));
     }
     assignClaims(animation);
     for (const bag of animation.claimBags) {
       const {carousel} = bag.flight;
       if (carousel === null || bag.feedPath) continue;
-      const feedAt = Math.max(now, bag.transferPath.at(-1).time + sortingDelay, animation.nextFeedAt[carousel]);
+      const feedAt = Math.max(now, readyForBeltAt(bag), animation.nextFeedAt[carousel]);
       bag.feedPath = timedPath(carousels[carousel].feed, feedAt, claimSpeed);
       animation.nextFeedAt[carousel] = feedAt + .37;
     }
@@ -266,7 +291,7 @@ const baggage = (() => {
       loader.docked = Math.max(0, Math.min(1, loader.docked + delta));
       loader.offset = (1 + loader.offset + dt * .88 * loader.direction) % 1;
     }
-    advanceClaim(animation, now);
+    advanceClaim(animation, now, dt);
   }
 
   function drawLoaders(animation, meshes, moving) {

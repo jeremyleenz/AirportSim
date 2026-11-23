@@ -31,6 +31,9 @@
   const flightReminderSeconds = 9;
   const departureGraceMinutes = 5;
   const finePerLateMinute = 25;
+  const baggageWaitGraceMinutes = 25;
+  const baggageDelaysPerSatisfactionPoint = 15;
+  const maxBaggageSatisfactionLoss = 6;
   const taxiSpeed = 4;
   const pushbackSpeed = 2.5;
   const taxiSeparation = 24;
@@ -117,7 +120,7 @@
       staffingCosts: {checkIn: 0, security: 0},
       timetable, departureCount, flights: timetable.map(makeFlight), results: [], selected: overnightAircraft.length ? timetable[0].id : null,
       view: "flights", staffingFocus: null,
-      movements: new Map(), taxiQueue: [], nextDeparture: null, luggage: baggage.create()};
+      movements: new Map(), taxiQueue: [], nextDeparture: null, luggage: baggage.create(baggageWaitGraceMinutes * secondsPerMinute)};
   }
 
   let state = createShift(1, [{gate: 0, aircraft: {airline: 0}}]);
@@ -905,8 +908,11 @@
     const minutes = clockMinutes(state.now);
     const time = formatTime(minutes);
     const dispatched = state.results.filter(({takeoff}) => takeoff !== null).length;
-    const satisfaction = Math.min(100, Math.max(55, 84 + dispatched * 2 -
-      Math.floor((occupancy.security.length - 38) / 16) - Math.ceil(state.missedPassengers / 5) - Math.floor(state.delayMinutes / 5)));
+    const baseSatisfaction = Math.min(100, 84 + dispatched * 2 -
+      Math.floor((occupancy.security.length - 38) / 16) - Math.ceil(state.missedPassengers / 5) - Math.floor(state.delayMinutes / 5));
+    const baggageLoss = Math.min(maxBaggageSatisfactionLoss,
+      Math.ceil(state.luggage.claimStats.delayedPassengers / baggageDelaysPerSatisfactionPoint));
+    const satisfaction = Math.max(55, baseSatisfaction - baggageLoss);
     const staffingSpent = staffingCost("checkIn") + staffingCost("security");
     $("#cash").textContent = currency.format(state.cash - staffingSpent);
     $("#passengers").textContent = occupancy.total;
@@ -1358,6 +1364,9 @@
     $("#report-overnight").textContent = overnightGates.length
       ? "Overnight parking at " + overnightGates.join(", ") + "."
       : "Gates clear overnight.";
+    const {delayedPassengers, fullBeltWaitSeconds} = state.luggage.claimStats;
+    $("#report-baggage-waits").innerHTML = stat("Passengers who waited over " + baggageWaitGraceMinutes + " min for bags", delayedPassengers) +
+      stat("Waiting for a free belt", Math.round(fullBeltWaitSeconds / secondsPerMinute) + " passenger-min");
     $("#report-finances").innerHTML = stat("Flight revenue", currency.format(revenue)) +
       stat("Ground handling", currency.format(-handling)) + stat("Extra check-in staffing", currency.format(0 - checkIn)) +
       stat("Extra security staffing", currency.format(0 - security)) + stat("Late takeoff fines", currency.format(0 - fines));

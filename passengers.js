@@ -609,7 +609,11 @@ const passengerFlow = (() => {
         if (arrival.remaining === 0 && arrival.onBridge === 0) onDeplaned(flight);
         changed = true;
       }
-      if (!person.route && person.arrivalBag) advancePickup(person, flow);
+      if (!person.route && person.arrivalBag) {
+        const bag = person.arrivalBag;
+        if (!bag.cancelled) bag.claimWaitAt ??= now;
+        advancePickup(person, flow);
+      }
       if (!person.route && !person.arrivalBag) {
         flow.arrivals.splice(i, 1);
         changed = true;
