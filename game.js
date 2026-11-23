@@ -584,8 +584,9 @@
     let label;
     if (flight) {
       const minutes = pushbackMinutesRemaining(flight);
-      const timing = minutes > 0 ? "due in " + minutes + " min" : minutes === 0 ? "due now" : "overdue";
-      label = "Pushback " + timing + " · " + flight.id;
+      const timing = minutes > 0 ? minutes + " min to leave the gate"
+        : minutes === 0 ? "Leave the gate now" : "Late leaving the gate";
+      label = timing + " · " + flight.id;
     }
     paintFlightAlert("#departure-alert", flight, label, flights.length - 1);
   }
