@@ -486,7 +486,9 @@ function createPassengerFlow(airport) {
     if (flight.stage === "boarding") return true;
     const queuesEarly = person.index * 7 % 13 < 4;
     const leadTime = 6 + person.index * 5 % 11;
-    return flight.stage === "parked" && queuesEarly && now >= flight.boardingAt - leadTime;
+    const patience = person.index % 4 === 0 ? Infinity : 30 + person.index * 17 % 28;
+    return flight.stage === "parked" && queuesEarly && now >= flight.boardingAt - leadTime &&
+      now < flight.boardingAt + patience;
   }
 
   function boardingEntry(queue) {
@@ -507,6 +509,16 @@ function createPassengerFlow(airport) {
     const entryX = x + 1;
     const turnZ = z + .92;
     return [point(entryX, walkwayZ), point(entryX, turnZ), point(x, turnZ), position];
+  }
+
+  function gateQueueExit(queue, offset, walkwayZ) {
+    if (offset <= queue.offsets[1]) {
+      const entry = {position: queue.points[1], offset: queue.offsets[1]};
+      return boardingApproach(queue, entry, walkwayZ).reverse();
+    }
+    const next = queue.offsets.findIndex(distance => distance > offset);
+    const tail = next < 0 ? [] : queue.points.slice(next);
+    return [...tail, point(queue.points.at(-1)[0], walkwayZ)];
   }
 
   function approachLine(person, queue, {points, offset, duration}, now) {
@@ -536,6 +548,16 @@ function createPassengerFlow(airport) {
 
   function advanceGateQueue(flight, queue, now, dt) {
     let changed = false;
+    if (flight.stage === "parked" && now >= flight.boardingAt) {
+      for (let index = queue.line.length - 1; index >= 0; index--) {
+        const {person, offset} = queue.line[index];
+        if (wantsToQueue(person, flight, now)) continue;
+        queue.line.splice(index, 1);
+        person.zone = "concourse";
+        walk(person, gateQueueExit(queue, offset, 16.1), "concourse");
+        changed = true;
+      }
+    }
     for (const [index, entry] of queue.line.entries()) {
       const ahead = index ? queue.line[index - 1].offset + boardingSpacing : 0;
       const distance = Math.min(dt * pace, entry.offset - ahead);
@@ -649,13 +671,7 @@ function createPassengerFlow(airport) {
     const path = [];
     if (zone === "gateQueue") {
       const {offset} = queue.line.find(entry => entry.person === person);
-      if (offset <= queue.offsets[1]) {
-        const entry = {position: queue.points[1], offset: queue.offsets[1]};
-        return [...boardingApproach(queue, entry, cafeCorridorZ).reverse(), ...toExit];
-      } else {
-        const next = queue.offsets.findIndex(distance => distance > offset);
-        if (next >= 0) path.push(...queue.points.slice(next));
-      }
+      return [...gateQueueExit(queue, offset, cafeCorridorZ), ...toExit];
     } else if (spot && (zone === "gate" || zone === "otherGate" || zone === "sharedSeats")) {
       const row = seatAisle(spot);
       if (route?.zone === "gate") path.push(...route.points.slice(route.index, -1));
