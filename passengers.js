@@ -6,6 +6,7 @@ function createPassengerFlow(airport) {
     concourseLeft, concourseRight, restroomStalls, security: securityLayout} = terminalPaths;
   const pace = 4.1;
   const entranceZ = 29;
+  const entranceLanes = [-6, -2, 2, 6];
   const corridorZ = 27.77;
   const cafeCorridorZ = 17.7;
   const boardingSpacing = .64;
@@ -17,13 +18,7 @@ function createPassengerFlow(airport) {
   const deplaneInterval = .32;
   const departureWaitingZones = new Set(["concourse", "cafe", "sharedSeats", "otherGate", "gate"]);
   const point = (x, z) => [x, floor, z];
-  const entrancePositions = Array.from({length: 30}, (_, index) =>
-    point(-8.1 + index % 15 * 1.14 + (index >= 15 ? .28 : 0), 28.33 + Math.floor(index / 15) * .54));
-  const strollPausePositions = Array.from({length: Math.floor((concourseRight - concourseLeft - 2) / 1.25)},
-    (_, index) => concourseLeft + 1 + index * 1.25)
-    .filter(x => Math.abs(x - cafeDoorX) > 1.2 &&
-      securityLayout.banks.every(bank => Math.abs(x - bank.x) > securityLayout.width / 2 + .35))
-    .map(x => point(x, cafeCorridorZ + .92));
+  const entranceSpots = makeEntranceSpots();
   const claimEntrance = point(baggageClaim.entranceX, baggageClaim.entranceZ);
   const arrivalsConcourse = point(airsideExit.x, baggageClaim.entranceZ);
   const arrivalExitPath = [point(airsideExit.x, airsideExit.thresholdZ),
@@ -54,6 +49,35 @@ function createPassengerFlow(airport) {
     return now + duration + person.index % 4 * .12;
   }
 
+  function makeRandom(seed) {
+    return () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+  }
+
+  function makeEntranceSpots() {
+    const sample = makeRandom(7919);
+    const spots = [];
+    const count = 30;
+    const spacingSquared = .56 ** 2;
+    const left = -11.9, right = Math.min(11.4, concourseRight);
+    const stationAreas = [terminalPaths.checkIn, securityLayout].flatMap(({banks, width}) =>
+      banks.map(({x}) => ({x, clearance: width / 2 + .36})));
+    for (let attempt = 0; attempt < count * 100 && spots.length < count; attempt++) {
+      const x = left + (right - left) * sample();
+      const z = 27.03 + (28.72 - 27.03) * sample();
+      // Keep the walking aisle clear, and use space beside the stations where their queues do not reach.
+      const besideStations = z <= corridorZ - .42 && stationAreas.every(area => Math.abs(area.x - x) > area.clearance);
+      const alongFrontWall = z >= corridorZ + .42;
+      const inTravelLane = Math.abs(x) <= .55 || entranceLanes.some(lane => Math.abs(x - lane) <= .34);
+      if ((!besideStations && !alongFrontWall) || inTravelLane ||
+          spots.some(({position: [px, , pz]}) => (px - x) ** 2 + (pz - z) ** 2 < spacingSquared)) continue;
+      spots.push({position: point(x, z), angle: Math.PI + (sample() - .5) * 2.8, seated: false});
+    }
+    return spots;
+  }
+
   function create() {
     function banks(layout) {
       return layout.banks.map(({id, x, desks}, index) => ({
@@ -73,8 +97,7 @@ function createPassengerFlow(airport) {
       claimSeats: baggageClaim.claimSeats.map(spot => ({...spot})),
       claimStanding: baggageClaim.claimStanding.map(spot => ({...spot})),
       exiting: [], arrivals: [],
-      entrance: [], entranceSpots: entrancePositions.map(position => ({position, angle: Math.PI, seated: false})),
-      strollPauses: strollPausePositions.map(position => ({position, aisleX: position[0], angle: Math.PI, seated: false})),
+      entrance: [], entranceSpots: entranceSpots.map(spot => ({...spot})),
       nextEntry: 0, entrancesUsed: 0
     };
     flow.guestSeats = flow.boarding.flatMap(queue => queue.spots.seats);
@@ -108,11 +131,7 @@ function createPassengerFlow(airport) {
       [-8.6, -4.22, 15.02, 15.6], [-3.18, -1.58, 15.15, 15.6], [-.54, 8.35, 15.15, 15.6]
     ];
     const betweenSeats = [[.4, 8.14, 10.99, 12.12], [-8.38, -6.11, 11.02, 12.13]];
-    let seed = 12503 + x;
-    function sample() {
-      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-      return seed / 4294967296;
-    }
+    const sample = makeRandom(12503 + x);
     function addStanding(areas, limit) {
       const clearanceSquared = .4 ** 2;
       for (let i = 0; i < 16000 && standing.length < limit; i++) {
@@ -320,9 +339,7 @@ function createPassengerFlow(airport) {
     if (person.route || flight.stage === "boarding" || flight.stage === "closing" ||
         !departureWaitingZones.has(person.zone)) return false;
     const deadline = departureActivityDeadline(person, flight, now);
-    const started = useDepartureRestroom(person, flight, flow, now, deadline) || useDepartureCafe(person, flight, flow, now, deadline);
-    if (started) delete person.strollPauseUntil;
-    return started;
+    return useDepartureRestroom(person, flight, flow, now, deadline) || useDepartureCafe(person, flight, flow, now, deadline);
   }
 
   function startStroll(person) {
@@ -345,35 +362,9 @@ function createPassengerFlow(airport) {
     walk(person, [point(x, z), ...ends.map(end => point(end, z))], "concourse");
   }
 
-  function pauseAfterStroll(person, flow, now) {
-    const trip = person.strollsTaken;
-    if (!person.strolling || (person.index + trip) % (2 + person.index % 3)) return false;
-    const [x, , z] = person.position;
-    let nearest = null;
-    let distance = 6.5;
-    for (const spot of flow.strollPauses) {
-      const difference = Math.abs(spot.position[0] - x);
-      if (spot.owner || difference >= distance) continue;
-      nearest = spot;
-      distance = difference;
-    }
-    if (!nearest) return false;
-    const path = [point(nearest.position[0], z), nearest.position];
-    const duration = 6 + (person.index * 11 + trip * 3) % 13;
-    person.strollPauseUntil = now + travelTime(person.position, path) + duration;
-    delete person.strolling;
-    occupySpot(person, nearest);
-    walk(person, path);
-    return true;
-  }
-
   function goToGateOrWait(person, flight, flow, now) {
     delete person.strolling;
     delete person.retryGateAt;
-    if (person.strollPauseUntil !== undefined) {
-      delete person.strollPauseUntil;
-      leaveSpot(person);
-    }
     const queue = flow.boarding[flight.gate];
     if (queue) {
       if (!walkToGate(person, flight, queue, now)) {
@@ -406,8 +397,7 @@ function createPassengerFlow(airport) {
   }
 
   function recallActivities(person, flight, flow, now) {
-    const inConcourse = person.strolling || person.strollPauseUntil !== undefined;
-    if ((inConcourse && flight.gate !== null) || now >= person.strollPauseUntil || now >= person.retryGateAt) {
+    if ((person.strolling && flight.gate !== null) || now >= person.retryGateAt) {
       goToGateOrWait(person, flight, flow, now);
     }
     if (person.cafeUntil === undefined) return false;
@@ -693,8 +683,12 @@ function createPassengerFlow(airport) {
   function showEntranceWaiter(person, flow) {
     const spot = reserve(person, flow.entranceSpots, 7);
     if (!spot) return false;
-    person.position = point(spot.position[0], entranceZ);
-    walk(person, [spot.position]);
+    const [x, , z] = spot.position;
+    const doorX = Math.max(-8.5, Math.min(8.5, x));
+    person.position = point(doorX, entranceZ);
+    const path = doorX === x && z > corridorZ ? [spot.position]
+      : [point(doorX, corridorZ), point(x, corridorZ), spot.position];
+    walk(person, path);
     return true;
   }
 
@@ -719,7 +713,7 @@ function createPassengerFlow(airport) {
     if (now < flow.nextEntry) return false;
     const person = flow.entrance.shift() ?? nextPassenger(flights, now);
     if (!person) return false;
-    const entranceX = person.position?.[0] ?? (-6 + flow.entrancesUsed++ % 4 * 4);
+    const entranceX = person.position?.[0] ?? entranceLanes[flow.entrancesUsed++ % entranceLanes.length];
     person.position ??= point(entranceX, entranceZ);
     if (leaveSpot(person)) fillEntranceSpots(flow);
     person.zone = "checkIn";
@@ -732,7 +726,11 @@ function createPassengerFlow(airport) {
 
   function exitPath(person, queue) {
     const {zone, spot, route, position: [x, , z]} = person;
-    if (zone === "entrance") return [point(x, entranceZ + .6)];
+    if (zone === "entrance") {
+      const doorX = Math.max(-8.5, Math.min(8.5, x));
+      const outside = point(doorX, entranceZ + .6);
+      return doorX === x && z > corridorZ ? [outside] : [point(x, corridorZ), point(doorX, corridorZ), outside];
+    }
     if (zone === "checkIn" || zone === "landside" || (zone === "security" && z >= securityLayout.checkpointZ)) {
       return [point(x, corridorZ), point(0, corridorZ), point(0, entranceZ + .6)];
     }
@@ -944,7 +942,7 @@ function createPassengerFlow(airport) {
           changed = true;
           continue;
         }
-        if (person.cafeUntil !== undefined || person.strolling || person.strollPauseUntil !== undefined || person.retryGateAt !== undefined) {
+        if (person.cafeUntil !== undefined || person.strolling || person.retryGateAt !== undefined) {
           changed = recallActivities(person, flight, flow, now) || changed;
         }
         changed = recallWaitingSeat(person, flight, flow, now) || changed;
@@ -958,7 +956,7 @@ function createPassengerFlow(airport) {
           if (previousZone === "security") delete person.securityBag;
           if (startDepartureActivity(person, flight, flow, now)) {
             changed = true;
-          } else if (!pauseAfterStroll(person, flow, now)) {
+          } else {
             goToGateOrWait(person, flight, flow, now);
           }
         }
