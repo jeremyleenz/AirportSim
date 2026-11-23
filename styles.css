@@ -229,9 +229,11 @@ button, h1, h2, h3, p { margin: 0; }
 #claim-alert { flex: 0 0 auto; width: auto; margin: 8px 18px 0; color: var(--amber); border-color: #a57b4b; }
 #baggage-claim { scroll-margin-top: 10px; }
 #claim-instruction { margin: 10px 0 6px; }
-#claim-flights button { display: grid; gap: 3px; margin: 0; text-align: left; }
-#claim-flights button small { color: var(--muted); font-size: .75rem; }
-#claim-flights button[aria-pressed="true"] { border-color: var(--mint); background: #244039; }
+.claim-flight { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; }
+.claim-flight strong { font-size: .85rem; }
+.claim-flight small { color: var(--muted); font-size: .75rem; }
+.claim-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 3px; }
+.claim-actions button { margin: 0; }
 .staffing-summary { display: grid; gap: 6px; }
 .staffing-summary .detail-stat b, .secondary .staffing-action-rate { color: var(--amber); }
 .staffing-summary p { color: var(--muted); font-size: .75rem; line-height: 1.4; }

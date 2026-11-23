@@ -33,7 +33,7 @@ const baggage = (() => {
   });
 
   function create(claimWaitGrace = Infinity) {
-    return {items: [], arrivals: [], claims: [], claimBags: [], priority: null, nextFeedAt: carousels.map(() => 0), trip: null,
+    return {items: [], arrivals: [], claims: [], claimBags: [], nextFeedAt: carousels.map(() => 0), trip: null,
       claimWaitGrace, claimStats: {delayedPassengers: 0, fullBeltWaitSeconds: 0},
       loaders: loaderRoutes.map(() => ({docked: 0, stayUntil: 0, direction: 0, offset: 0}))};
   }
@@ -99,35 +99,16 @@ const baggage = (() => {
     const assigned = carousels.map((_, index) => animation.claims.find(({flight}) => flight.carousel === index)?.flight);
     const waiting = animation.claims.filter(({flight}) => flight.carousel === null);
     const available = assigned.filter(flight => !flight).length;
-    const competing = waiting.length > Math.max(available, 1);
-    const {priority} = animation;
-    return {carousels: assigned, waiting, available, competing, priority,
-      needsChoice: competing && available === 1 && priority === null && waiting.some(claim => claim.ready)};
+    return {carousels: assigned, waiting, available};
   }
 
-  function assignClaims(animation) {
-    const {carousels: assigned, waiting, available} = claimBoard(animation);
-    let free = available;
-    for (const [carousel, flight] of assigned.entries()) {
-      if (flight) continue;
-      const preferred = waiting.findIndex(claim => claim === animation.priority && claim.ready);
-      const automatic = free > 1 || waiting.length <= free;
-      const index = preferred >= 0 ? preferred : automatic ? waiting.findIndex(claim => claim.ready) : -1;
-      if (index < 0) break;
-      const [claim] = waiting.splice(index, 1);
-      claim.flight.carousel = carousel;
-      if (claim === animation.priority) animation.priority = null;
-      free--;
-    }
-  }
-
-  function prioritizeClaim(animation, id) {
-    const {competing, waiting} = claimBoard(animation);
-    if (!competing) return false;
+  function assignCarousel(animation, id, carousel) {
+    if (!Number.isInteger(carousel) || carousel < 0 || carousel >= carousels.length) return false;
+    const {carousels: assigned, waiting} = claimBoard(animation);
+    if (assigned[carousel]) return false;
     const claim = waiting.find(({flight}) => flight.id === id);
     if (!claim) return false;
-    animation.priority = animation.priority === claim ? null : claim;
-    assignClaims(animation);
+    claim.flight.carousel = carousel;
     return true;
   }
 
@@ -225,11 +206,9 @@ const baggage = (() => {
     const pending = bag => !bag.claimed && !bag.cancelled;
     animation.claimBags = animation.claimBags.filter(pending);
     animation.claims = animation.claims.filter(({bags}) => bags.some(pending));
-    if (animation.priority && !animation.claims.includes(animation.priority)) animation.priority = null;
     for (const claim of animation.claims) {
       claim.ready ||= claim.bags.some(bag => pending(bag) && now >= readyForBeltAt(bag));
     }
-    assignClaims(animation);
     for (const bag of animation.claimBags) {
       const {carousel} = bag.flight;
       if (carousel === null || bag.feedPath) continue;
@@ -350,5 +329,5 @@ const baggage = (() => {
     return moving;
   }
 
-  return {create, checkedIn, arrived, claimBoard, prioritizeClaim, advance, actors};
+  return {create, checkedIn, arrived, claimBoard, assignCarousel, advance, actors};
 })();

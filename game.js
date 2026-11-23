@@ -347,7 +347,8 @@
 
   function shiftComplete() {
     return state.results.length === state.departureCount &&
-      (state.closedAtCurfew || state.flights.every(flight => !isOvernightArrival(flight) || flight.stage === "overnight"));
+      (state.closedAtCurfew || (state.flights.every(flight => !isOvernightArrival(flight) || flight.stage === "overnight") &&
+        state.luggage.claims.every(({flight}) => flight.carousel !== null)));
   }
 
   function availableGate() {
@@ -877,29 +878,31 @@
     return Math.round(state.staffingCosts[type]);
   }
 
-  function paintBaggageClaim({carousels, waiting, competing, priority, available}) {
+  function paintBaggageClaim({carousels, waiting, available}, complete) {
     $("#carousel-status").innerHTML = carousels.map((flight, index) =>
-      stat("Carousel " + (index + 1), flight?.id ?? "Available")).join("") +
-      (waiting.length && !competing ? stat("Awaiting carousel", waiting.map(({flight}) => flight.id).join(", ")) : "");
-    const queue = $("#claim-queue");
-    queue.hidden = !competing;
-    const instruction = available === 1 ? "Choose which flight gets the free carousel."
-      : "Choose which flight gets the next free carousel.";
-    $("#claim-instruction").textContent = instruction;
-    const options = competing ? waiting.map(claim => {
-      const {flight, bags, ready} = claim;
-      const selected = claim === priority;
-      const status = ready ? "Ready for belt" : "Sorting bags";
-      return '<button type="button" class="secondary" data-claim-flight="' + flight.id + '" aria-pressed="' + selected +
-        '"' + (shiftComplete() ? " disabled" : "") + '><strong>' + flight.id + ' · ' + flight.destination +
-        '</strong><small>' + (selected ? "Next · " : "") + status + ' · ' + bags.length + ' bags</small></button>';
-    }).join("") : "";
+      stat("Carousel " + (index + 1), flight?.id ?? "Available")).join("");
+    $("#claim-queue").hidden = waiting.length === 0;
+    $("#claim-instruction").textContent = complete ? "Shift ended with baggage waiting for a carousel."
+      : available ? "Choose a carousel for each flight." : "Both carousels are in use.";
+    const options = waiting.map(({flight, bags, ready}) => {
+      const choices = carousels.map((occupant, index) => {
+        const name = "Carousel " + (index + 1);
+        return '<button type="button" class="secondary" data-claim-flight="' + flight.id + '" data-carousel="' + index +
+          '" aria-label="Assign ' + flight.id + ' to ' + name + '"' + (occupant || complete ? ' disabled=""' : "") +
+          '>' + name + '</button>';
+      }).join("");
+      return '<div class="claim-flight"><strong>' + flight.id + ' · ' + flight.destination + '</strong><small>' +
+        (ready ? "Ready for belt" : "Sorting bags") + ' · ' + bags.length + ' bags</small><div class="claim-actions">' +
+        choices + '</div></div>';
+    }).join("");
     const flights = $("#claim-flights");
     if (flights.innerHTML !== options) {
-      const focused = flights.contains(document.activeElement) ? document.activeElement.dataset.claimFlight : null;
+      const focused = flights.contains(document.activeElement) ? document.activeElement.dataset : null;
       flights.innerHTML = options;
       if (focused) {
-        (flights.querySelector('[data-claim-flight="' + focused + '"]') ?? $("#baggage-claim-title")).focus({preventScroll: true});
+        const button = flights.querySelector('[data-claim-flight="' + focused.claimFlight + '"][data-carousel="' +
+          focused.carousel + '"]:enabled');
+        (button ?? $("#baggage-claim-title")).focus({preventScroll: true});
       }
     }
   }
@@ -946,7 +949,7 @@
     const scheduleOpen = state.view === "schedule";
     const flightsOpen = state.view === "flights";
     const claimBoard = baggage.claimBoard(state.luggage);
-    const chooseClaim = !complete && claimBoard.needsChoice;
+    const chooseClaim = !complete && claimBoard.available > 0 && claimBoard.waiting.length > 0;
     $("#claim-alert").hidden = !chooseClaim;
     $("#terminal-tab").setAttribute("aria-pressed", String(terminalOpen));
     $("#schedule-tab").setAttribute("aria-pressed", String(scheduleOpen));
@@ -979,18 +982,25 @@
       $("#exiting-count").textContent = occupancy.exiting.length;
       paintStaffing("checkIn");
       paintStaffing("security");
-      paintBaggageClaim(claimBoard);
+      paintBaggageClaim(claimBoard, complete);
       $("#lounge-counts").querySelectorAll("b").forEach((count, index) => {
         count.textContent = occupancy.gates[index].length;
       });
     }
-    const parking = !complete && dispatched === state.departureCount;
-    const goal = parking ? state.timetable.length - state.departureCount : state.departureCount;
-    const progress = parking ? state.flights.filter(flight => flight.stage === "overnight").length : dispatched;
-    $("#goal-bar").style.width = progress / goal * 100 + "%";
-    $("#goal-count").textContent = progress + " / " + goal;
+    const overnightCount = state.timetable.length - state.departureCount;
+    const parked = state.flights.filter(flight => flight.stage === "overnight").length;
+    const departuresComplete = !complete && dispatched === state.departureCount;
+    const parking = departuresComplete && parked < overnightCount;
+    const assigning = departuresComplete && !parking;
+    const goal = parking ? overnightCount : state.departureCount;
+    const progress = parking ? parked : dispatched;
+    const goalBar = $("#goal-bar");
+    goalBar.parentNode.hidden = assigning;
+    goalBar.style.width = progress / goal * 100 + "%";
+    $("#goal-count").textContent = assigning ? claimBoard.waiting.length + " waiting" : progress + " / " + goal;
     $("#objective-title").textContent = state.closedAtCurfew ? "Curfew reached"
-      : complete ? "Operating day complete" : parking ? "Park overnight arrivals" : "Dispatch " + goal + " flights";
+      : complete ? "Operating day complete" : parking ? "Park overnight arrivals"
+        : assigning ? "Assign baggage carousels" : "Dispatch " + goal + " flights";
     $("#view-report").hidden = !complete;
 
     const gate = selectedGate();
@@ -1026,7 +1036,7 @@
       if (section === "baggageClaim") {
         element.toggleAttribute("data-action-needed", chooseClaim);
         count.hidden = !chooseClaim && !claimBoard.waiting.length;
-        count.textContent = chooseClaim ? "Choose next" : claimBoard.waiting.length;
+        count.textContent = chooseClaim ? "Assign" : claimBoard.waiting.length;
       } else if (count) {
         count.textContent = occupancy[section].length;
       }
@@ -1373,8 +1383,10 @@
       ? "Overnight parking at " + overnightGates.join(", ") + "."
       : "Gates clear overnight.";
     const {delayedPassengers, fullBeltWaitSeconds} = state.luggage.claimStats;
+    const unassigned = baggage.claimBoard(state.luggage).waiting.length;
     $("#report-baggage-waits").innerHTML = stat("Passengers who waited over " + baggageWaitGraceMinutes + " min for bags", delayedPassengers) +
-      stat("Waiting for a free belt", Math.round(fullBeltWaitSeconds / secondsPerMinute) + " passenger-min");
+      stat("Waiting for a free belt", Math.round(fullBeltWaitSeconds / secondsPerMinute) + " passenger-min") +
+      (unassigned ? stat("Flights without a carousel", unassigned) : "");
     $("#report-finances").innerHTML = stat("Flight revenue", currency.format(revenue)) +
       stat("Ground handling", currency.format(-handling)) + stat("Extra check-in staffing", currency.format(0 - checkIn)) +
       stat("Extra security staffing", currency.format(0 - security)) + stat("Late takeoff fines", currency.format(0 - fines));
@@ -1495,8 +1507,15 @@
   $("#claim-alert").addEventListener("click", revealBaggageClaim);
   $("#claim-flights").addEventListener("click", event => {
     const button = event.target.closest("[data-claim-flight]");
-    if (!button || shiftComplete() || !baggage.prioritizeClaim(state.luggage, button.dataset.claimFlight)) return;
-    paint();
+    if (!button || shiftComplete()) return;
+    const {claimFlight} = button.dataset;
+    const carousel = Number(button.dataset.carousel);
+    if (!baggage.assignCarousel(state.luggage, claimFlight, carousel)) return;
+    if (shiftComplete()) finishShift();
+    else {
+      announce(claimFlight + " baggage assigned to Carousel " + (carousel + 1) + ".");
+      paint();
+    }
   });
   $("#all-staffing").addEventListener("click", () => {
     notifyTab("terminal");
