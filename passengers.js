@@ -9,6 +9,8 @@ function createPassengerFlow(airport) {
   const corridorZ = 27.77;
   const cafeCorridorZ = 17.7;
   const boardingSpacing = .64;
+  const preboardingLeadTime = 34;
+  const fullQueueLeadTime = 16;
   const scanTime = .43;
   const checkInTime = .95;
   const screeningTime = .75;
@@ -100,10 +102,10 @@ function createPassengerFlow(airport) {
   function makeLounge(x, gate) {
     const seats = loungeSeats(x).map(spot => ({...spot, gate}));
     const standing = [];
-    // Keep the boarding line and the approaches at x - 3.7 and x + 9.16 clear.
+    // Keep the approaches to both ends of the snake and the walkway extension clear.
     const walkwayEdge = [
       [.36, 8.35, 13.38, 14.17], [-7.55, -5.65, 13.38, 14.17],
-      [-8.6, -4.22, 15.02, 15.6], [-3.18, 8.35, 15.15, 15.6]
+      [-8.6, -4.22, 15.02, 15.6], [-3.18, -1.58, 15.15, 15.6], [-.54, 8.35, 15.15, 15.6]
     ];
     const betweenSeats = [[.4, 8.14, 10.99, 12.12], [-8.38, -6.11, 11.02, 12.13]];
     let seed = 12503 + x;
@@ -157,12 +159,13 @@ function createPassengerFlow(airport) {
 
   function fillVacantLoungeSeats(flight, queue, now) {
     if (flight.stage !== "parked") return;
+    const lineHasRoom = hasRoom(queue, flight, now);
     for (const seat of queue.spots.seats) {
       if (seat.owner) continue;
       let closest = null;
       let shortestTime = Infinity;
       for (const {owner} of queue.spots.standing) {
-        if (!owner || owner.zone !== "gate" || owner.route || wantsToQueue(owner, flight, now)) continue;
+        if (!owner || owner.zone !== "gate" || owner.route || (lineHasRoom && wantsToQueue(owner, flight, now))) continue;
         const path = pathToSeat(owner, seat, seatExit(owner));
         const time = travelTime(owner.position, path);
         if (time >= shortestTime) continue;
@@ -394,7 +397,7 @@ function createPassengerFlow(airport) {
     }
     const queue = flow.boarding[flight.gate];
     const hasLoungeSpace = queue.spots.seats.some(seat => !seat.owner) || queue.spots.standing.some(place => !place.owner);
-    if (!hasLoungeSpace && !(wantsToQueue(person, flight, now) && hasRoom(queue))) return false;
+    if (!hasLoungeSpace && !(wantsToQueue(person, flight, now) && hasRoom(queue, flight, now))) return false;
     const row = seatAisle(spot);
     leaveSpot(person);
     person.zone = "concourse";
@@ -460,7 +463,7 @@ function createPassengerFlow(airport) {
   function walkToGate(person, flight, queue, now) {
     const [startX] = person.position;
     const middleZ = 16.1 + person.index % 5 * .48;
-    if (wantsToQueue(person, flight, now) && hasRoom(queue)) {
+    if (wantsToQueue(person, flight, now) && hasRoom(queue, flight, now)) {
       const entry = boardingEntry(queue);
       const {offset} = entry;
       const points = [point(startX, middleZ), ...boardingApproach(queue, entry, middleZ)];
@@ -505,7 +508,7 @@ function createPassengerFlow(airport) {
     const offsets = [0];
     for (let i = 1; i < points.length; i++) offsets.push(offsets[i - 1] + lengthBetween(points[i - 1], points[i]));
     const length = offsets.at(-1);
-    return {points, offsets, length, capacity: Math.floor(length / boardingSpacing),
+    return {points, offsets, length, snakeEnd: points.length - 2, capacity: Math.floor(length / boardingSpacing),
       line: [], approaching: [], scanUntil: null, nextJoin: 0, nextCall: 0};
   }
 
@@ -516,28 +519,29 @@ function createPassengerFlow(airport) {
     return queue.points[start].map((value, i) => value + (queue.points[end][i] - value) * t);
   }
 
-  function hasRoom(queue) {
-    return queue.line.length + queue.approaching.length < queue.capacity && queue.approaching.length < 10;
+  function hasRoom(queue, flight, now) {
+    const snakeCapacity = Math.floor(queue.offsets[queue.snakeEnd] / boardingSpacing) + 1;
+    const queued = queue.line.length + queue.approaching.length;
+    if (flight.stage === "boarding") return queued < queue.capacity && queue.approaching.length < 10;
+    const fill = Math.max(0, Math.min(1, (now - flight.boardingAt + preboardingLeadTime) / (preboardingLeadTime - fullQueueLeadTime)));
+    return queued < Math.ceil(snakeCapacity * fill) && queue.approaching.length < 13;
   }
 
   function wantsToQueue(person, flight, now) {
     if (flight.stage === "boarding") return true;
-    const queuesEarly = person.index * 7 % 13 < 4;
-    const leadTime = 6 + person.index * 5 % 11;
-    const patience = person.index % 4 === 0 ? Infinity : 30 + person.index * 17 % 28;
-    return flight.stage === "parked" && queuesEarly && now >= flight.boardingAt - leadTime &&
-      now < flight.boardingAt + patience;
+    const preference = person.index * 7 % 13;
+    if (flight.stage !== "parked" || preference >= 11) return false;
+    const leadTime = preference < 4 ? 25 + person.index * 5 % 9
+      : preference < 9 ? 18 + person.index * 5 % 8 : 12 + person.index * 5 % 6;
+    return now >= flight.boardingAt - leadTime;
   }
 
   function boardingEntry(queue) {
-    const tailOffset = queue.line.at(-1)?.offset ?? -boardingSpacing;
-    const joinOffset = tailOffset + (queue.approaching.length + 1) * boardingSpacing;
-    const fullEntranceInUse = queue.approaching.at(-1)?.offset === queue.length;
-    // The open end of the first lane lets passengers join behind a short line without crossing a rail.
-    if (!fullEntranceInUse && joinOffset <= queue.offsets[1]) {
-      return {position: queue.points[1], offset: queue.offsets[1]};
-    }
-    return {position: queue.points.at(-1), offset: queue.length};
+    const queuedLength = (queue.line.length + queue.approaching.length) * boardingSpacing;
+    const joinOffset = Math.max(queuedLength, queue.approaching.at(-1)?.offset ?? 0);
+    // Use the nearest opening that can fit the line once everyone has moved forward.
+    const entrance = [1, queue.snakeEnd, queue.points.length - 1].find(index => joinOffset <= queue.offsets[index]);
+    return {position: queue.points[entrance], offset: queue.offsets[entrance]};
   }
 
   function boardingApproach(queue, {position, offset}, walkwayZ) {
@@ -550,13 +554,19 @@ function createPassengerFlow(airport) {
   }
 
   function gateQueueExit(queue, offset, walkwayZ) {
-    if (offset <= queue.offsets[1]) {
+    if (offset <= queue.offsets[3]) {
       const entry = {position: queue.points[1], offset: queue.offsets[1]};
-      return boardingApproach(queue, entry, walkwayZ).reverse();
+      const shortExit = boardingApproach(queue, entry, walkwayZ).reverse();
+      return offset > queue.offsets[2] ? [queue.points[2], ...shortExit] : shortExit;
     }
-    const next = queue.offsets.findIndex(distance => distance > offset);
-    const tail = next < 0 ? [] : queue.points.slice(next);
-    return [...tail, point(queue.points.at(-1)[0], walkwayZ)];
+    const snakeEnd = queue.offsets[queue.snakeEnd];
+    if (offset - snakeEnd <= queue.length - offset) {
+      const mouth = queue.points[queue.snakeEnd];
+      const path = offset < queue.offsets[4] ? [queue.points[4], mouth] : [mouth];
+      return [...path, point(mouth[0], walkwayZ)];
+    }
+    const tail = queue.points.at(-1);
+    return [tail, point(tail[0], walkwayZ)];
   }
 
   function approachLine(person, queue, {points, offset, duration}, now) {
@@ -567,7 +577,7 @@ function createPassengerFlow(airport) {
   }
 
   function callFromLounge(flight, queue, now) {
-    if (!hasRoom(queue) || now < queue.nextCall) return;
+    if (!hasRoom(queue, flight, now) || now < queue.nextCall) return;
     const waiting = flight.manifest.filter(person => person.zone === "gate" && !person.route &&
       !queue.approaching.some(entry => entry.person === person) && wantsToQueue(person, flight, now));
     if (!waiting.length) return;
@@ -586,16 +596,6 @@ function createPassengerFlow(airport) {
 
   function advanceGateQueue(flight, queue, now, dt) {
     let changed = false;
-    if (flight.stage === "parked" && now >= flight.boardingAt) {
-      for (let index = queue.line.length - 1; index >= 0; index--) {
-        const {person, offset} = queue.line[index];
-        if (wantsToQueue(person, flight, now)) continue;
-        queue.line.splice(index, 1);
-        person.zone = "concourse";
-        walk(person, gateQueueExit(queue, offset, 16.1), "concourse");
-        changed = true;
-      }
-    }
     for (const [index, entry] of queue.line.entries()) {
       const ahead = index ? queue.line[index - 1].offset + boardingSpacing : 0;
       const distance = Math.min(dt * pace, entry.offset - ahead);
