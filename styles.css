@@ -333,6 +333,11 @@ button.flight-alert:hover { background: #584933; }
 #upgrade-preview { width: 100%; height: clamp(150px, 29dvh, 240px); border-radius: 8px; }
 #upgrade-note { margin: 0; }
 #upgrade-note:empty { display: none; }
+#reset-progress { margin-top: 20px; }
+#reset-error { color: #ffb1a9; }
+#reset-error:not(:empty) { margin-top: 12px; }
+#confirm-reset { color: #321b1b; background: #ffb1a9; }
+#confirm-reset:hover { background: #ffd0ca; }
 @media (max-height: 780px) and (min-width: 761px) {
   .topbar { height: 65px; }
   .panel-head { padding-top: 15px; padding-bottom: 12px; }

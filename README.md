@@ -8,6 +8,8 @@ See the [expansion roadmap](ROADMAP.md) for the planned progression, airport imp
 
 At the end of a shift, the game saves the next day, closing treasury, overnight aircraft, and opening schedule to this browser. Reopening starts the simulation at the beginning of the saved day. An unfinished shift restarts from opening.
 
+To start over, open **Operations → Terminal** and choose **Reset progress** at the bottom. Confirming starts Day 1 and removes the current run and its upgrades.
+
 Between shifts, open **Airport upgrades** to buy a second baggage carousel, a third security lane, or a third check-in desk. You can buy several upgrades if the treasury covers them. The confirmation screen previews where each upgrade will go. The game saves the purchase and location together with the updated treasury. Purchased facilities are available the next morning.
 
 With one baggage carousel, arriving flights get it automatically in arrival order. Once you install a second carousel, you choose one for each flight.

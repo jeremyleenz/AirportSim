@@ -6,6 +6,7 @@
   const game = $(".game");
   const currency = new Intl.NumberFormat("en-US", {style: "currency", currency: "USD", maximumFractionDigits: 0});
   const startingCash = 60000;
+  const startingAircraft = [{gate: 0, aircraft: {airline: 0}}];
   const progressKey = "airport-ops-opening-v1";
   const baseOperatingRate = 8;
   const staffingRates = {checkIn: 10, security: 15};
@@ -180,7 +181,7 @@
   const holdingPosition = {x: 44, z: taxiwayZ, angle: -Math.PI / 2};
   let state = savedOpening
     ? createShift(savedOpening.day, savedOpening.overnightAircraft, savedOpening.cash, savedOpening.seed)
-    : createShift(1, [{gate: 0, aircraft: {airline: 0}}]);
+    : createShift(1, startingAircraft);
   let nextOpening = null;
   let openingSaved = false;
   let mapAction = null;
@@ -1499,7 +1500,7 @@
   }
 
   function update(dt) {
-    if (state.paused) return;
+    if (state.paused || resetDialog.open) return;
     state.playTime += dt;
     let remaining = dt * state.speed;
     // Keep queue processing and walking on small steps at accelerated speeds.
@@ -1512,6 +1513,22 @@
 
   const report = $("#shift-report");
   const startNextDay = $("#restart-shift");
+  const resetDialog = $("#reset-dialog");
+  const resetError = $("#reset-error");
+
+  $("#reset-progress").addEventListener("click", () => {
+    resetError.textContent = "";
+    resetDialog.showModal();
+  });
+  $("#confirm-reset").addEventListener("click", () => {
+    const opening = {day: 1, cash: startingCash, seed: newShiftSeed(), overnightAircraft: startingAircraft, upgrades: {}};
+    // A new checkpoint also prevents tabs from the previous run from saving over the reset.
+    if (!saveOpening(opening)) {
+      resetError.textContent = "Couldn’t reset progress. Reload the game and try again. Make sure browser storage is available.";
+      return;
+    }
+    window.location.reload();
+  });
 
   function showShiftReport() {
     if (!nextOpening) return;
@@ -2074,7 +2091,7 @@
     canvas.addEventListener("pointerleave", () => canvas.removeAttribute("data-aircraft-hover"));
   }
   window.addEventListener("keydown", event => {
-    if (report.open || upgradeShop.open || event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+    if (report.open || upgradeShop.open || resetDialog.open || event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
     if (event.code === "Space" && !["BUTTON", "INPUT", "TEXTAREA"].includes(event.target.tagName)) {
       event.preventDefault();
       togglePause();
