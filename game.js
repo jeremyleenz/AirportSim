@@ -31,6 +31,8 @@
   const flightReminderSeconds = 9;
   const departureGraceMinutes = 5;
   const finePerLateMinute = 25;
+  const severeDelayMinutes = 30;
+  const finePerSevereLateMinute = 75;
   const baggageWaitGraceMinutes = 25;
   const baggageDelaysPerSatisfactionPoint = 15;
   const maxBaggageSatisfactionLoss = 6;
@@ -728,7 +730,9 @@
   }
 
   function departureFine(lateMinutes) {
-    return Math.max(0, lateMinutes - departureGraceMinutes) * finePerLateMinute;
+    const standardMinutes = Math.max(0, Math.min(lateMinutes, severeDelayMinutes) - departureGraceMinutes);
+    const severeMinutes = Math.max(0, lateMinutes - severeDelayMinutes);
+    return standardMinutes * finePerLateMinute + severeMinutes * finePerSevereLateMinute;
   }
 
   function paintDetail() {
@@ -793,8 +797,9 @@
     const schedule = takeoffSchedule(flight);
     delayNotice.hidden = !lateWaiting && !schedule?.urgency;
     if (!delayNotice.hidden) {
-      const fine = departureFine(schedule?.lateMinutes ?? 0);
-      const rate = currency.format(finePerLateMinute) + "/min";
+      const lateMinutes = schedule?.lateMinutes ?? 0;
+      const fine = departureFine(lateMinutes);
+      const rate = currency.format(lateMinutes >= severeDelayMinutes ? finePerSevereLateMinute : finePerLateMinute) + "/min";
       delayNotice.textContent = "Late fine · " + (fine ? currency.format(fine) + " so far (+" + rate + ")"
         : rate + " after " + departureGraceMinutes + " min late");
     }
@@ -1353,7 +1358,10 @@
       (cancelled === 1 ? " departure cancelled" : " departures cancelled") : "");
     $("#report-on-time").textContent = onTime + " / " + results.length;
     $("#report-missed").textContent = results.reduce((total, flight) => total + flight.missed, 0);
-    $("#report-profit").textContent = currency.format(revenue - handling - checkIn - security - fines);
+    const profit = revenue - handling - checkIn - security - fines;
+    const profitValue = $("#report-profit");
+    profitValue.textContent = currency.format(profit);
+    profitValue.toggleAttribute("data-loss", profit < 0);
     $("#report-delays").innerHTML = stat("Total departure delay", state.delayMinutes + " min");
     const overnightArrivals = state.flights.filter(isOvernightArrival);
     const arrivalSummary = $("#report-overnight-arrivals");

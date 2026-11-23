@@ -287,6 +287,7 @@ button.flight-alert:hover { background: #584933; }
 .report-metrics > div { display: grid; align-content: space-between; gap: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 9px; }
 .report-metrics dt { color: var(--muted); font-size: .79rem; }
 .report-metrics dd { margin: 0; color: var(--mint); font: 700 clamp(.86rem, 3.6vw, 1.22rem) var(--mono); }
+#report-profit[data-loss] { color: #ffb1a9; }
 #report-delays { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 #report-overnight-arrivals { margin-bottom: 6px; }
 #report-overnight { margin-bottom: 12px; }
