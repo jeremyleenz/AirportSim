@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=37">
+  <link rel="stylesheet" href="styles.css?v=38">
   <script defer src="renderer.js?v=2"></script>
   <script defer src="layout.js?v=16"></script>
   <script defer src="airport.js?v=33"></script>
   <script defer src="passengers.js?v=40"></script>
   <script defer src="baggage.js?v=19"></script>
-  <script defer src="game.js?v=76"></script>
+  <script defer src="game.js?v=77"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -59,6 +59,10 @@
       <canvas id="scene" aria-label="3D airport map"></canvas>
       <div id="aircraft-selection" class="aircraft-selection" aria-hidden="true" hidden><i></i><i></i><i></i><i></i></div>
       <div class="map-heading"><span>Northpoint Regional</span><strong>Airport view</strong><small><i></i> TERMINAL 1 · NPT</small></div>
+      <button id="arrival-holding-status" class="map-arrivals" type="button" aria-controls="flight-view" hidden>
+        <svg class="icon" aria-hidden="true"><use href="#plane"/></svg>
+        <span><strong id="holding-status-count"></strong><span id="holding-status-detail"></span></span>
+      </button>
       <div id="map-labels" class="map-labels">
         <button id="map-holding" class="map-gate map-holding" type="button" data-state="holding" hidden>
           <span class="map-chip">
@@ -198,7 +202,6 @@
       <button type="button" id="departure-alert" class="flight-alert" title="Open flight" hidden></button>
       <button type="button" id="claim-alert" class="flight-alert" aria-controls="baggage-claim" hidden>Assign baggage carousel</button>
       <button type="button" id="late-flight-alert" class="flight-alert" title="Open flight" hidden></button>
-      <span id="arrival-holding-status" class="flight-alert" role="status" hidden></span>
     </div>
     <div class="mobile-views" role="group" aria-label="Game view">
       <button id="show-map" type="button" aria-controls="map" aria-pressed="true">Map</button>

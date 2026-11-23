@@ -312,8 +312,15 @@
   const holdingPinLate = holdingPin.querySelector(".map-late-time");
   const holdingPinCount = holdingPin.querySelector(".holding-count");
   const holdingPinPosition = {element: holdingPin, x: holdingPosition.x, y: 6.4, z: holdingPosition.z};
+  const holdingStatus = $("#arrival-holding-status");
+  const holdingStatusCount = $("#holding-status-count");
+  const holdingStatusDetail = $("#holding-status-detail");
   holdingPin.addEventListener("click", () => {
     const flight = flightAtHoldingPoint();
+    if (flight) selectFromMap(flight.id);
+  });
+  holdingStatus.addEventListener("click", () => {
+    const flight = state.flights.find(({id, stage}) => stage === "holding" && id === holdingStatus.dataset.flight);
     if (flight) selectFromMap(flight.id);
   });
   $("#lounge-counts").innerHTML = gates.map(({name}) => stat(name, 0)).join("");
@@ -704,13 +711,17 @@
     const gatesFull = arrivals.length > 0 && availableGate() < 0;
     const actionable = gatesFull ? [] : arrivals.filter(flight =>
       flight.waitedForGate && reminderActive(flight, "gateReminderAt"));
-    const status = $("#arrival-holding-status");
-    status.hidden = !arrivals.length || actionable.length > 0;
-    status.toggleAttribute("data-gates-full", gatesFull);
-    if (!status.hidden) {
+    const next = arrivals[0];
+    holdingStatus.hidden = !next;
+    holdingStatus.toggleAttribute("data-gates-full", gatesFull);
+    if (next) {
       const count = arrivals.length + (arrivals.length === 1 ? " arrival holding" : " arrivals holding");
-      const label = gatesFull ? count + " · Gates full" : count;
-      if (status.textContent !== label) status.textContent = label;
+      const detail = next.id + (gatesFull ? " · Gates full" : " · Gate available");
+      if (holdingStatusCount.textContent !== count) holdingStatusCount.textContent = count;
+      if (holdingStatusDetail.textContent !== detail) holdingStatusDetail.textContent = detail;
+      holdingStatus.dataset.flight = next.id;
+    } else {
+      delete holdingStatus.dataset.flight;
     }
     const flight = actionable[0];
     paintFlightAlert("#arrival-alert", flight, flight && flight.id + " · Choose a gate", actionable.length - 1);
@@ -1676,7 +1687,7 @@
 
   const aircraftSelection = $("#aircraft-selection");
   const aircraftDelayPins = new Map();
-  const mapOverlays = [$(".map-heading"), $(".map-controls")];
+  const mapOverlays = [$(".map-heading"), $(".map-controls"), holdingStatus];
   function showAircraftSelection(aircraft) {
     if (!aircraft) {
       aircraftSelection.hidden = true;
@@ -1734,7 +1745,7 @@
   function placeMapLabels(labels) {
     const gap = 6;
     const {width, height} = renderer.view;
-    const occupied = mapOverlays.map(element => ({
+    const occupied = mapOverlays.filter(element => !element.hidden).map(element => ({
       left: element.offsetLeft, top: element.offsetTop,
       right: element.offsetLeft + element.offsetWidth, bottom: element.offsetTop + element.offsetHeight
     }));
