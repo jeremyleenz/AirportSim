@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=30">
+  <link rel="stylesheet" href="styles.css?v=32">
   <script defer src="renderer.js"></script>
   <script defer src="airport.js?v=16"></script>
   <script defer src="passengers.js?v=24"></script>
   <script defer src="baggage.js?v=15"></script>
-  <script defer src="game.js?v=63"></script>
+  <script defer src="game.js?v=65"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -60,9 +60,11 @@
       <div class="map-heading"><span>Northpoint Regional</span><strong>Airport view</strong><small><i></i> TERMINAL 1 · NPT</small></div>
       <div id="map-labels" class="map-labels">
         <button id="map-holding" class="map-gate map-holding" type="button" data-state="holding" hidden>
-          <i aria-hidden="true"></i>
-          <span><span class="holding-route"></span><span class="holding-time">Takeoff <time></time></span><span class="map-late-time" hidden></span></span>
-          <span class="holding-count map-count" hidden></span>
+          <span class="map-chip">
+            <i aria-hidden="true"></i>
+            <span><span class="holding-route"></span><span class="holding-time">Takeoff <time></time></span><span class="map-late-time" hidden></span></span>
+            <span class="holding-count map-count" hidden></span>
+          </span>
         </button>
       </div>
       <div class="map-controls">
@@ -109,7 +111,7 @@
             <div id="late-passengers" class="late-passengers flow-stats" hidden></div>
             <p id="departure-delay-notice" class="detail-copy departure-delay" hidden></p>
             <fieldset id="gate-picker" class="gate-picker" hidden>
-              <legend>Choose a gate</legend>
+              <legend>Assign a gate</legend>
               <div id="gate-options" class="gate-options"></div>
             </fieldset>
             <button type="button" id="flight-action" class="primary"></button>

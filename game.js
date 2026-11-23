@@ -121,7 +121,7 @@
     return {day, cash: startingCash, now: 0, playTime: 0, speed: 1, paused: false, closedAtCurfew: false, missedPassengers: 0, delayMinutes: 0,
       staffingCosts: {checkIn: 0, security: 0},
       timetable, departureCount, flights: timetable.map(makeFlight), results: [], selected: overnightAircraft.length ? timetable[0].id : null,
-      view: "flights", terminalFocus: null,
+      view: "flights", terminalFocus: null, gateFromMap: null,
       movements: new Map(), taxiQueue: [], nextDeparture: null, luggage: baggage.create(baggageWaitGraceMinutes * secondsPerMinute)};
   }
 
@@ -178,12 +178,16 @@
     const shortcut = staffing || claim;
     const label = document.createElement(shortcut ? "button" : "span");
     label.className = "map-note";
-    label.textContent = text;
-    const count = section ? addMapCount(label) : null;
+    let content = label;
     if (shortcut) {
       label.type = "button";
       label.classList.add("map-shortcut");
+      content = document.createElement("span");
+      content.className = "map-chip";
+      label.append(content);
     }
+    content.textContent = text;
+    const count = section ? addMapCount(content) : null;
     if (staffing) {
       label.dataset.staffingType = section;
       label.setAttribute("aria-controls", "staffing-" + section);
@@ -191,6 +195,13 @@
       label.addEventListener("click", () => revealStaffing(section));
     }
     if (claim) {
+      const name = document.createElement("span");
+      name.className = "claim-map-name";
+      name.textContent = text;
+      const shortName = document.createElement("span");
+      shortName.className = "claim-map-short-name";
+      shortName.textContent = "BAGS";
+      content.replaceChildren(name, shortName, count);
       label.setAttribute("aria-controls", "baggage-claim");
       label.addEventListener("click", () => revealBaggageClaim(true));
     }
@@ -207,15 +218,15 @@
     const button = document.createElement("button");
     button.className = "map-gate";
     button.type = "button";
-    button.innerHTML = '<i aria-hidden="true"></i><span><span class="map-gate-info">' + name + '</span>' +
-      '<span class="map-late-time" hidden></span></span>';
+    button.innerHTML = '<span class="map-chip"><i aria-hidden="true"></i><span><span class="map-gate-info">' + name +
+      '</span><span class="map-late-time" hidden></span></span></span>';
     const count = addMapCount(button.querySelector(".map-gate-info"));
     const late = button.querySelector(".map-late-time");
     button.addEventListener("click", () => {
       const flight = flightAtGate(gate);
       const arrivals = state.flights.filter(item => item.stage === "holding");
       const arrival = arrivals.find(item => item.id === state.selected) || arrivals[0];
-      selectFromMap(flight?.id || arrival?.id || "gate-" + gate, gate);
+      selectFromMap(flight?.id || arrival?.id || "gate-" + gate, flight ? null : gate);
     });
     if (renderer) $("#map-labels").append(button);
     return {element: button, x: x + 2.9, y: 2.85, z: 7.93, count, late};
@@ -248,11 +259,10 @@
     $("#event").textContent = message;
   }
 
-  function select(id, stand = null) {
-    if (id !== state.selected || stand === null) mapAction = null;
-    const arrival = state.flights.find(flight => flight.id === id && flight.stage === "holding");
-    if (arrival && stand !== null && !flightAtGate(stand)) arrival.preferredGate = stand;
+  function select(id, gateFromMap = null) {
+    mapAction = null;
     state.selected = id;
+    state.gateFromMap = gateFromMap;
     state.view = "flights";
     state.terminalFocus = null;
     paint();
@@ -282,19 +292,18 @@
   function revealFlight(focus = true) {
     const entry = flightElements.get(state.selected);
     (entry?.card ?? flightDetail).scrollIntoView({block: "nearest"});
-    if (!focus) return;
     if (mobileLayout.matches && entry) {
-      const gateChoice = gatePicker.hidden ? null : gatePicker.querySelector("input:enabled");
-      const action = gateChoice ?? flightDetail.querySelector("button:not([hidden]):enabled");
+      const preferred = gateOptions[state.gateFromMap]?.button;
+      const gateChoice = gatePicker.hidden ? null
+        : preferred && !preferred.disabled ? preferred : gatePicker.querySelector("button:enabled");
+      const action = gateChoice ?? (focus ? flightDetail.querySelector("button:not([hidden]):enabled") : null);
       if (action) {
-        // Keep the confirmation and gate choices in view together when there is room.
-        if (gateChoice) $("#flight-action").scrollIntoView({block: "nearest"});
         (gateChoice ? gatePicker : action).scrollIntoView({block: "nearest"});
-        action.focus({preventScroll: true});
+        if (focus) action.focus({preventScroll: true});
         return;
       }
     }
-    (entry?.button ?? $("#stand-title")).focus({preventScroll: true});
+    if (focus) (entry?.button ?? $("#stand-title")).focus({preventScroll: true});
   }
 
   function selectFromMap(id, stand = null) {
@@ -306,6 +315,7 @@
 
   function notifyTab(view, terminalFocus = null) {
     mapAction = null;
+    state.gateFromMap = null;
     if (state.view !== view || state.terminalFocus !== terminalFocus) $(".panel-body").scrollTop = 0;
     state.view = view;
     state.terminalFocus = terminalFocus;
@@ -391,10 +401,8 @@
     const flight = state.flights.find(item => item.id === state.selected);
     if (flight?.stage === "outbound" && flightAtGate(flight.gate) !== flight) return -1;
     if (flight?.gate != null) return flight.gate;
-    if (flight?.stage === "holding") {
-      const {preferredGate} = flight;
-      return preferredGate !== undefined && !flightAtGate(preferredGate) ? preferredGate : -1;
-    }
+    const {gateFromMap} = state;
+    if (flight?.stage === "holding" && gateFromMap !== null && !flightAtGate(gateFromMap)) return gateFromMap;
     return state.selected?.startsWith("gate-") ? Number(state.selected.slice(5)) : -1;
   }
 
@@ -402,28 +410,32 @@
   const flightDetail = $("#flight-detail");
   const delayNotice = $("#departure-delay-notice");
   const gatePicker = $("#gate-picker");
+  const gatePickerLegend = gatePicker.querySelector("legend");
 
   const gateOptions = gates.map(({name}, index) => {
-    const label = document.createElement("label");
-    label.className = "gate-option";
-    label.innerHTML = '<input type="radio" name="arrival-gate"><span class="gate-choice"><strong></strong><small></small></span>';
-    label.querySelector("strong").textContent = name;
-    const input = label.querySelector("input");
-    input.value = index;
-    input.addEventListener("change", () => select(state.selected, index));
-    $("#gate-options").append(label);
-    return {input, status: label.querySelector("small")};
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "gate-choice";
+    button.innerHTML = "<small></small><strong></strong>";
+    button.querySelector("strong").textContent = name;
+    button.addEventListener("click", () => assignGate(index));
+    $("#gate-options").append(button);
+    return {button, name, label: button.querySelector("small")};
   });
 
   function paintGatePicker(flight, gate) {
     gatePicker.hidden = flight?.stage !== "holding";
     if (gatePicker.hidden) return;
-    gateOptions.forEach(({input, status}, index) => {
+    const title = gate < 0 ? "Assign a gate" : "Gate " + gates[gate].name + " selected on map";
+    if (gatePickerLegend.textContent !== title) gatePickerLegend.textContent = title;
+    gateOptions.forEach(({button, name, label}, index) => {
       const occupant = flightAtGate(index);
-      input.disabled = Boolean(occupant);
-      input.checked = index === gate;
-      status.textContent = !occupant ? "Open"
+      button.disabled = Boolean(occupant);
+      button.toggleAttribute("data-map-selected", gate === index);
+      const status = !occupant ? "Assign"
         : occupant.stage === "reserved" || occupant.stage === "inbound" ? "Reserved" : "Occupied";
+      label.textContent = status;
+      button.setAttribute("aria-label", occupant ? name + " " + status : "Assign " + name);
     });
   }
 
@@ -782,7 +794,7 @@
     flightDetail.hidden = !flight && gate < 0;
     if (flightDetail.hidden) return;
     $("#stand-heading").hidden = Boolean(flight);
-    action.hidden = !flight || ["boarding", "deplaning", "scheduled", "overnight"].includes(flight.stage);
+    action.hidden = !flight || ["holding", "boarding", "deplaning", "scheduled", "overnight"].includes(flight.stage);
     if (!flight) {
       $("#stand-name").textContent = "Gate " + gates[gate].name;
       $("#detail-content").innerHTML = '<p class="detail-copy">This gate can receive the next arrival.</p>';
@@ -855,13 +867,11 @@
       parked: beforeBoarding ? "Boarding opens at " + formatTime(clockMinutes(flight.boardingAt)) : "Start boarding",
       closing: "Finishing boarding",
       ready: readyAction,
-      holding: gate >= 0 ? "Assign " + gates[gate].name : availableGate() >= 0 ? "Choose an open gate" : "No open gates",
       reserved: "Waiting for taxi clearance",
       inbound: "Taxiing to gate", outbound: "Departure in progress"
     };
     action.textContent = labels[stage] ?? "";
-    action.disabled = beforeBoarding || pastLastCall || (stage !== "parked" && stage !== "ready" &&
-      !(stage === "holding" && gate >= 0));
+    action.disabled = beforeBoarding || pastLastCall || (stage !== "parked" && stage !== "ready");
     close.hidden = stage !== "boarding" || waiting === 0;
     if (!close.hidden) close.textContent = "Close boarding · " + waiting + (waiting === 1 ? " empty seat" : " empty seats");
     upgrade.hidden = counts.security === 0 || flow.security.every(bank => bank.status === "open");
@@ -921,7 +931,7 @@
         const name = "Carousel " + (index + 1);
         return '<button type="button" class="secondary" data-claim-flight="' + flight.id + '" data-carousel="' + index +
           '" aria-label="Assign ' + flight.id + ' to ' + name + '"' + (occupant || complete ? ' disabled=""' : "") +
-          '>' + name + '</button>';
+          '>' + (occupant || complete ? name : "Assign " + name) + '</button>';
       }).join("");
       return '<div class="claim-flight"><strong>' + flight.id + ' · ' + flight.destination + '</strong><small>' +
         (ready ? "Ready for belt" : "Sorting bags") + ' · ' + bags.length + ' bags</small><div class="claim-actions">' +
@@ -1073,6 +1083,7 @@
     for (const {element, count, section} of mapSigns) {
       if (section === "baggageClaim") {
         element.toggleAttribute("data-action-needed", chooseClaim);
+        element.setAttribute("aria-label", chooseClaim ? "Baggage claim, carousel assignment needed" : "Baggage claim");
         count.hidden = !chooseClaim && !claimBoard.waiting.length;
         count.textContent = chooseClaim ? "Assign" : claimBoard.waiting.length;
       } else if (count) {
@@ -1242,21 +1253,28 @@
           announce(flight.id + " has the next takeoff slot.");
         }
       }
-    } else if (flight.stage === "holding") {
-      const gate = selectedGate();
-      if (gate < 0) return;
-      flight.gate = gate;
-      flight.stage = "reserved";
-      state.taxiQueue.push(flight);
-      releaseTaxiIn();
-      if (flight.stage === "reserved") {
-        announce(gates[gate].name + " reserved for " + flight.id + ".");
-      }
     } else {
       return;
     }
     returnToMapAfter("flight", flight.id);
     paint();
+  }
+
+  function assignGate(gate) {
+    if (shiftComplete() || flightAtGate(gate)) return;
+    const flight = state.flights.find(item => item.id === state.selected && item.stage === "holding");
+    if (!flight) return;
+    state.gateFromMap = null;
+    flight.gate = gate;
+    flight.stage = "reserved";
+    state.taxiQueue.push(flight);
+    releaseTaxiIn();
+    if (flight.stage === "reserved") {
+      announce(gates[gate].name + " reserved for " + flight.id + ".");
+    }
+    returnToMapAfter("flight", flight.id);
+    paint();
+    if (!mobileLayout.matches || game.dataset.mobileView === "operations") revealFlight();
   }
 
   function closeSelectedBoarding() {
@@ -1480,12 +1498,13 @@
         pin.type = "button";
         pin.className = "map-gate map-aircraft-delay";
         pin.dataset.takeoff = "late";
+        pin.innerHTML = '<span class="map-chip"></span>';
         pin.addEventListener("click", () => selectFromMap(flight.id));
         $("#map-labels").append(pin);
         aircraftDelayPins.set(flight.id, pin);
       }
       const text = flight.id + " · " + schedule.message;
-      if (pin.textContent !== text) pin.textContent = text;
+      if (pin.textContent !== text) pin.firstElementChild.textContent = text;
       pin.setAttribute("aria-pressed", String(flight.id === state.selected));
       const {left, right, top} = renderer.projectBounds(object);
       const x = (left + right) / 2;
@@ -1546,7 +1565,7 @@
     const labels = [holdingPinPosition, ...mapPins, ...mapSigns].map(({x, y, z, element, decorative}) => {
       const [left, top] = renderer.project(x, y, z);
       element.hidden = left < 18 || top < 19 || left > width - 18 || top > height - 18 ||
-        (decorative && width < 520) ||
+        (decorative && (mobile || width < 520)) ||
         (element === holdingPin && (shiftComplete() || !holding || (!mobile && (left < 90 || left > width - 90))));
       return {element, decorative, left, top};
     }).concat(movingLabels);
@@ -1688,13 +1707,17 @@
   function zoom(factor, anchor) {
     if (!renderer) return;
     const {view} = renderer;
-    const next = Math.max(.65, Math.min(2.7, view.zoom * factor));
+    const next = Math.max(.65, Math.min(maxMapZoom(), view.zoom * factor));
+    if (next === view.zoom) return;
     const [x, y] = anchor ?? [view.width / 2, view.height / 2];
     const multiplier = next / view.zoom - 1;
     view.x += (view.width * .495 + view.x - x) * multiplier;
     view.y += (view.height * .51 + view.y - y) * multiplier;
     view.zoom = next;
     requestDraw = true;
+  }
+  function maxMapZoom() {
+    return mobileLayout.matches ? 5.2 : 2.7;
   }
   function mapFitZoom() {
     return mobileLayout.matches && window.innerHeight > window.innerWidth ? 1.45 : 1;
@@ -1730,8 +1753,9 @@
 
     function pan(dx, dy) {
       const {view} = renderer;
-      view.x = Math.max(-view.width * 1.5, Math.min(view.width * 1.5, view.x + dx));
-      view.y = Math.max(-view.height * 1.5, Math.min(view.height * 1.5, view.y + dy));
+      const range = Math.max(1.5, view.zoom * .55);
+      view.x = Math.max(-view.width * range, Math.min(view.width * range, view.x + dx));
+      view.y = Math.max(-view.height * range, Math.min(view.height * range, view.y + dy));
       requestDraw = true;
     }
 
@@ -1810,6 +1834,7 @@
     const wasFitted = view?.zoom === fittedZoom && view.x === 0 && view.y === 0;
     fittedZoom = mapFitZoom();
     if (wasFitted) fit();
+    else if (view?.zoom > maxMapZoom()) zoom(1);
     requestDraw = true;
   });
   function frame(timestamp) {
