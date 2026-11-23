@@ -290,7 +290,7 @@
     return {element: button, x: x + 2.9, y: 2.85, z: 7.93, count, late};
   });
   const mapSigns = renderer ? [
-    createLabel("ENTRANCE", -2.2, 1.1, 34.1),
+    createLabel("ENTRANCE", -2.2, 1.1, 32.15, "entrance"),
     createLabel("ARRIVALS EXIT", airport.terminalPaths.airsideExit.x, 1.2, airport.terminalPaths.airsideExit.z + 3.45),
     createLabel("BAGGAGE CLAIM", ...airport.baggageClaim.label, "baggageClaim"),
     createLabel("CAFÉ", -26, 1.84, 19.05, "cafe"),
@@ -641,11 +641,11 @@
       button.querySelector(".flight-progress").hidden = true;
       return;
     }
-    const {checkIn, security, gate, gateQueue, boarded, boarding, missed, outside} = occupancy.byFlight.get(flight.id);
+    const {entrance, checkIn, security, gate, gateQueue, boarded, boarding, missed, outside} = occupancy.byFlight.get(flight.id);
     button.querySelector(".flight-progress").hidden = flight.stage === "scheduled" && outside === flight.passengers;
     button.querySelector(".flight-load b").textContent = boarded + " / " + flight.passengers;
     button.querySelector(".flight-progress-track span").style.width = boarded / flight.passengers * 100 + "%";
-    const stages = [[checkIn, "at check-in"], [security, "at security"], [gate + gateQueue, "at gate"],
+    const stages = [[entrance, "waiting at entrance"], [checkIn, "at check-in"], [security, "at security"], [gate + gateQueue, "at gate"],
       [boarding, "walking to aircraft"], [outside, "yet to arrive"], [missed, "empty seats"]];
     const lateWaiting = notifiedLatePassengers(flight);
     const late = lateWaiting ? '<span class="flight-late-passengers">' + latePassengerLabel(lateWaiting) + '</span>' : '';
@@ -655,12 +655,12 @@
 
   function notifiedLatePassengers(flight) {
     if (flight.stage !== "boarding") return 0;
-    const {regularUnboarded, lateOutside, lateInTerminal} = occupancy.byFlight.get(flight.id);
+    const {regularUnboarded, lateOutside, lateAtEntrance, lateInTerminal} = occupancy.byFlight.get(flight.id);
     if (regularUnboarded) return 0;
     const taxiToLiftoff = outboundRoutes[flight.gate]?.liftoff ?? 0;
     const notice = Math.max(lateNoticeMinutes * secondsPerMinute, taxiToLiftoff + 4 * secondsPerMinute);
     if (state.now < flight.takeoffAt - notice) return 0;
-    return lateOutside + lateInTerminal;
+    return lateOutside + lateAtEntrance + lateInTerminal;
   }
 
   function latePassengerLabel(count) {
@@ -895,9 +895,10 @@
         ? '<p class="detail-copy">Taking off from runway 09.</p>'
         : '<p class="detail-copy">Aircraft cleared for runway 09.</p>';
     } else {
-      const {outside, boarded, boarding, gateQueue, gate: lounge, missed, checkIn, security} = counts;
-      const elsewhere = passengers - outside - missed - boarded - lounge - gateQueue - boarding - checkIn - security;
-      $("#detail-content").innerHTML = '<div class="flow-stats">' + (checkIn ? stat("At check-in", checkIn) : "") +
+      const {outside, entrance, boarded, boarding, gateQueue, gate: lounge, missed, checkIn, security} = counts;
+      const elsewhere = passengers - outside - entrance - missed - boarded - lounge - gateQueue - boarding - checkIn - security;
+      $("#detail-content").innerHTML = '<div class="flow-stats">' + (entrance ? stat("Waiting at entrance", entrance) : "") +
+        (checkIn ? stat("At check-in", checkIn) : "") +
         (security ? stat("At security", security) : "") + stat("In lounge", lounge) +
         stat("In boarding line", gateQueue) + stat("Walking to aircraft", boarding) +
         (elsewhere ? stat("Elsewhere in terminal", elsewhere) : "") +
@@ -905,14 +906,15 @@
     }
     if (arriving && !isOvernightArrival(flight)) {
       $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
-        stat("Passengers in terminal", (passengers - counts.outside) + " / " + passengers) + '</div>');
+        stat("Passengers past entrance", (passengers - counts.outside - counts.entrance) + " / " + passengers) +
+        (counts.entrance ? stat("Waiting at entrance", counts.entrance) : "") + '</div>');
     }
     if (stage === "deplaning") {
       const carousel = airport.baggageClaim.carousels.find(({id}) => id === flight.carousel);
       $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
         stat("Baggage claim", carousel ? "Carousel " + carousel.number : "Awaiting carousel") + '</div>');
     }
-    const {lateOutside, lateInTerminal} = counts;
+    const {lateOutside, lateAtEntrance, lateInTerminal} = counts;
     const lateWaiting = notifiedLatePassengers(flight);
     const schedule = takeoffSchedule(flight);
     delayNotice.hidden = !lateWaiting && !schedule?.urgency;
@@ -926,6 +928,7 @@
     if (lateWaiting) {
       lateNotice.hidden = false;
       lateNotice.innerHTML = (lateOutside ? stat("Late passengers yet to arrive", lateOutside) : "") +
+        (lateAtEntrance ? stat("Late passengers waiting at entrance", lateAtEntrance) : "") +
         (lateInTerminal ? stat("Late passengers in terminal", lateInTerminal) : "");
     }
     const waiting = passengers - counts.boarded - counts.boarding - counts.missed;
@@ -1168,6 +1171,9 @@
         element.setAttribute("aria-label", chooseClaim ? "Baggage claim, carousel assignment needed" : "Baggage claim");
         count.hidden = !chooseClaim && !claimBoard.waiting.length;
         count.textContent = chooseClaim ? "Assign" : claimBoard.waiting.length;
+      } else if (section === "entrance") {
+        count.hidden = flow.entrance.length === 0;
+        count.textContent = flow.entrance.length;
       } else if (count) {
         count.textContent = occupancy[section].length;
       }
@@ -1787,8 +1793,9 @@
   function positionMapLabels(holding, movingLabels) {
     const mobile = mobileLayout.matches;
     const {width, height} = renderer.view;
-    const labels = [holdingPinPosition, ...mapPins, ...mapSigns].map(({x, y, z, element, decorative}) => {
+    const labels = [holdingPinPosition, ...mapPins, ...mapSigns].map(({x, y, z, element, decorative, section}) => {
       const [left, top] = renderer.project(x, y, z);
+      if (section === "entrance" && flow.entrance.length) decorative = false;
       element.hidden = left < 18 || top < 19 || left > width - 18 || top > height - 18 ||
         (decorative && (mobile || width < 520)) ||
         (element === holdingPin && (shiftComplete() || !holding || (!mobile && (left < 90 || left > width - 90))));

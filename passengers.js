@@ -15,6 +15,8 @@ function createPassengerFlow(airport) {
   const deplaneInterval = .32;
   const departureWaitingZones = new Set(["concourse", "cafe", "sharedSeats", "otherGate", "gate"]);
   const point = (x, z) => [x, floor, z];
+  const entrancePositions = Array.from({length: 30}, (_, index) =>
+    point(-8.1 + index % 15 * 1.14 + (index >= 15 ? .28 : 0), 28.33 + Math.floor(index / 15) * .54));
   const claimEntrance = point(baggageClaim.entranceX, baggageClaim.entranceZ);
   const arrivalsConcourse = point(airsideExit.x, baggageClaim.entranceZ);
   const arrivalExitPath = [point(airsideExit.x, airsideExit.thresholdZ),
@@ -64,6 +66,7 @@ function createPassengerFlow(airport) {
       claimSeats: baggageClaim.claimSeats.map(spot => ({...spot})),
       claimStanding: baggageClaim.claimStanding.map(spot => ({...spot})),
       exiting: [], arrivals: [],
+      entrance: [], entranceSpots: entrancePositions.map(position => ({position, angle: Math.PI, seated: false})),
       nextEntry: 0, entrancesUsed: 0
     };
     flow.guestSeats = flow.boarding.flatMap(queue => queue.spots.seats);
@@ -652,8 +655,49 @@ function createPassengerFlow(airport) {
     return next;
   }
 
+  function showEntranceWaiter(person, flow) {
+    const spot = reserve(person, flow.entranceSpots, 7);
+    if (!spot) return false;
+    person.position = point(spot.position[0], entranceZ);
+    walk(person, [spot.position]);
+    return true;
+  }
+
+  function fillEntranceSpots(flow) {
+    for (const person of flow.entrance) {
+      if (!person.position && !showEntranceWaiter(person, flow)) break;
+    }
+  }
+
+  function advanceEntrance(flights, flow, now) {
+    const queue = findLine(flow.checkIn);
+    if (!queue) {
+      let changed = false;
+      for (let person = nextPassenger(flights, now); person; person = nextPassenger(flights, now)) {
+        person.zone = "entrance";
+        flow.entrance.push(person);
+        showEntranceWaiter(person, flow);
+        changed = true;
+      }
+      return changed;
+    }
+    if (now < flow.nextEntry) return false;
+    const person = flow.entrance.shift() ?? nextPassenger(flights, now);
+    if (!person) return false;
+    const entranceX = person.position?.[0] ?? (-6 + flow.entrancesUsed++ % 4 * 4);
+    person.position ??= point(entranceX, entranceZ);
+    if (leaveSpot(person)) fillEntranceSpots(flow);
+    person.zone = "checkIn";
+    scheduleRestroomVisit(person, now, 18, 105);
+    queue.line.people.push(person);
+    walk(person, [point(entranceX, corridorZ), point(queue.line.x, corridorZ)]);
+    flow.nextEntry = now + .17;
+    return true;
+  }
+
   function exitPath(person, queue) {
     const {zone, spot, route, position: [x, , z]} = person;
+    if (zone === "entrance") return [point(x, entranceZ + .6)];
     if (zone === "checkIn" || zone === "landside" || (zone === "security" && z >= securityLayout.checkpointZ)) {
       return [point(x, corridorZ), point(0, corridorZ), point(0, entranceZ + .6)];
     }
@@ -704,6 +748,8 @@ function createPassengerFlow(airport) {
       if (bank.service && missed.has(bank.service.person)) bank.service = null;
       for (const line of bank.lines) line.people = line.people.filter(person => !missed.has(person));
     }
+    flow.entrance = flow.entrance.filter(person => !missed.has(person));
+    fillEntranceSpots(flow);
     queue.line = [];
     queue.approaching = [];
     queue.scanUntil = null;
@@ -954,20 +1000,7 @@ function createPassengerFlow(airport) {
       return true;
     });
 
-    if (now >= flow.nextEntry) {
-      const person = nextPassenger(flights, now);
-      const queue = person && findLine(flow.checkIn);
-      if (queue) {
-        const entranceX = -6 + flow.entrancesUsed++ % 4 * 4;
-        person.position = point(entranceX, entranceZ);
-        person.zone = "checkIn";
-        scheduleRestroomVisit(person, now, 18, 105);
-        queue.line.people.push(person);
-        walk(person, [point(entranceX, corridorZ), point(queue.line.x, corridorZ)]);
-        flow.nextEntry = now + .17;
-        changed = true;
-      }
-    }
+    changed = advanceEntrance(flights, flow, now) || changed;
 
     for (const flight of flights) {
       if (flight.stage === "parked" || flight.stage === "boarding") {
@@ -981,29 +1014,31 @@ function createPassengerFlow(airport) {
 
   function snapshot(flights, flow) {
     const people = {
-      checkIn: [], landside: [], security: [], concourse: [], cafe: [], restroom: [], sharedSeats: [], boarding: [],
+      entrance: [], checkIn: [], landside: [], security: [], concourse: [], cafe: [], restroom: [], sharedSeats: [], boarding: [],
       deplaning: [], arrivalsExit: [], exiting: [...flow.exiting], visible: [...flow.exiting, ...flow.arrivals],
       gates: gates.map(() => [])
     };
     for (const entry of flow.arrivals) people[entry.person.zone].push(entry);
     const byFlight = new Map();
     for (const flight of flights) {
-      const counts = {outside: 0, checkIn: 0, landside: 0, security: 0, concourse: 0, cafe: 0, restroom: 0,
+      const counts = {outside: 0, entrance: 0, checkIn: 0, landside: 0, security: 0, concourse: 0, cafe: 0, restroom: 0,
         sharedSeats: 0, otherGate: 0, gate: 0, gateQueue: 0, boarding: 0, boarded: 0, missed: 0,
-        regularUnboarded: 0, lateOutside: 0, lateInTerminal: 0};
+        regularUnboarded: 0, lateOutside: 0, lateAtEntrance: 0, lateInTerminal: 0};
       byFlight.set(flight.id, counts);
       for (const person of flight.manifest) {
         counts[person.zone]++;
         if (person.lateArrival) {
           if (person.zone === "outside") {
             counts.lateOutside++;
+          } else if (person.zone === "entrance") {
+            counts.lateAtEntrance++;
           } else if (!["boarding", "boarded", "missed"].includes(person.zone)) {
             counts.lateInTerminal++;
           }
         } else if (person.zone !== "boarded") {
           counts.regularUnboarded++;
         }
-        if (person.zone === "boarded" || person.zone === "outside" || person.zone === "missed") continue;
+        if (person.zone === "boarded" || person.zone === "outside" || person.zone === "missed" || !person.position) continue;
         const entry = {person, flight};
         const atGate = person.zone === "gate" || person.zone === "gateQueue";
         const gate = person.zone === "otherGate" ? person.spot.gate : atGate ? flight.gate : null;
