@@ -10,13 +10,13 @@ Day 1 starts with one overnight aircraft and a free gate for the first inbound. 
 
 In-game prompts guide players through gate assignment, baggage carousel assignment, and dispatch as those actions become relevant.
 
-## 2. Carry the treasury and save progress
+## 2. Carry the treasury and save progress (complete for MVP)
 
-Carry the airport’s balance into the next day so operating profit can fund improvements. Use the shift report to show where capacity ran short. For baggage claim, distinguish arrivals that waited while every belt was occupied from arrivals that waited while a belt was available but unassigned.
+The closing treasury carries into the next day after staffing, handling costs, and fines. The shift report shows the opening and closing balances and separates time spent waiting for a free baggage carousel from time spent waiting for the player to assign one that was available.
 
-Save progress in the browser at the end of each shift and after each purchase or applied layout change. On reopening, restore the day, treasury, overnight aircraft, and airport improvements, including their positions.
+At the end of each shift, the game saves the next day, treasury, timetable, and overnight aircraft in the browser. Reopening resumes at the saved morning, paused.
 
-Keep the base schedule available after a loss so players can recover through operations. A poor shift should delay expansion while leaving a way to earn money back.
+The base schedule stays available after a loss so players can earn money back through operations.
 
 ## 3. Offer the first two improvements
 
@@ -24,6 +24,8 @@ Let players buy and place a second carousel or more shared seating between shift
 
 - **Second carousel** can go anywhere in baggage claim that passengers can reach and baggage handling can serve. It lets two arrivals use baggage claim at once. Players still choose which carousel each arrival uses.
 - **Shared seating** can be placed and moved within accessible waiting areas. Show where passengers sit during the next shift and whether seats near the busiest gates are getting more use.
+
+Save each completed purchase with the updated treasury and the improvement’s chosen position. Restore the carousel and seating in those positions when the game reopens.
 
 Give the next shift a comparable workload so players can tell whether their purchase helped. The first playable milestone is finishing Day 1, using the report to buy and place an improvement, then closing and reopening the game to run Day 2 with the improvement in place.
 
@@ -34,6 +36,8 @@ Give players a planning mode between shifts to place new facilities and relocate
 Let players draft several changes together and check that the resulting layout works before they apply it. Gates need a passenger route and access to the taxiway. Check-in and security need queue space and a route from the public terminal through screening to the gates. Carousels need passenger access and a baggage handling connection. Explain which connection or space a placement needs when it cannot be used.
 
 Show the cost and affected passenger routes before players apply a change. Let them undo moves so they can try different placements and recover from an accidental tap on mobile. Show the consequences during the next shift, such as shorter walks to gates or less congestion around check-in.
+
+Extend the browser save to cover every facility the player can place or move. Save the facility positions and updated treasury when the player applies the layout, and restore that layout on reopening.
 
 ## 5. Add more operational expansion
 

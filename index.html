@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=34">
+  <link rel="stylesheet" href="styles.css?v=35">
   <script defer src="renderer.js"></script>
   <script defer src="layout.js?v=9"></script>
   <script defer src="airport.js?v=25"></script>
   <script defer src="passengers.js?v=29"></script>
-  <script defer src="baggage.js?v=16"></script>
-  <script defer src="game.js?v=69"></script>
+  <script defer src="baggage.js?v=17"></script>
+  <script defer src="game.js?v=70"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -221,7 +221,10 @@
       <div id="report-delays"></div>
       <div id="report-overnight-arrivals" hidden></div>
       <p id="report-overnight" class="detail-copy"></p>
-      <div id="report-baggage-waits" class="flow-stats"></div>
+      <section id="report-baggage" aria-labelledby="report-baggage-title">
+        <h3 id="report-baggage-title">Baggage claim</h3>
+        <div id="report-baggage-waits" class="flow-stats"></div>
+      </section>
       <div id="report-finances" class="flow-stats"></div>
       <table class="report-flights">
         <caption>Departure results</caption>
@@ -229,7 +232,10 @@
         <tbody id="report-flights"></tbody>
       </table>
     </div>
-    <div class="report-actions"><button type="button" id="restart-shift" class="primary" autofocus>Start new shift</button></div>
+    <div class="report-actions">
+      <p id="report-save-status" class="detail-copy"></p>
+      <button type="button" id="restart-shift" class="primary" autofocus>Start new shift</button>
+    </div>
   </dialog>
 </body>
 </html>

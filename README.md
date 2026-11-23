@@ -4,6 +4,10 @@ An isometric airport operations game. It runs in a browser with WebGL 2, with no
 
 See the [expansion roadmap](ROADMAP.md) for the planned progression, airport improvements, and airline contracts.
 
+## Saved progress
+
+At the end of a shift, the game saves the next day, closing treasury, overnight aircraft, and opening schedule to this browser. Reopening returns to the start of that saved day, paused. An unfinished shift restarts from opening.
+
 ## Package for deployment
 
 Run `make package` from the repository to copy the game to `dist/` and create `airport-sim.zip`. The ZIP has `index.html` at its root and contains all the files needed to play. Rerun the command after changes to make a new package.

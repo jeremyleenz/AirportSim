@@ -34,7 +34,7 @@ const baggage = (() => {
 
   function create(claimWaitGrace = Infinity) {
     return {items: [], arrivals: [], claims: [], claimBags: [], nextFeedAt: new Map(), trip: null,
-      claimWaitGrace, claimStats: {delayedPassengers: 0, fullBeltWaitSeconds: 0},
+      claimWaitGrace, claimStats: {delayedPassengers: 0, fullBeltWaitSeconds: 0, unassignedBeltWaitSeconds: 0},
       loaders: loaderRoutes.map(() => ({docked: 0, stayUntil: 0, direction: 0, offset: 0}))};
   }
 
@@ -175,6 +175,7 @@ const baggage = (() => {
   function measureClaimWaits(animation, now, dt) {
     const {claims, claimStats, claimWaitGrace} = animation;
     const beltsFull = claims.filter(({flight}) => flight.carousel !== null).length === carousels.length;
+    const waitCause = beltsFull ? "fullBeltWaitSeconds" : "unassignedBeltWaitSeconds";
     for (const {flight, bags} of claims) {
       for (const bag of bags) {
         if (bag.claimWaitAt === undefined) continue;
@@ -182,9 +183,9 @@ const baggage = (() => {
           bag.longWait = true;
           claimStats.delayedPassengers++;
         }
-        if (beltsFull && flight.carousel === null) {
+        if (flight.carousel === null) {
           const blockedSince = Math.max(now - dt, bag.claimWaitAt, readyForBeltAt(bag));
-          claimStats.fullBeltWaitSeconds += Math.max(0, now - blockedSince);
+          claimStats[waitCause] += Math.max(0, now - blockedSince);
         }
         if (bag.claimed || bag.cancelled) delete bag.claimWaitAt;
       }

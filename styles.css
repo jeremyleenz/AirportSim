@@ -298,7 +298,8 @@ button.flight-alert:hover { background: #584933; }
 #report-delays { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 #report-overnight-arrivals { margin-bottom: 6px; }
 #report-overnight { margin-bottom: 12px; }
-#report-baggage-waits { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+#report-baggage { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+#report-baggage-title { margin: 0 0 6px; font-size: .9rem; }
 .report-flights { width: 100%; margin-top: 15px; border-collapse: collapse; text-align: left; }
 .report-flights caption { padding-bottom: 8px; text-align: left; font-weight: 650; }
 .report-flights th, .report-flights td { padding: 8px 4px; border-top: 1px solid var(--line); font: .82rem var(--mono); }
@@ -307,6 +308,7 @@ button.flight-alert:hover { background: #584933; }
 .report-flights span { display: block; margin-top: 2px; color: var(--muted); font: .74rem system-ui, sans-serif; }
 .report-flights .report-late { color: var(--amber); }
 .report-actions { border-top: 1px solid var(--line); }
+.report-actions .detail-copy { margin: 0 0 8px; }
 .report-actions .primary { margin: 0; }
 @media (max-height: 780px) and (min-width: 761px) {
   .topbar { height: 65px; }
