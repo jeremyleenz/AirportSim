@@ -8,11 +8,11 @@ The compact starter terminal has two gates, one baggage carousel, two check-in c
 
 Day 1 starts with one overnight aircraft and a free gate for the first inbound. Early flights are staggered so players can handle an arrival and a departure before more turnarounds overlap. Each of four simulated shifts dispatched all 12 flights before curfew using the starter facilities.
 
-In-game prompts guide players through gate assignment, baggage carousel assignment, and dispatch as those actions become relevant.
+In-game prompts guide players through gate assignment and dispatch as those actions become relevant. The starter carousel is assigned automatically in arrival order.
 
 ## 2. Carry the treasury and save progress (complete for MVP)
 
-The closing treasury carries into the next day after staffing, handling costs, and fines. The shift report shows the opening and closing balances and separates time spent waiting for a free baggage carousel from time spent waiting for the player to assign one that was available.
+The closing treasury carries into the next day after staffing, handling costs, and fines. The shift report shows the opening and closing balances and the time spent waiting for a free baggage carousel. At airports with two carousels, it also shows time spent waiting for the player to assign an available carousel.
 
 At the end of each shift, the game saves the next day, treasury, timetable, and overnight aircraft in the browser. Reopening resumes at the saved morning, paused.
 
@@ -22,7 +22,7 @@ The base schedule stays available after a loss so players can earn money back th
 
 Let players buy and place a second baggage carousel, a third security lane, or a third check-in desk between shifts. Set prices so a decent first shift makes at least one upgrade affordable. Players decide what to buy based on the bottlenecks they encountered during the shift. Offer a choice of sites with a map preview for each upgrade.
 
-- **Second carousel** goes in baggage claim where passengers and baggage handling can reach it. It lets two arrivals use baggage claim at once. Players still choose which carousel each arrival uses.
+- **Second carousel** goes in baggage claim where passengers and baggage handling can reach it. It lets two arrivals use baggage claim at once. Once installed, players choose which carousel each arrival uses.
 - **Third security lane** adds screening capacity when staffed. Place it where passengers can queue and pass through to the gates.
 - **Third check-in desk** adds check-in capacity when staffed. Place it in the public terminal with queue space and a connection to baggage handling.
 

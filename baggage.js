@@ -15,6 +15,7 @@ function createBaggage(airport) {
   const claimSpeed = 2.5;
   const sortingDelay = 2.6;
   const {carousels} = airport.baggageClaim;
+  const automatic = carousels.length === 1;
   const carouselRoutes = new Map(carousels.map(({id, loop, feed}) => [id, {loop: timedPath(loop, 0, claimSpeed), feed}]));
   const atGate = new Set(["deplaning", "parked", "boarding", "closing", "ready", "overnight"]);
   const loaderRoutes = airport.gates.map((_, gate) => {
@@ -91,6 +92,7 @@ function createBaggage(airport) {
       const bags = [...byPassenger.values()];
       animation.arrivals.push({flight, bags: [...bags], firstTrip: true});
       animation.claims.push({flight, bags, ready: false});
+      assignSingleCarousel(animation.claims);
     }
     return byPassenger;
   }
@@ -100,11 +102,16 @@ function createBaggage(airport) {
       ({id, number, flight: animation.claims.find(({flight}) => flight.carousel === id)?.flight}));
     const waiting = animation.claims.filter(({flight}) => flight.carousel === null);
     const available = assigned.filter(({flight}) => !flight).length;
-    return {carousels: assigned, waiting, available};
+    return {carousels: assigned, waiting, available, automatic};
+  }
+
+  function assignSingleCarousel(claims) {
+    if (!automatic || !claims.length || claims.some(({flight}) => flight.carousel !== null)) return;
+    claims[0].flight.carousel = carousels[0].id;
   }
 
   function assignCarousel(animation, id, carousel) {
-    if (!carouselRoutes.has(carousel)) return false;
+    if (automatic || !carouselRoutes.has(carousel)) return false;
     const {carousels: assigned, waiting} = claimBoard(animation);
     if (assigned.find(({id}) => id === carousel).flight) return false;
     const claim = waiting.find(({flight}) => flight.id === id);
@@ -208,6 +215,7 @@ function createBaggage(airport) {
     const pending = bag => !bag.claimed && !bag.cancelled;
     animation.claimBags = animation.claimBags.filter(pending);
     animation.claims = animation.claims.filter(({bags}) => bags.some(pending));
+    assignSingleCarousel(animation.claims);
     for (const claim of animation.claims) {
       claim.ready ||= claim.bags.some(bag => pending(bag) && now >= readyForBeltAt(bag));
     }
