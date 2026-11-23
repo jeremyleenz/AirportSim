@@ -2,6 +2,8 @@
 
 An isometric airport operations game. It runs in a browser with WebGL 2, with no backend or account required for players.
 
+See the [expansion roadmap](ROADMAP.md) for the planned progression, airport improvements, and airline contracts.
+
 ## Package for deployment
 
 Run `make package` from the repository to copy the game to `dist/` and create `airport-sim.zip`. The ZIP has `index.html` at its root and contains all the files needed to play. Rerun the command after changes to make a new package.
