@@ -2,13 +2,13 @@
 
 Start with a small airport and give players time to learn its operations. Airport improvements should make a comparable shift easier to run. Players can take on more traffic when they’re ready.
 
-## 1. Start with a smaller airport
+## 1. Start with a smaller airport (complete for MVP)
 
-Start with two gates, one baggage carousel, two check-in counters, and two security lanes. Staff one counter and one lane at opening. The second of each gives players a way to respond when queues build.
+The compact starter terminal has two gates, one baggage carousel, two check-in counters, and two security lanes. One counter and one lane are staffed at opening. Players can open the second of each as queues build.
 
-Start the first day with one overnight aircraft and a free gate for the first inbound. Stagger early flights so players can handle an arrival and a departure before more turnarounds overlap. Two gates let players choose a stand and recover from a late departure. A well-run first shift should be manageable with the starting facilities.
+Day 1 starts with one overnight aircraft and a free gate for the first inbound. Early flights are staggered so players can handle an arrival and a departure before more turnarounds overlap. Each of four simulated shifts dispatched all 12 flights before curfew using the starter facilities.
 
-Use those first quiet flights to teach gate assignment, baggage carousel assignment, and dispatch. Introduce each action when the player first needs it.
+In-game prompts guide players through gate assignment, baggage carousel assignment, and dispatch as those actions become relevant.
 
 ## 2. Carry the treasury and save progress
 
