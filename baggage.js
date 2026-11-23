@@ -126,6 +126,12 @@ function createBaggage(airport) {
       (!bag.loading || now < bag.path.at(-1).time);
   }
 
+  function trackCarry(crew, from, to, putDownAt) {
+    const backAt = putDownAt + to.time - from.time;
+    crew.transfers.push({from, to, putDownAt, backAt});
+    crew.freeAt = backAt + .12;
+  }
+
   function dispatch(animation, now) {
     const waiting = animation.items.filter(bag => !bag.loading &&
       now >= bag.path.at(-1).time && atGate.has(bag.flight.stage));
@@ -151,8 +157,7 @@ function createBaggage(airport) {
         const start = Math.max(crew.freeAt, nextBeltAt - path.at(-2).time);
         for (const step of path) step.time += start;
         const [, pickedUp, carried, onBelt] = path;
-        crew.freeAt = onBelt.time + carried.time - pickedUp.time + .12;
-        crew.transfers.push({path, backAt: crew.freeAt - .12});
+        trackCarry(crew, pickedUp, carried, onBelt.time);
         nextBeltAt = onBelt.time + .36;
         bag.path = path;
         bag.loading = true;
@@ -167,10 +172,25 @@ function createBaggage(airport) {
     const route = tugRoutes[gate];
     const arrival = route[1].time;
     const {transfer, foot, hatch} = loaderRoutes[gate];
+    const crews = [[], []];
     bags.forEach((bag, index) => {
-      const trailer = trailerPose(route, arrival, Math.floor(index / inboundBagsPerTrailer));
+      const trailerIndex = Math.floor(index / inboundBagsPerTrailer);
+      const trailer = trailerPose(route, arrival, trailerIndex);
       const slot = bagSlot(trailer, index % inboundBagsPerTrailer);
-      bag.loadPath = timedPath([hatch, foot, slot], now + arrival + .35 + index * .31, loaderBeltSpeed, 4.5);
+      const [onAircraft, offBelt, stowed] = timedPath([hatch, foot, slot], now + arrival + .35 + index * .31, loaderBeltSpeed, 4.5);
+      // Fit the staff animation into the existing transfer so carousel timing stays intact.
+      const handoff = (fraction, height) => ({point: [foot[0] + (slot[0] - foot[0]) * fraction, height,
+        foot[2] + (slot[2] - foot[2]) * fraction], time: offBelt.time + (stowed.time - offBelt.time) * fraction});
+      const pickup = handoff(.24, .55);
+      const placement = handoff(.82, .58);
+      bag.loadPath = [onAircraft, offBelt, pickup, placement, stowed];
+      const handlers = crews[trailerIndex];
+      let handler = handlers.find(({freeAt}) => pickup.time >= freeAt);
+      if (!handler) {
+        handler = {transfers: []};
+        handlers.push(handler);
+      }
+      trackCarry(handler, pickup, placement, stowed.time);
     });
     const returnAt = Math.max(...bags.map(bag => bag.loadPath.at(-1).time)) + .35;
     const depotTime = route[5].time;
@@ -186,7 +206,7 @@ function createBaggage(airport) {
       leaveDepotAt = Math.max(leaveDepotAt, bag.transferPath.at(-1).time + .28);
       animation.claimBags.push(bag);
     }
-    animation.trip = {flight, bags, route, start: now, arrival, returnAt, depotAt, leaveDepotAt,
+    animation.trip = {flight, bags, crews: crews.flat(), route, start: now, arrival, returnAt, depotAt, leaveDepotAt,
       finish: leaveDepotAt + route.at(-1).time - depotTime};
   }
 
@@ -340,14 +360,16 @@ function createBaggage(airport) {
     if (!trip?.crews || now < trip.start + trip.arrival || now >= trip.returnAt) return;
     for (const {transfers} of trip.crews) {
       if (!transfers.length) continue;
-      const {path, backAt} = transfers.find(transfer => now < transfer.backAt) ?? transfers.at(-1);
-      const [, pickup, placement, onBelt] = path;
-      const returning = now >= onBelt.time;
-      const carryTime = returning ? placement.time - (now - onBelt.time) : now;
-      const pose = poseOnPath([pickup, placement], Math.max(pickup.time, Math.min(placement.time, carryTime)));
-      const walking = now >= pickup.time && (now < placement.time || returning && now < backAt);
-      const x = pose.x - Math.sin(pose.angle) * .40, z = pose.z - Math.cos(pose.angle) * .40;
-      const angle = pose.angle + (now >= pickup.time && !returning ? 0 : Math.PI);
+      const {from, to, putDownAt, backAt} = transfers.find(transfer => now < transfer.backAt) ?? transfers.at(-1);
+      if (trip.flight && (now < from.time - .12 || now >= backAt)) continue;
+      const returning = now >= putDownAt;
+      const carryTime = returning ? to.time - (now - putDownAt) : now;
+      const pose = poseOnPath([from, to], Math.max(from.time, Math.min(to.time, carryTime)));
+      const walking = now >= from.time && (now < to.time || returning && now < backAt);
+      const sidestep = trip.flight && returning ? .63 * Math.sin(Math.PI * (now - putDownAt) / (backAt - putDownAt)) : 0;
+      const x = pose.x - Math.sin(pose.angle) * .40 + Math.cos(pose.angle) * sidestep;
+      const z = pose.z - Math.cos(pose.angle) * .40 - Math.sin(pose.angle) * sidestep;
+      const angle = pose.angle + (now >= from.time && !returning ? 0 : Math.PI);
       moving.push({mesh: meshes.crew[walking ? Math.floor(now * 10) % 2 : 0], x, z, angle});
     }
   }
