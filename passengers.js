@@ -2,8 +2,8 @@
 
 function createPassengerFlow(airport) {
   const {gates, floor, terminalPaths, baggageClaim} = airport;
-  const {queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats, cafeDoorX, airsideExit, concourseRight, restroomStalls,
-    security: securityLayout} = terminalPaths;
+  const {queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats, cafeDoorX, airsideExit,
+    concourseLeft, concourseRight, restroomStalls, security: securityLayout} = terminalPaths;
   const pace = 4.1;
   const entranceZ = 29;
   const corridorZ = 27.77;
@@ -13,6 +13,7 @@ function createPassengerFlow(airport) {
   const checkInTime = .95;
   const screeningTime = .75;
   const deplaneInterval = .32;
+  const departureWaitingZones = new Set(["concourse", "cafe", "sharedSeats", "otherGate", "gate"]);
   const point = (x, z) => [x, floor, z];
   const claimEntrance = point(baggageClaim.entranceX, baggageClaim.entranceZ);
   const arrivalsConcourse = point(airsideExit.x, baggageClaim.entranceZ);
@@ -90,40 +91,81 @@ function createPassengerFlow(airport) {
   function makeLounge(x, gate) {
     const seats = loungeSeats(x).map(spot => ({...spot, gate}));
     const standing = [];
-    const clearAreas = [[.4, 8.14, 9.28, 9.77], [.4, 8.14, 10.91, 12.18], [.4, 8.14, 13.42, 14.17],
-      [-8.38, -6.11, 11.02, 12.13]];
+    // Keep the boarding line and the approaches at x - 3.7 and x + 9.16 clear.
+    const walkwayEdge = [
+      [.36, 8.35, 13.38, 14.17], [-7.55, -5.65, 13.38, 14.17],
+      [-8.6, -4.22, 15.02, 15.6], [-3.18, 8.35, 15.15, 15.6]
+    ];
+    const betweenSeats = [[.4, 8.14, 10.99, 12.12], [-8.38, -6.11, 11.02, 12.13]];
     let seed = 12503 + x;
     function sample() {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       return seed / 4294967296;
     }
-    for (let i = 0; i < 16000 && standing.length < 106; i++) {
-      const [left, right, near, far] = clearAreas[i % clearAreas.length];
-      const dx = left + (right - left) * sample();
-      const z = near + (far - near) * sample();
-      if (standing.some(({position}) => Math.hypot(position[0] - x - dx, position[2] - z) < .4)) continue;
-      standing.push({position: point(x + dx, z), angle: sample() * Math.PI * 2,
-        aisleX: x + (dx < 0 ? -9.15 : 9.16), seated: false});
+    function addStanding(areas, limit) {
+      const clearanceSquared = .4 ** 2;
+      for (let i = 0; i < 16000 && standing.length < limit; i++) {
+        const [left, right, near, far] = areas[i % areas.length];
+        const dx = left + (right - left) * sample();
+        const standX = x + dx;
+        const z = near + (far - near) * sample();
+        if (standing.some(({position: [px, , pz]}) => (px - standX) ** 2 + (pz - z) ** 2 < clearanceSquared)) continue;
+        const aisleX = z > 15 ? standX : x + (dx < 0 ? -9.15 : 9.16);
+        standing.push({position: point(standX, z), angle: sample() * Math.PI * 2, aisleX, seated: false});
+      }
     }
-    return {seats, standing};
+
+    addStanding(walkwayEdge, 110);
+    const concourseStanding = standing.slice();
+    addStanding(betweenSeats, 110);
+    return {seats, standing, concourseStanding};
   }
 
-  function reserve(person, spots, stride) {
+  function availableSpot(person, spots, stride) {
     const start = person.index * stride % spots.length;
     for (let i = 0; i < spots.length; i++) {
       const spot = spots[(start + i) % spots.length];
-      if (spot.owner) continue;
-      spot.owner = person;
-      person.spot = spot;
-      return spot;
+      if (!spot.owner) return spot;
     }
     return null;
   }
 
+  function occupySpot(person, spot) {
+    spot.owner = person;
+    person.spot = spot;
+    return spot;
+  }
+
+  function reserve(person, spots, stride) {
+    const spot = availableSpot(person, spots, stride);
+    return spot && occupySpot(person, spot);
+  }
+
   function reserveLounge(person, queue) {
-    const prefersSeat = person.index * 19 % 11 < 7;
-    return (prefersSeat && reserve(person, queue.spots.seats, 7)) ||
-      reserve(person, queue.spots.standing, 37) || reserve(person, queue.spots.seats, 7);
+    const {seats, concourseStanding, standing} = queue.spots;
+    return reserve(person, seats, 7) || reserve(person, concourseStanding, 37) || reserve(person, standing, 37);
+  }
+
+  function fillVacantLoungeSeats(flight, queue, now) {
+    if (flight.stage !== "parked") return;
+    for (const seat of queue.spots.seats) {
+      if (seat.owner) continue;
+      let closest = null;
+      let shortestTime = Infinity;
+      for (const {owner} of queue.spots.standing) {
+        if (!owner || owner.zone !== "gate" || owner.route || wantsToQueue(owner, flight, now)) continue;
+        const path = pathToSeat(owner, seat, seatExit(owner));
+        const time = travelTime(owner.position, path);
+        if (time >= shortestTime) continue;
+        closest = {person: owner, path};
+        shortestTime = time;
+      }
+      if (!closest) break;
+      const {person, path} = closest;
+      leaveSpot(person);
+      occupySpot(person, seat);
+      walk(person, path, "gate");
+    }
   }
 
   function settle(person) {
@@ -145,17 +187,35 @@ function createPassengerFlow(airport) {
     return flight.boardingAt - 4 - person.index * 43 % 34;
   }
 
-  function startRestroomVisit(person, flow, now, returnBy = Infinity) {
+  function departureActivityDeadline(person, flight, now) {
+    // Give boarding a head start before passengers decide they have time for another activity.
+    if (flight.gate === null || now >= flight.boardingAt + 12 + person.index % 20) return Infinity;
+    return gateBy(person, flight);
+  }
+
+  function walkTimeToGate(flight, x) {
+    const gate = gates[flight.gate];
+    const distance = gate ? Math.abs(x - gate.x) : Math.max(x - concourseLeft, concourseRight - x);
+    return (distance + 12) / pace;
+  }
+
+  function scheduleRestroomVisit(person, now, minimum, spread) {
+    person.restroomAt = now + minimum + (person.index * 53 + Math.floor(now * 11)) % spread;
+  }
+
+  function startRestroomVisit(person, flow, now, returnBy = Infinity, access = []) {
     const stall = flow.restrooms.find(({owner}) => !owner);
     if (!stall) return false;
     const {approach, entryPath, position} = stall;
-    const path = [point(person.position[0], approach[2]), approach, ...entryPath, position];
+    const [x] = access.at(-1) ?? person.position;
+    const path = [...access, point(x, approach[2]), approach, ...entryPath, position];
     const exit = [...entryPath].reverse().concat([approach]);
     const duration = 3.2 + person.index % 4 * .8;
     const returnAt = now + travelTime(person.position, path) + duration + travelTime(position, exit);
     if (returnAt > returnBy) return false;
     stall.owner = person;
-    person.restroomVisit = {stall, exit, duration, leaveAt: null, leaving: false};
+    person.restroomVisit = {stall, exit, duration, approachIndex: access.length + 1, leaveAt: null, leaving: false};
+    delete person.restroomAt;
     person.zone = "restroom";
     walk(person, path);
     return true;
@@ -188,72 +248,101 @@ function createPassengerFlow(airport) {
       point(cafeDoorX, cafeCorridorZ)];
   }
 
-  function reserveCafe(person, flight, flow, now) {
-    const spot = reserve(person, flow.cafe, 3);
-    if (spot) person.cafeUntil = flight.gate === null ? now + 22 + person.index % 13 : Infinity;
-    return spot;
+  function leaveCafePath(person) {
+    if (person.zone === "cafe") return cafeExit(person.spot);
+    const {points, index} = person.route;
+    const door = points.length - 4;
+    return index > door ? points.slice(door, index).reverse() : points.slice(index, door);
   }
 
-  function cafeLeaveAt(person, flight) {
-    if (flight.gate === null) return person.cafeUntil;
-    const spot = person.spot;
-    const walkBack = travelTime(spot.position, cafeExit(spot)) + (Math.abs(gates[flight.gate].x - cafeDoorX) + 11) / pace;
-    return Math.min(person.cafeUntil, gateBy(person, flight) - walkBack);
+  function seatExit(person) {
+    const {spot} = person;
+    if (!spot) return [];
+    const row = seatAisle(spot);
+    return [point(person.position[0], row), point(spot.aisleX, row)];
   }
 
-  function strollPath(person, destinationX) {
+  function useDepartureRestroom(person, flight, flow, now, deadline) {
+    if (!(now >= person.restroomAt) || !flow.restrooms.length) return false;
+    const access = person.zone === "cafe" ? cafeExit(person.spot) : seatExit(person);
+    const [approachX] = flow.restrooms[0].approach;
+    if (!startRestroomVisit(person, flow, now, deadline - walkTimeToGate(flight, approachX), access)) return false;
+    leaveSpot(person);
+    delete person.cafeUntil;
+    delete person.strolling;
+    delete person.retryGateAt;
+    return true;
+  }
+
+  function cafeReturnTime(flight, spot) {
+    return travelTime(spot.position, cafeExit(spot)) + walkTimeToGate(flight, cafeDoorX);
+  }
+
+  function useDepartureCafe(person, flight, flow, now, deadline) {
+    if (person.zone === "cafe" || person.index * 11 % 19 >= 8 || now < (person.cafeAt ?? 0)) return false;
+    person.cafeAt = now + 12 + person.index % 19;
+    if (now >= deadline) return false;
+    const spot = availableSpot(person, flow.cafe, 3);
+    if (!spot) return false;
+    const access = seatExit(person);
+    const [x] = access.at(-1) ?? person.position;
+    const path = [...access, point(x, cafeCorridorZ), ...cafeExit(spot).reverse(), spot.position];
+    const reachedAt = now + travelTime(person.position, path);
+    if (reachedAt + 3 >= deadline - cafeReturnTime(flight, spot)) return false;
+    leaveSpot(person);
+    occupySpot(person, spot);
+    person.cafeUntil = reachedAt + 22 + person.index % 13;
+    person.cafeAt = person.cafeUntil + 150 + person.index * 17 % 100;
+    person.zone = "concourse";
+    delete person.strolling;
+    delete person.retryGateAt;
+    walk(person, path, "cafe");
+    return true;
+  }
+
+  function startDepartureActivity(person, flight, flow, now) {
+    if (person.route || flight.stage === "boarding" || flight.stage === "closing" ||
+        !departureWaitingZones.has(person.zone)) return false;
+    const deadline = departureActivityDeadline(person, flight, now);
+    return useDepartureRestroom(person, flight, flow, now, deadline) ||
+      useDepartureCafe(person, flight, flow, now, deadline);
+  }
+
+  function startStroll(person) {
     const [x] = person.position;
     const z = 16.25 + person.index % 5 * .45;
-    const turnX = x > 12 || (x >= -12 && person.index % 2) ? -25 + person.index % 7
-      : Math.min(27, concourseRight) - 7 + person.index % 8;
-    return [point(x, z), point(turnX, z), point(turnX, z + .55), point((turnX + destinationX) / 2, z + .55)];
-  }
-
-  function afterSecurity(person, flight, flow, now) {
-    if (flight.stage !== "boarding") {
-      const gate = gates[flight.gate];
-      const preference = person.index * 11 % 19;
-      const [x] = person.position;
-      if (preference < 6 && flow.restrooms.length) {
-        const [approachX] = flow.restrooms[0].approach;
-        const walkToGate = gate ? (Math.abs(approachX - gate.x) + 12) / pace : 0;
-        if (startRestroomVisit(person, flow, now, gateBy(person, flight) - walkToGate)) return;
-      }
-      if (preference < 8) {
-        const spot = reserveCafe(person, flight, flow, now);
-        if (spot) {
-          const path = [point(x, cafeCorridorZ), ...cafeExit(spot).reverse(), spot.position];
-          if (now + travelTime(person.position, path) + 3 < cafeLeaveAt(person, flight)) {
-            walk(person, path, "cafe");
-            return;
-          }
-          leaveSpot(person);
-          person.cafeUntil = undefined;
-        }
-      }
-      if (preference < 14) {
-        const path = strollPath(person, gate?.x ?? x);
-        const returnAt = gate ? gateBy(person, flight) - (Math.abs(path.at(-1)[0] - gate.x) + 10) / pace : Infinity;
-        if (now + travelTime(person.position, path) < returnAt) {
-          person.strollUntil = returnAt;
-          walk(person, path);
-          return;
-        }
-      }
+    const inset = person.index % 7 * .28;
+    const west = concourseLeft + inset, east = concourseRight - inset;
+    const trip = person.strollsTaken ?? 0;
+    let ends;
+    if (person.index % 4 === 0) {
+      ends = x <= (west + east) / 2 ? [west, east] : [east, west];
+    } else {
+      const eastbound = (person.index + trip) % 2 === 0;
+      const direction = eastbound ? (east - x >= 8 ? 1 : -1) : (x - west >= 8 ? -1 : 1);
+      const distance = 12 + person.index * 7 % 17;
+      ends = [Math.max(west, Math.min(east, x + direction * distance))];
     }
-    goToGateOrWait(person, flight, flow, now);
+    person.strollsTaken = trip + 1;
+    person.strolling = true;
+    walk(person, [point(x, z), ...ends.map(end => point(end, z))], "concourse");
   }
 
   function goToGateOrWait(person, flight, flow, now) {
+    delete person.strolling;
+    delete person.retryGateAt;
     const queue = flow.boarding[flight.gate];
-    if (queue && walkToGate(person, flight, queue, now)) return;
+    if (queue) {
+      if (!walkToGate(person, flight, queue, now)) {
+        person.route = null;
+        person.retryGateAt = now + 2 + person.index % 4;
+      }
+      return;
+    }
     const spot = reserve(person, flow.sharedSeats, 7) || reserve(person, flow.guestSeats, 7);
     if (spot) {
       walkToSeat(person, spot, spot.gate === undefined ? "sharedSeats" : "otherGate");
-    } else {
-      person.strollUntil = Infinity;
-      walk(person, strollPath(person, person.position[0]));
-    }
+    } else startStroll(person);
   }
 
   function recallWaitingSeat(person, flight, flow, now) {
@@ -263,8 +352,6 @@ function createPassengerFlow(airport) {
       person.zone = "gate";
       return true;
     }
-    const walkBack = (Math.abs(spot.aisleX - gates[flight.gate].x) + 14) / pace;
-    if (flight.stage !== "boarding" && now < gateBy(person, flight) - walkBack) return false;
     const queue = flow.boarding[flight.gate];
     const hasLoungeSpace = queue.spots.seats.some(seat => !seat.owner) || queue.spots.standing.some(place => !place.owner);
     if (!hasLoungeSpace && !(wantsToQueue(person, flight, now) && hasRoom(queue))) return false;
@@ -276,26 +363,20 @@ function createPassengerFlow(airport) {
   }
 
   function recallActivities(person, flight, flow, now) {
-    const boarding = flight.stage === "boarding";
-    if (person.strollUntil !== undefined && (!person.route ||
-      (person.strollUntil < Infinity && (boarding || now >= person.strollUntil)))) {
-      person.strollUntil = undefined;
+    if ((person.strolling && flight.gate !== null) || now >= person.retryGateAt) {
       goToGateOrWait(person, flight, flow, now);
     }
-    if (person.cafeUntil === undefined || (!boarding && now < cafeLeaveAt(person, flight))) return false;
+    if (person.cafeUntil === undefined) return false;
+    const deadline = departureActivityDeadline(person, flight, now) - cafeReturnTime(flight, person.spot);
+    if (flight.stage !== "boarding" && now < Math.min(person.cafeUntil, deadline)) return false;
 
-    const seatedAtCafe = person.zone === "cafe";
-    const spot = leaveSpot(person);
-    const route = person.route;
-    person.cafeUntil = undefined;
+    const exit = leaveCafePath(person);
+    leaveSpot(person);
+    delete person.cafeUntil;
     person.zone = "concourse";
-    if (seatedAtCafe || route?.index >= 3) {
-      const exit = seatedAtCafe ? cafeExit(spot) : route.points.slice(1, route.index).reverse();
-      walk(person, exit, "concourse");
-    } else {
-      goToGateOrWait(person, flight, flow, now);
-    }
-    return seatedAtCafe;
+    if (exit.length) walk(person, exit, "concourse");
+    else goToGateOrWait(person, flight, flow, now);
+    return true;
   }
 
   function follow(person, dt) {
@@ -339,10 +420,12 @@ function createPassengerFlow(airport) {
     const [startX] = person.position;
     const middleZ = 16.1 + person.index % 5 * .48;
     if (wantsToQueue(person, flight, now) && hasRoom(queue)) {
-      const {position, offset} = boardingEntry(queue);
-      const points = [point(startX, middleZ), point(position[0], middleZ), position];
+      const entry = boardingEntry(queue);
+      const {offset} = entry;
+      const points = [point(startX, middleZ), ...boardingApproach(queue, entry, middleZ)];
       approachLine(person, queue, {points, offset, duration: travelTime(person.position, points)}, now);
     } else {
+      fillVacantLoungeSeats(flight, queue, now);
       const spot = reserveLounge(person, queue);
       if (!spot) return false;
       walkToSeat(person, spot, "gate");
@@ -351,11 +434,17 @@ function createPassengerFlow(airport) {
   }
 
   function walkToSeat(person, spot, zone) {
+    walk(person, pathToSeat(person, spot), zone);
+  }
+
+  function pathToSeat(person, spot, exit = []) {
     const [x] = spot.position;
     const middleZ = 16.1 + person.index % 5 * .48;
     const row = seatAisle(spot);
-    walk(person, [point(person.position[0], middleZ), point(spot.aisleX, middleZ),
-      point(spot.aisleX, row), point(x, row), spot.position], zone);
+    const approach = [point(spot.aisleX, row), point(x, row), spot.position];
+    const [startX] = exit.at(-1) ?? person.position;
+    if (exit.length && startX === spot.aisleX) return [...exit, ...approach];
+    return [...exit, point(startX, middleZ), point(spot.aisleX, middleZ), ...approach];
   }
 
   function seatAisle(spot) {
@@ -408,6 +497,15 @@ function createPassengerFlow(airport) {
     return {position: queue.points.at(-1), offset: queue.length};
   }
 
+  function boardingApproach(queue, {position, offset}, walkwayZ) {
+    const [x, , z] = position;
+    if (offset !== queue.offsets[1]) return [point(x, walkwayZ), position];
+    // Go around the waiting area in front of the short queue entrance.
+    const entryX = x + 1;
+    const turnZ = z + .92;
+    return [point(entryX, walkwayZ), point(entryX, turnZ), point(x, turnZ), position];
+  }
+
   function approachLine(person, queue, {points, offset, duration}, now) {
     const joinAt = Math.max(now + duration, queue.nextJoin);
     queue.nextJoin = joinAt + .31;
@@ -422,12 +520,13 @@ function createPassengerFlow(airport) {
     if (!waiting.length) return;
 
     const person = waiting[Math.floor(Math.random() * waiting.length)];
-    const {position, offset} = boardingEntry(queue);
+    const entry = boardingEntry(queue);
+    const {position, offset} = entry;
     const row = seatAisle(person.spot);
     const aisleX = person.spot.aisleX;
     const points = [point(person.position[0], row), point(aisleX, row)];
-    if (aisleX !== position[0]) points.push(point(aisleX, 15.36), point(position[0], 15.36));
-    points.push(position);
+    if (aisleX === position[0] && offset !== queue.offsets[1]) points.push(position);
+    else points.push(point(aisleX, 16.1), ...boardingApproach(queue, entry, 16.1));
     approachLine(person, queue, {points, offset, duration: travelTime(person.position, points)}, now + .13);
     queue.nextCall = now + .25;
   }
@@ -466,6 +565,7 @@ function createPassengerFlow(airport) {
       changed = true;
     }
     callFromLounge(flight, queue, now);
+    fillVacantLoungeSeats(flight, queue, now);
     return changed;
   }
 
@@ -533,12 +633,13 @@ function createPassengerFlow(airport) {
       return [point(x, corridorZ), point(0, corridorZ), point(0, entranceZ + .6)];
     }
     const toExit = [claimEntrance, arrivalsConcourse, ...arrivalExitPath];
-    if (zone === "cafe") return [...cafeExit(spot), ...toExit];
+    if (person.cafeUntil !== undefined) return [...leaveCafePath(person), ...toExit];
     if (person.restroomVisit) {
-      const {exit, leaving} = person.restroomVisit;
-      const waypoints = route
-        ? leaving ? route.points.slice(route.index) : route.points.slice(0, route.index).reverse()
-        : exit;
+      const {exit, leaving, approachIndex} = person.restroomVisit;
+      if (!route) return [...exit, ...toExit];
+      const waypoints = leaving ? route.points.slice(route.index)
+        : route.index > approachIndex ? route.points.slice(approachIndex, route.index).reverse()
+          : route.points.slice(route.index, approachIndex + 1);
       return [...waypoints, ...toExit];
     }
 
@@ -546,15 +647,17 @@ function createPassengerFlow(airport) {
     if (zone === "gateQueue") {
       const {offset} = queue.line.find(entry => entry.person === person);
       if (offset <= queue.offsets[1]) {
-        path.push(queue.points[1]);
+        const entry = {position: queue.points[1], offset: queue.offsets[1]};
+        return [...boardingApproach(queue, entry, cafeCorridorZ).reverse(), ...toExit];
       } else {
         const next = queue.offsets.findIndex(distance => distance > offset);
         if (next >= 0) path.push(...queue.points.slice(next));
       }
     } else if (spot && (zone === "gate" || zone === "otherGate" || zone === "sharedSeats")) {
       const row = seatAisle(spot);
-      path.push(point(x, row), point(spot.aisleX, row));
-    } else if (zone === "concourse" && route?.zone === "concourse") {
+      if (route?.zone === "gate") path.push(...route.points.slice(route.index, -1));
+      path.push(point(path.at(-1)?.[0] ?? x, row), point(spot.aisleX, row));
+    } else if (zone === "concourse" && route?.zone === "concourse" && !person.strolling) {
       path.push(...route.points.slice(route.index));
     } else if (spot && route?.index > 1) {
       path.push(...route.points.slice(0, route.index).reverse());
@@ -672,7 +775,7 @@ function createPassengerFlow(airport) {
         if (arrival.remaining === 0 && arrival.onBridge === 0) onDeplaned(flight);
         changed = true;
       }
-      if (person.zone === "arrivalsExit" && person.index * 5 % 17 < 5 &&
+      if (person.zone === "arrivalsExit" && now >= person.restroomAt &&
           person.route?.index === arrival.path.length - 2) {
         const resume = person.route.points.slice(person.route.index);
         if (startRestroomVisit(person, flow, now)) {
@@ -698,6 +801,7 @@ function createPassengerFlow(airport) {
       const index = flight.incomingPassengers - arrival.remaining;
       const person = makePerson(flight.passengers + index, "deplaning");
       person.position = arrival.door;
+      scheduleRestroomVisit(person, now, 1, 40);
       const bag = arrival.arrivalBags?.get(index);
       person.arrivalBag = bag && !bag.cancelled ? bag : null;
       walk(person, person.arrivalBag ? arrival.path : [...arrival.path, ...arrivalExitPath]);
@@ -727,13 +831,20 @@ function createPassengerFlow(airport) {
         person.moving = false;
         if (person.restroomVisit) {
           if (advanceRestroomVisit(person, now, dt)) {
+            scheduleRestroomVisit(person, now, 180, 105);
             person.zone = "concourse";
             goToGateOrWait(person, flight, flow, now);
             changed = true;
           }
           continue;
         }
-        if (person.cafeUntil !== undefined || person.strollUntil !== undefined) {
+        const leavingGateSeat = person.zone === "gate" && person.seated;
+        if (startDepartureActivity(person, flight, flow, now)) {
+          if (leavingGateSeat) fillVacantLoungeSeats(flight, flow.boarding[flight.gate], now);
+          changed = true;
+          continue;
+        }
+        if (person.cafeUntil !== undefined || person.strolling || person.retryGateAt !== undefined) {
           changed = recallActivities(person, flight, flow, now) || changed;
         }
         changed = recallWaitingSeat(person, flight, flow, now) || changed;
@@ -741,12 +852,12 @@ function createPassengerFlow(airport) {
         const wasWalking = person.route;
         const walkStart = wasWalking?.startAt ?? -Infinity;
         const walkTime = Math.min(dt, Math.max(0, now - walkStart));
-        if (wasWalking && walkTime > 0 && person.zone === "gate") leaveSpot(person);
+        if (wasWalking && walkTime > 0 && person.zone === "gate" && wasWalking.zone !== "gate") leaveSpot(person);
         changed = follow(person, walkTime) || changed;
         if (wasWalking?.zone === "concourse" && !person.route) {
-          if (previousZone === "security") {
-            delete person.securityBag;
-            afterSecurity(person, flight, flow, now);
+          if (previousZone === "security") delete person.securityBag;
+          if (startDepartureActivity(person, flight, flow, now)) {
+            changed = true;
           } else {
             goToGateOrWait(person, flight, flow, now);
           }
@@ -831,6 +942,7 @@ function createPassengerFlow(airport) {
         const entranceX = -6 + flow.entrancesUsed++ % 4 * 4;
         person.position = point(entranceX, entranceZ);
         person.zone = "checkIn";
+        scheduleRestroomVisit(person, now, 18, 105);
         queue.line.people.push(person);
         walk(person, [point(entranceX, corridorZ), point(queue.line.x, corridorZ)]);
         flow.nextEntry = now + .17;

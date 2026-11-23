@@ -102,6 +102,9 @@ function createAirport(layout) {
     seated: true
   })));
 
+  const concourseLeft = terminalLeft + 2.4;
+  const concourseRight = terminalRight - 1.3;
+
   function bridgePath(x) {
     return [[x - 4.7, floor, terminalBackZ], [x - 4.7, floor, 7.5],
       [x - 3.35, 1.45, 3.3], [x - 1.05, 1.45, 1.2], [x - .60, 1.45, 1.2]];
@@ -854,7 +857,7 @@ function createAirport(layout) {
     queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats, cafeDoorX, airsideExit,
     restroomStalls,
     restroomLabel: restrooms ? [restrooms.x, floor + 2.6, restrooms.frontZ - restrooms.roomSize / 2] : null,
-    concourseRight: terminalRight - 1.3,
+    concourseLeft, concourseRight,
     checkIn: checkInQueue,
     security: securityQueue
   };
