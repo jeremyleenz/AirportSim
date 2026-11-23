@@ -16,7 +16,7 @@ const baggage = (() => {
   const sortingDelay = 2.6;
   const {carousels} = airport.baggageClaim;
   const claimLoops = carousels.map(({loop}) => timedPath(loop, 0, claimSpeed));
-  const atGate = new Set(["deplaning", "parked", "boarding", "closing", "ready"]);
+  const atGate = new Set(["deplaning", "parked", "boarding", "closing", "ready", "overnight"]);
   const loaderRoutes = airport.gates.map((_, gate) => {
     const [transfer, , foot, hatch] = airport.luggageToAircraft(gate);
     const dx = hatch[0] - foot[0], dz = hatch[2] - foot[2];

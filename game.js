@@ -46,28 +46,41 @@
     ["Melbourne", 96], ["Brisbane", 90], ["Auckland", 110],
     ["Hobart", 86], ["Adelaide", 102], ["Wellington", 94]
   ];
-  // Times are minutes after opening. One aircraft is parked overnight and Brisbane is the first inbound.
+  // Times are minutes after opening. Overnight aircraft operate the first departures.
   const scheduleSlots = [
-    [0, 0, 214, null, 74], [1, 1, 507, 8, 104], [2, 2, 318, 54, 126],
+    [0, 0, 214, 4, 74], [1, 1, 507, 8, 104], [2, 2, 318, 54, 126],
     [3, 3, 126, 89, 146],
     [5, 1, 201, 120, 176], [0, 2, 216, 134, 190], [1, 3, 509, 151, 207], [2, 0, 320, 169, 230],
     [3, 1, 128, 198, 265], [4, 2, 437, 232, 306], [5, 3, 203, 267, 344],
     [0, 0, 218, 305, 384], [4, 0, 435, 358, 413], [1, 1, 511, 349, 432],
     [5, 1, 204, 402, 458], [2, 2, 322, 397, 480], [3, 3, 130, 445, 530]
   ];
+  const overnightArrivalCounts = [2, 1, 0, 1];
+  const overnightArrivalSlots = [[5, 0, 702, 28], [4, 2, 704, 14]];
 
-  function createTimetable() {
-    return scheduleSlots.map(([route, airline, number, arrivalMinute, takeoffMinute], index) => {
+  function createTimetable(day, overnightAircraft) {
+    const departures = scheduleSlots.map(([route, airline, number, arrivalMinute, takeoffMinute], index) => {
       const [destination, passengers] = routes[route];
+      const overnight = overnightAircraft[index];
+      const aircraft = overnight?.aircraft ?? {airline};
       // Offset arrival and takeoff together to preserve each flight's turnaround time.
       const offset = index < 2 ? 0 : Math.floor(Math.random() * (2 * scheduleVariationMinutes + 1)) - scheduleVariationMinutes;
-      const arrivalAt = arrivalMinute === null ? null : (arrivalMinute + offset) * secondsPerMinute;
+      const arrivalAt = overnight ? null : (arrivalMinute + offset) * secondsPerMinute;
       const departureMinute = takeoffMinute + offset;
       const lead = passengers >= largeFlightCapacity ? largeFlightBoardingLeadMinutes : boardingLeadMinutes;
       const boardingAt = Math.max(0, departureMinute - lead) * secondsPerMinute;
       const takeoffAt = departureMinute * secondsPerMinute;
-      return {id: airlines[airline].code + number, destination, airline, passengers, arrivalAt, boardingAt, takeoffAt};
+      return {id: airlines[aircraft.airline].code + number, destination, airline: aircraft.airline, aircraft,
+        openingGate: overnight?.gate ?? null, passengers, arrivalAt, boardingAt, takeoffAt};
     }).sort((a, b) => a.takeoffAt - b.takeoffAt);
+    const finalTakeoff = departures.at(-1).takeoffAt;
+    const count = overnightArrivalCounts[(day - 1) % overnightArrivalCounts.length];
+    const eveningArrivals = overnightArrivalSlots.slice(0, count).map(([route, airline, number, lead]) => {
+      const [destination, passengers] = routes[route];
+      return {id: airlines[airline].code + number, destination, airline, aircraft: {airline},
+        openingGate: null, passengers, arrivalAt: finalTakeoff - lead * secondsPerMinute, boardingAt: null, takeoffAt: null};
+    });
+    return [...departures, ...eveningArrivals];
   }
 
   function lateArrivalTimes(takeoffAt) {
@@ -82,31 +95,36 @@
   }
 
   function makeFlight(plan, index) {
-    const {arrivalAt, takeoffAt, passengers} = plan;
-    const gate = arrivalAt === null ? index : null;
+    const {arrivalAt, takeoffAt, openingGate: gate} = plan;
     const stage = gate === null ? "scheduled" : "parked";
-    const lateTimes = lateArrivalTimes(takeoffAt);
-    const firstArrival = gate === null ? Math.max(0, takeoffAt - earliestPassengerArrival * secondsPerMinute) : 0;
-    const lastArrival = Math.max(0, takeoffAt - latestPassengerArrival * secondsPerMinute);
-    const manifest = passengerFlow.manifest(passengers, firstArrival, lastArrival, lateTimes);
-    for (const person of manifest) person.flightId = plan.id;
-    const incomingPassengers = arrivalAt === null ? 0 : Math.round(passengers * (.55 + index * 3 % 5 * .04));
-    return {...plan, stage, gate, carousel: null, manifest, incomingPassengers};
+    const incomingPassengers = arrivalAt === null ? 0 : Math.round(plan.passengers * (.55 + index * 3 % 5 * .04));
+    const passengers = isOvernightArrival(plan) ? 0 : plan.passengers;
+    let manifest = [];
+    if (passengers) {
+      const lateTimes = lateArrivalTimes(takeoffAt);
+      const firstArrival = gate !== null && index === 0 ? 0 : Math.max(0, takeoffAt - earliestPassengerArrival * secondsPerMinute);
+      const lastArrival = Math.max(0, takeoffAt - latestPassengerArrival * secondsPerMinute);
+      manifest = passengerFlow.manifest(passengers, firstArrival, lastArrival, lateTimes);
+      for (const person of manifest) person.flightId = plan.id;
+    }
+    return {...plan, passengers, stage, gate, carousel: null, manifest, incomingPassengers};
   }
 
-  function createShift(day = 1) {
-    const timetable = createTimetable();
+  function createShift(day, overnightAircraft) {
+    const timetable = createTimetable(day, overnightAircraft);
+    const departureCount = timetable.filter(plan => !isOvernightArrival(plan)).length;
     return {day, cash: startingCash, now: 0, playTime: 0, speed: 1, paused: false, closedAtCurfew: false, missedPassengers: 0, delayMinutes: 0,
       staffingCosts: {checkIn: 0, security: 0},
-      timetable, flights: timetable.map(makeFlight), results: [], selected: timetable[0].id, view: "flights", staffingFocus: null,
+      timetable, departureCount, flights: timetable.map(makeFlight), results: [], selected: overnightAircraft.length ? timetable[0].id : null,
+      view: "flights", staffingFocus: null,
       movements: new Map(), taxiQueue: [], nextDeparture: null, luggage: baggage.create()};
   }
 
-  let state = createShift();
+  let state = createShift(1, [{gate: 0, aircraft: {airline: 0}}]);
   const statusText = {
     scheduled: "Expected",
     parked: "At gate", deplaning: "Deplaning", boarding: "Boarding", closing: "Boarding closed", ready: "Ready", holding: "Holding",
-    reserved: "Gate reserved", inbound: "Taxiing in", outbound: "Departing"
+    reserved: "Gate reserved", inbound: "Taxiing in", outbound: "Departing", overnight: "Parked overnight"
   };
   let flow = passengerFlow.create();
   let occupancy = passengerFlow.snapshot(state.flights, flow);
@@ -290,6 +308,15 @@
     return stage === "scheduled" || stage === "holding" || stage === "reserved" || stage === "inbound";
   }
 
+  function isOvernightArrival({takeoffAt}) {
+    return takeoffAt === null;
+  }
+
+  function parkedAircraft() {
+    return state.flights.filter(flight => flight.gate !== null && !isArriving(flight) && flight.stage !== "outbound")
+      .map(({gate, aircraft}) => ({gate, aircraft})).sort((a, b) => a.gate - b.gate);
+  }
+
   function holdingFlights() {
     return state.flights.filter(({stage}) => stage === "holding" || stage === "reserved");
   }
@@ -314,7 +341,8 @@
   }
 
   function shiftComplete() {
-    return state.results.length === state.timetable.length;
+    return state.results.length === state.departureCount &&
+      (state.closedAtCurfew || state.flights.every(flight => !isOvernightArrival(flight) || flight.stage === "overnight"));
   }
 
   function availableGate() {
@@ -393,7 +421,7 @@
   }
 
   function takeoffSchedule(flight) {
-    if (!flight) return null;
+    if (!flight || isOvernightArrival(flight)) return null;
     const movement = state.movements.get(flight);
     if (movement && movementElapsed(movement) >= movement.liftoff) return null;
 
@@ -441,13 +469,16 @@
     const {timetable} = state;
     const rows = timetable.map(({id, destination, arrivalAt, boardingAt, takeoffAt}) => {
       const row = document.createElement("tr");
-      const arrival = arrivalAt === null ? '<span class="schedule-initial">At gate</span>' : scheduleTime(arrivalAt);
-      row.innerHTML = '<th scope="row"><button type="button" class="schedule-flight">' + destination +
-        '</button><span class="schedule-destination" hidden>' + destination + '</span><span class="schedule-id">' +
-        id + '<span class="schedule-gate"></span></span></th><td>' + arrival + '</td><td>' + scheduleTime(boardingAt) +
-        '</td><td>' + scheduleTime(takeoffAt) + '<span class="schedule-status"></span></td>';
+      const arrival = arrivalAt === null ? '<span class="schedule-initial">Overnight</span>' : scheduleTime(arrivalAt);
+      const name = takeoffAt === null ? "From " + destination : destination;
+      const boarding = boardingAt === null ? "—" : scheduleTime(boardingAt);
+      const takeoff = takeoffAt === null ? '<span class="schedule-initial">Overnight</span>' : scheduleTime(takeoffAt);
+      row.innerHTML = '<th scope="row"><button type="button" class="schedule-flight">' + name +
+        '</button><span class="schedule-destination" hidden>' + name + '</span><span class="schedule-id">' +
+        id + '<span class="schedule-gate"></span></span></th><td>' + arrival + '</td><td>' + boarding +
+        '</td><td>' + takeoff + '<span class="schedule-status"></span></td>';
       const button = row.querySelector("button");
-      button.setAttribute("aria-label", "Open " + destination + " " + id + " on flight board");
+      button.setAttribute("aria-label", "Open " + name + " " + id + " on flight board");
       button.addEventListener("click", () => {
         const flight = state.flights.find(item => item.id === id);
         if (!flight) return;
@@ -478,12 +509,18 @@
       gateLabel.textContent = gate ? " · " + gate.name : "";
       row.dataset.stage = flight?.stage ?? (cancelled ? "cancelled" : "departed");
       row.dataset.late = result && result.takeoff > result.due ? "true" : "false";
-      status.textContent = cancelled ? "Cancelled at curfew" : result ? "Left " + formatTime(result.takeoff) : flightStatus(flight);
-      status.hidden = flight?.stage === "scheduled";
+      const unparked = state.closedAtCurfew && flight && isOvernightArrival(flight) && isArriving(flight);
+      status.textContent = unparked ? "Unparked at curfew" : cancelled ? "Cancelled at curfew"
+        : result ? "Left " + formatTime(result.takeoff) : flightStatus(flight);
+      status.hidden = flight?.stage === "scheduled" && !unparked;
     }
   }
 
   function paintFlightProgress(button, flight) {
+    if (isOvernightArrival(flight)) {
+      button.querySelector(".flight-progress").hidden = true;
+      return;
+    }
     const {checkIn, security, gate, gateQueue, boarded, boarding, missed, outside} = occupancy.byFlight.get(flight.id);
     button.querySelector(".flight-progress").hidden = flight.stage === "scheduled" && outside === flight.passengers;
     button.querySelector(".flight-load b").textContent = boarded + " / " + flight.passengers;
@@ -647,7 +684,8 @@
       else button.removeAttribute("aria-controls");
       const arriving = isArriving(flight);
       const gate = gates[flight.gate];
-      button.querySelector("strong").textContent = arriving ? "To " + flight.destination : flight.destination;
+      button.querySelector("strong").textContent = isOvernightArrival(flight) ? "From " + flight.destination
+        : arriving ? "To " + flight.destination : flight.destination;
       button.querySelector("small").textContent = gate ? flight.id + " · " + gate.name : flight.id;
       paintArrivalTime(button.querySelector(".flight-arrival"), flight);
       const badge = button.querySelector(".flight-status");
@@ -704,7 +742,7 @@
     flightDetail.hidden = !flight && gate < 0;
     if (flightDetail.hidden) return;
     $("#stand-heading").hidden = Boolean(flight);
-    action.hidden = !flight || ["boarding", "deplaning", "scheduled"].includes(flight.stage);
+    action.hidden = !flight || ["boarding", "deplaning", "scheduled", "overnight"].includes(flight.stage);
     if (!flight) {
       $("#stand-name").textContent = "Gate " + gates[gate].name;
       $("#detail-content").innerHTML = '<p class="detail-copy">This gate can receive the next arrival.</p>';
@@ -724,6 +762,8 @@
       const {remaining, onBridge} = flight.deplaning;
       $("#detail-content").innerHTML = '<div class="flow-stats">' + stat("Arrivals still aboard", remaining) +
         stat("Arrivals on jet bridge", onBridge) + '</div>';
+    } else if (stage === "overnight") {
+      $("#detail-content").innerHTML = '<p class="detail-copy">Stays at ' + gates[flight.gate].name + ' for tomorrow’s departures.</p>';
     } else if (stage === "outbound") {
       $("#detail-content").innerHTML = departureOnRunway(flight)
         ? '<p class="detail-copy">Taking off from runway 09.</p>'
@@ -737,7 +777,7 @@
         (elsewhere ? stat("Elsewhere in terminal", elsewhere) : "") +
         (outside ? stat("Yet to arrive", outside) : "") + (missed ? stat("Empty seats", missed) : "") + '</div>';
     }
-    if (arriving) {
+    if (arriving && !isOvernightArrival(flight)) {
       $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
         stat("Passengers in terminal", (passengers - counts.outside) + " / " + passengers) + '</div>');
     }
@@ -933,11 +973,13 @@
         count.textContent = occupancy.gates[index].length;
       });
     }
-    const flightCount = state.timetable.length;
-    $("#goal-bar").style.width = dispatched / flightCount * 100 + "%";
-    $("#goal-count").textContent = dispatched + " / " + flightCount;
+    const parking = !complete && dispatched === state.departureCount;
+    const goal = parking ? state.timetable.length - state.departureCount : state.departureCount;
+    const progress = parking ? state.flights.filter(flight => flight.stage === "overnight").length : dispatched;
+    $("#goal-bar").style.width = progress / goal * 100 + "%";
+    $("#goal-count").textContent = progress + " / " + goal;
     $("#objective-title").textContent = state.closedAtCurfew ? "Curfew reached"
-      : complete ? "Operating day complete" : "Dispatch " + flightCount + " flights";
+      : complete ? "Operating day complete" : parking ? "Park overnight arrivals" : "Dispatch " + goal + " flights";
     $("#view-report").hidden = !complete;
 
     const gate = selectedGate();
@@ -956,18 +998,18 @@
     const waiting = holdingFlights();
     const holding = complete ? null : flightAtHoldingPoint(waiting);
     if (holding) {
-      const route = holding.id + " to " + holding.destination;
+      const route = holding.id + (isOvernightArrival(holding) ? " from " : " to ") + holding.destination;
       const schedule = takeoffSchedule(holding);
       const delay = paintMapDelay(holdingPin, holdingPinLate, schedule);
-      const {time} = schedule;
       holdingPinRoute.textContent = route;
-      holdingPinSchedule.hidden = Boolean(delay);
-      holdingPinTime.dateTime = time;
-      holdingPinTime.textContent = time;
+      holdingPinSchedule.hidden = !schedule || Boolean(delay);
+      holdingPinTime.dateTime = schedule?.time ?? "";
+      holdingPinTime.textContent = schedule?.time ?? "";
       holdingPin.setAttribute("aria-pressed", String(holding.id === state.selected));
       holdingPinCount.hidden = waiting.length === 1;
       holdingPinCount.textContent = waiting.length;
-      holdingPin.setAttribute("aria-label", waiting.length + " awaiting taxi-in. " + route + ". Takeoff at " + time + delay);
+      holdingPin.setAttribute("aria-label", waiting.length + " awaiting taxi-in. " + route +
+        (schedule ? ". Takeoff at " + schedule.time + delay : ". Parks overnight."));
     }
     for (const {element, count, section} of mapSigns) {
       if (section === "baggageClaim") {
@@ -1201,6 +1243,7 @@
     }
     state.closedAtCurfew = !shiftComplete();
     for (const flight of state.flights) {
+      if (isOvernightArrival(flight)) continue;
       const alreadyMissed = flight.manifest.filter(person => person.zone === "missed").length;
       state.missedPassengers += flight.passengers - alreadyMissed;
       state.results.push({id: flight.id, destination: flight.destination, due: clockMinutes(flight.takeoffAt),
@@ -1224,8 +1267,9 @@
         announce(flight.id + " is ready for departure.");
       },
       flight => {
-        flight.stage = "parked";
-        announce(flight.id + " finished deplaning at " + gates[flight.gate].name + ".");
+        const overnight = isOvernightArrival(flight);
+        flight.stage = overnight ? "overnight" : "parked";
+        announce(flight.id + (overnight ? " parked overnight at " : " finished deplaning at ") + gates[flight.gate].name + ".");
       }, person => {
         const flight = state.flights.find(item => item.id === person.flightId);
         baggage.checkedIn(state.luggage, flight, person, state.now);
@@ -1242,11 +1286,11 @@
         announce(flight.id + " deplaning at " + gates[flight.gate].name + ".");
       } else {
         finishDeparture(movement);
-        if (shiftComplete()) {
-          finishShift();
-          return;
-        }
       }
+    }
+    if (shiftComplete()) {
+      finishShift();
+      return;
     }
     if (state.now >= curfewAt) {
       closeAtCurfew();
@@ -1298,13 +1342,22 @@
     const checkIn = staffingCost("checkIn");
     const security = staffingCost("security");
     const closure = $("#report-closure");
-    closure.hidden = cancelled === 0;
-    closure.textContent = formatTime(curfewMinutes) + " curfew · " + cancelled +
-      (cancelled === 1 ? " flight cancelled" : " flights cancelled");
+    closure.hidden = !state.closedAtCurfew;
+    closure.textContent = formatTime(curfewMinutes) + " curfew" + (cancelled ? " · " + cancelled +
+      (cancelled === 1 ? " departure cancelled" : " departures cancelled") : "");
     $("#report-on-time").textContent = onTime + " / " + results.length;
     $("#report-missed").textContent = results.reduce((total, flight) => total + flight.missed, 0);
     $("#report-profit").textContent = currency.format(revenue - handling - checkIn - security - fines);
     $("#report-delays").innerHTML = stat("Total departure delay", state.delayMinutes + " min");
+    const overnightArrivals = state.flights.filter(isOvernightArrival);
+    const arrivalSummary = $("#report-overnight-arrivals");
+    arrivalSummary.hidden = overnightArrivals.length === 0;
+    arrivalSummary.innerHTML = stat("Overnight arrivals parked",
+      overnightArrivals.filter(flight => !isArriving(flight)).length + " / " + overnightArrivals.length);
+    const overnightGates = parkedAircraft().map(({gate}) => gates[gate].name);
+    $("#report-overnight").textContent = overnightGates.length
+      ? "Overnight parking at " + overnightGates.join(", ") + "."
+      : "Gates clear overnight.";
     $("#report-finances").innerHTML = stat("Flight revenue", currency.format(revenue)) +
       stat("Ground handling", currency.format(-handling)) + stat("Extra check-in staffing", currency.format(0 - checkIn)) +
       stat("Extra security staffing", currency.format(0 - security)) + stat("Late takeoff fines", currency.format(0 - fines));
@@ -1377,7 +1430,7 @@
     if (!renderer || (mobileLayout.matches && game.dataset.mobileView === "operations")) return;
     const holding = flightAtHoldingPoint();
     const aircraft = state.flights.filter(flight => !isArriving(flight) || flight.stage === "inbound" || flight === holding)
-      .map(flight => ({mesh: planes[flight.airline], ...aircraftPosition(flight), flightId: flight.id, flight}));
+      .map(flight => ({mesh: planes[flight.aircraft.airline], ...aircraftPosition(flight), flightId: flight.id, flight}));
     const moving = aircraft.slice();
     const selectedAircraft = aircraft.find(object => object.flightId === state.selected);
     const carTravel = state.now * 2.4;
@@ -1449,7 +1502,8 @@
   $("#view-report").addEventListener("click", showShiftReport);
   $("#close-report").addEventListener("click", () => report.close());
   startNextDay.addEventListener("click", () => {
-    state = createShift(operatingDay() + 1);
+    const overnightAircraft = parkedAircraft();
+    state = createShift(operatingDay() + 1, overnightAircraft);
     scheduleRows = buildScheduleRows();
     flow = passengerFlow.create();
     occupancyDirty = true;
@@ -1458,7 +1512,8 @@
     $(".panel-body").scrollTop = 0;
     showMobileView("map");
     fit();
-    announce("Terminal open. Passengers are arriving.");
+    announce(overnightAircraft.length ? "Terminal open. Overnight aircraft are at their gates."
+      : "Terminal open. Awaiting the first aircraft.");
     paint();
     (mobileLayout.matches ? $("#show-operations") : $("#flights-tab")).focus({preventScroll: true});
   });

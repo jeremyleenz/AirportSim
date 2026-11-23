@@ -64,7 +64,8 @@ button, h1, h2, h3, p { margin: 0; }
 .map-gate { position: absolute; pointer-events: auto; translate: -50% -100%; display: flex; gap: 6px; align-items: center; background: #14272d; border: 1px solid #95b4b2; color: var(--light); font: 700 .84rem var(--mono); border-radius: 6px; padding: 6px 8px; box-shadow: 0 3px 8px #12292469; }
 .map-gate i { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
 .map-gate[data-state="boarding"] i, .map-gate[data-state="deplaning"] i, .map-gate[data-state="ready"] i { background: var(--mint); }
-.map-gate[data-state="parked"] i, .map-gate[data-state="reserved"] i, .map-gate[data-state="holding"] i { background: var(--amber); }
+.map-gate[data-state="parked"] i, .map-gate[data-state="reserved"] i, .map-gate[data-state="holding"] i,
+.map-gate[data-state="overnight"] i { background: var(--amber); }
 .map-gate[aria-pressed="true"] { background: var(--mint); border-color: #ecfff3; color: #162e28; }
 .map-gate[aria-pressed="true"] i { background: #426a53; }
 .map-gate[data-takeoff="late"] { z-index: 1; background: var(--takeoff-background); border-color: #d18e8e; color: var(--takeoff-text); }
@@ -287,6 +288,8 @@ button.flight-alert:hover { background: #584933; }
 .report-metrics dt { color: var(--muted); font-size: .79rem; }
 .report-metrics dd { margin: 0; color: var(--mint); font: 700 clamp(.86rem, 3.6vw, 1.22rem) var(--mono); }
 #report-delays { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+#report-overnight-arrivals { margin-bottom: 6px; }
+#report-overnight { margin-bottom: 12px; }
 .report-flights { width: 100%; margin-top: 15px; border-collapse: collapse; text-align: left; }
 .report-flights caption { padding-bottom: 8px; text-align: left; font-weight: 650; }
 .report-flights th, .report-flights td { padding: 8px 4px; border-top: 1px solid var(--line); font: .82rem var(--mono); }

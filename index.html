@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=25">
+  <link rel="stylesheet" href="styles.css?v=26">
   <script defer src="renderer.js"></script>
   <script defer src="airport.js?v=16"></script>
   <script defer src="passengers.js?v=23"></script>
-  <script defer src="baggage.js?v=12"></script>
-  <script defer src="game.js?v=56"></script>
+  <script defer src="baggage.js?v=13"></script>
+  <script defer src="game.js?v=58"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -213,6 +213,8 @@
         <div><dt>Operating profit</dt><dd id="report-profit"></dd></div>
       </dl>
       <div id="report-delays"></div>
+      <div id="report-overnight-arrivals" hidden></div>
+      <p id="report-overnight" class="detail-copy"></p>
       <div id="report-finances" class="flow-stats"></div>
       <table class="report-flights">
         <caption>Departure results</caption>
