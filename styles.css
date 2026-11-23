@@ -192,7 +192,7 @@ button, h1, h2, h3, p { margin: 0; }
 .detail-stat b { color: var(--light); white-space: nowrap; font: 600 .81rem var(--mono); }
 .gate-picker { border: 0; padding: 0; margin: 12px 0 0; min-width: 0; }
 .gate-picker legend { padding: 0; margin-bottom: 7px; font-size: .84rem; font-weight: 650; }
-.gate-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.gate-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); gap: 6px; }
 .gate-choice { display: grid; gap: 4px; justify-items: center; padding: 7px 4px; border: 1px solid var(--line); border-radius: 6px; background: #142329; }
 .gate-choice strong { font: 700 .96rem var(--mono); }
 .gate-choice small { font-size: .73rem; color: var(--muted); }
@@ -237,14 +237,14 @@ button, h1, h2, h3, p { margin: 0; }
 .claim-flight { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; }
 .claim-flight strong { font-size: .85rem; }
 .claim-flight small { color: var(--muted); font-size: .75rem; }
-.claim-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 3px; }
+.claim-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 6px; margin-top: 3px; }
 .claim-actions button { margin: 0; }
 .staffing-summary { display: grid; gap: 6px; }
 .staffing-summary .detail-stat b, .secondary .staffing-action-rate { color: var(--amber); }
 .staffing-summary p { color: var(--muted); font-size: .75rem; line-height: 1.4; }
 .staffing-summary + .section-head { margin-top: 18px; }
 .staffing-card h3 { margin: 0; color: var(--light); font-size: .88rem; }
-.staffing-lanes { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin: 8px 0; padding: 0; }
+.staffing-lanes { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(68px, 1fr)); gap: 5px; margin: 8px 0; padding: 0; }
 .staffing-lanes li { display: grid; gap: 3px; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: #19262b; }
 .staffing-lanes li span { color: var(--muted); font-size: .71rem; }
 .staffing-lanes li strong { font: 700 .73rem var(--mono); }

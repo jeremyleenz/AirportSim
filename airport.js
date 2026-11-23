@@ -1,37 +1,31 @@
 "use strict";
 
-const airport = (() => {
+const airport = (function createAirport(layout) {
   const {Mesh} = world;
-  const gates = [-25, 0, 25].map((x, i) => ({x, name: "A0" + (i + 1)}));
+  const {runwayZ, taxiwayZ, standZ} = layout.airfield;
+  const gates = layout.gates.map(({id, x}) => ({id, name: id, x, z: standZ}));
   const colors = {
     grass: "#8fa486", asphalt: "#545f60", apron: "#9ca7a3", concrete: "#deded0",
     warm: "#e9e4d5", frame: "#506c70", glass: "#90babb", pale: "#d9e7df",
     white: "#f4f2df", paint: "#efbf62", ink: "#293e45", teal: "#4b847d"
   };
   const {grass, asphalt, apron, concrete, warm, frame, glass, pale, white, paint, ink, teal} = colors;
-  const floor = .78;
-  const runwayZ = -46;
-  const taxiwayZ = -23.2;
-  const terminalEdge = 37.95;
-  const terminalBackZ = 8.18;
-  const terminalFrontZ = 28.91;
-  const cafeBoundaryX = -13.1;
-  const cafeDoorX = -14.48;
-  const claimRoom = {left: -52.4, right: -terminalEdge, back: terminalBackZ, front: terminalFrontZ, doorZ: 17.7, doorWidth: 2.5};
-  const airsideExit = {x: -39.8, z: claimRoom.front + 1.25, thresholdZ: claimRoom.front, width: 1.65};
+  const {floor, halfWidth: terminalEdge, back: terminalBackZ, front: terminalFrontZ, cafeBoundaryX, cafeDoorX} = layout.terminal;
+  const {left: claimLeft, doorZ, doorWidth, exitX, exitWidth} = layout.baggageClaim;
+  const claimRoom = {left: claimLeft, right: -terminalEdge, back: terminalBackZ, front: terminalFrontZ, doorZ, doorWidth};
+  const airsideExit = {x: exitX, z: claimRoom.front + 1.25, thresholdZ: claimRoom.front, width: exitWidth};
   const roadsidePlanters = [-36.7, -33, -24, -7, 5, 24, 38];
-  const checkInQueue = {centers: [18, 25.2, 32.5], front: 22.14, width: 4.95, deskZ: 21.25};
-  const checkInDesks = Array.from({length: 6}, (_, index) => 15.8 + index * 3.43);
-  const sortingBeltZ = 20.14;
+  const {sortingZ: sortingBeltZ, transfer: baggageTransfer, ...checkIn} = layout.checkIn;
+  const checkInQueue = {...checkIn, banks: checkIn.banks.map(({id, x, deskOffsets}) =>
+    ({id, x, desks: deskOffsets.map(offset => x + offset)}))};
+  const checkInDesks = checkInQueue.banks.flatMap(({desks}) => desks);
   const sortingBeltY = floor + .39;
-  const baggageTransfer = [39.2, .22, 6.15];
-  const securityBelt = {offsetX: -.75, surfaceY: floor + .615, entryZ: 22.61, exitZ: 19.44};
-  const securityQueue = {centers: [-7.2, -.7, 5.8], front: 23.25, width: 4.3,
-    checkpointZ: 20.7, portalOffsetX: 1.05, portalWidth: .88, exitZ: 19.10, belt: securityBelt};
+  const securityBelt = {...layout.security.belt, surfaceY: floor + layout.security.belt.surfaceHeight};
+  const securityQueue = {...layout.security, belt: securityBelt};
   const baggageColors = ["#c96445", "#376582", "#cf9d45", "#586a52"];
 
-  function claimCarousel(z) {
-    const left = -50.6, right = -44.05, radius = .55, height = floor + .43;
+  function claimCarousel({id, number, x: left, z}) {
+    const right = left + 6.55, radius = .55, height = floor + .43;
     const arc = (x, start) => Array.from({length: 9}, (_, i) => {
       const angle = start + i * Math.PI / 8;
       return [x + radius * Math.cos(angle), height, z + radius * Math.sin(angle)];
@@ -45,7 +39,7 @@ const airport = (() => {
       return {position: [x, floor, z + side * spacing], pickup: [x, floor, z + side * 1.16],
         aisleZ: z + side * 2.36, angle: side > 0 ? Math.PI : 0, seated: false};
     }));
-    return {left, right, z, radius, height, loop, waitingSpots,
+    return {id, number, left, right, z, radius, height, loop, waitingSpots,
       feed: [[right + 1.85, height + .48, z - radius], [right + .55, height, z - radius], loop[0]]};
   }
 
@@ -61,15 +55,14 @@ const airport = (() => {
   });
   const baggageClaim = {
     entranceZ: claimRoom.doorZ,
-    carousels: [25.05, 12.35].map(claimCarousel),
+    carousels: layout.baggageClaim.carousels.map(claimCarousel),
     claimSeats, claimStanding,
     label: [claimRoom.left + 3.8, .85, claimRoom.front + 3.1]
   };
   const queueRows = 9;
   const queueSpacing = .47;
   const loungeBenches = [-7.32, 1.28, 4.17, 7.06];
-  const sharedBenches = [-12.5, 12.5].flatMap(x => [9.75, 11.75, 13.75].map(z => ({x, z})));
-  const cafeTables = [-30.8, -27.2, -23.6, -20.0, -16.8].map(x => ({x, z: x < -25 ? 24.25 : 23.35}));
+  const {sharedBenches, cafeTables} = layout;
 
   function benchSeats(x, z, angle, aisleX) {
     return [-.86, 0, .86].map(dx => ({position: [x + dx, floor, z], angle, aisleX, seated: true}));
@@ -305,13 +298,13 @@ const airport = (() => {
   }
 
   function securityCheckpoint(mesh) {
-    const {centers, checkpointZ, portalOffsetX, portalWidth} = securityQueue;
+    const {banks, checkpointZ, portalOffsetX, portalWidth} = securityQueue;
     const {offsetX, surfaceY, entryZ, exitZ} = securityBelt;
     const beltLength = entryZ - exitZ + .57;
     const beltZ = (entryZ + exitZ) / 2;
     const partition = (left, right) => securityPartition(mesh, (left + right) / 2, checkpointZ, right - left, true);
     let left = cafeBoundaryX;
-    for (const x of centers) {
+    for (const {x} of banks.slice().sort((a, b) => a.x - b.x)) {
       const portalX = x + portalOffsetX;
       const leftPost = portalX - portalWidth / 2;
       const rightPost = portalX + portalWidth / 2;
@@ -358,7 +351,7 @@ const airport = (() => {
     for (let x = -37.8; x < 38; x += 1.9) mesh.rect(x, floor + .013, 18.5, .032, 20.8, "#c5cec6");
     for (let z = 8.3; z < 29; z += 1.42) mesh.rect(0, floor + .015, z, 75.7, .034, "#c8cfc5");
     let wallStart = -terminalEdge;
-    for (const gate of gates) {
+    for (const gate of gates.slice().sort((a, b) => a.x - b.x)) {
       const door = bridgePath(gate.x)[0][0];
       const wallEnd = door - .72;
       wall(mesh, (wallStart + wallEnd) / 2, terminalBackZ, wallEnd - wallStart, true, 2.6);
@@ -419,7 +412,7 @@ const airport = (() => {
 
     mesh.rect(24.75, floor + .024, (checkpointZ + 26.75) / 2, 21.7, 26.75 - checkpointZ, "#d4d9ce");
     checkInDesks.forEach((x, index) => desk(mesh, x, checkInQueue.deskZ, index % 2 ? "#87a5a2" : "#6c9b91"));
-    for (const x of checkInQueue.centers) queue(mesh, x, checkInQueue);
+    for (const {x} of checkInQueue.banks) queue(mesh, x, checkInQueue);
     for (const x of [-34.5, -12.8, 12.4, 35.6]) planter(mesh, x, floor, 26.95, 1.3);
 
     return mesh;
@@ -580,7 +573,7 @@ const airport = (() => {
       mesh.face([a, d, below(d), below(a)], "#acb8ae");
       mesh.face([b, below(b), below(c), c], "#acb8ae");
     };
-    const main = luggageFromDesk(checkInDesks[0]);
+    const main = luggageFromDesk(Math.min(...checkInDesks));
     for (let i = 2; i < main.length; i++) drawBelt(main[i - 1], main[i]);
     for (const x of checkInDesks) {
       const [deskTop, merge] = luggageFromDesk(x);
@@ -643,7 +636,7 @@ const airport = (() => {
     return mesh;
   }
 
-  function baggageCarousel({left, right, z, radius, height, loop, feed}, index) {
+  function baggageCarousel({number, left, right, z, radius, height, loop, feed}) {
     const mesh = new Mesh();
     const centerX = (left + right) / 2;
     mesh.rect(centerX, floor + .032, z - .35, right - left + 2.5, 2.35, "#b9ceca");
@@ -667,7 +660,8 @@ const airport = (() => {
       [[-.18, -.28], [.18, -.28], [.18, -.02], [-.18, -.02], [-.18, .28], [.18, .28]]];
     const signZ = z + 1.55;
     mesh.rect(centerX, floor + .029, signZ, .83, .9, teal);
-    mesh.path(digits[index].map(([x, z]) => [centerX + x, signZ + z]), .062, floor + .03, white);
+    const digit = digits[number - 1];
+    if (digit) mesh.path(digit.map(([x, z]) => [centerX + x, signZ + z]), .062, floor + .03, white);
     return mesh;
   }
 
@@ -756,7 +750,7 @@ const airport = (() => {
 
   const terminalPaths = {
     queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats, cafeDoorX, airsideExit,
-    checkIn: {...checkInQueue, desks: checkInDesks},
+    checkIn: checkInQueue,
     security: securityQueue
   };
 
@@ -808,7 +802,7 @@ const airport = (() => {
       {mesh: baggageClaimWing()},
       {mesh: details()},
       {mesh: baggageBelt()},
-      ...baggageClaim.carousels.map((carousel, index) => ({mesh: baggageCarousel(carousel, index)}))
+      ...baggageClaim.carousels.map(carousel => ({mesh: baggageCarousel(carousel), facilityId: carousel.id}))
     ];
     const cars = [
       vehicle("#7da5ad"),
@@ -841,4 +835,4 @@ const airport = (() => {
 
   return {gates, aircraft, scene, passengerActors, carryOnPosition, terminalPaths, floor, runwayZ, taxiwayZ, luggageFromDesk, luggageToAircraft,
     baggageClaim, baggageColors};
-})();
+})(airportLayouts.starter);

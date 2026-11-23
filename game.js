@@ -3,6 +3,7 @@
 (() => {
   const $ = selector => document.querySelector(selector);
   const {gates, runwayZ, taxiwayZ, floor} = airport;
+  const baggageCarousels = airport.baggageClaim.carousels;
   const mobileLayout = window.matchMedia("(max-width: 760px), (pointer: coarse) and (max-height: 500px)");
   const game = $(".game");
   const currency = new Intl.NumberFormat("en-US", {style: "currency", currency: "USD", maximumFractionDigits: 0});
@@ -53,12 +54,10 @@
   ];
   // Times are minutes after opening. Overnight aircraft operate the first departures.
   const scheduleSlots = [
-    [0, 0, 214, 4, 74], [1, 1, 507, 8, 104], [2, 2, 318, 54, 126],
-    [3, 3, 126, 89, 146],
-    [5, 1, 201, 120, 176], [0, 2, 216, 134, 190], [1, 3, 509, 151, 207], [2, 0, 320, 169, 230],
-    [3, 1, 128, 198, 265], [4, 2, 437, 232, 306], [5, 3, 203, 267, 344],
-    [0, 0, 218, 305, 384], [4, 0, 435, 358, 413], [1, 1, 511, 349, 432],
-    [5, 1, 204, 402, 458], [2, 2, 322, 397, 480], [3, 3, 130, 445, 530]
+    [0, 0, 214, 4, 74], [1, 1, 507, 10, 119], [2, 2, 318, 86, 155],
+    [3, 3, 126, 132, 199], [5, 1, 201, 162, 236], [0, 2, 216, 211, 281],
+    [1, 3, 509, 248, 320], [2, 0, 320, 290, 365], [3, 1, 128, 332, 404],
+    [4, 2, 437, 374, 449], [5, 3, 203, 419, 493], [0, 0, 218, 463, 533]
   ];
   const overnightArrivalCounts = [2, 1, 0, 1];
   const overnightArrivalSlots = [[5, 0, 702, 28], [4, 2, 704, 14]];
@@ -79,7 +78,7 @@
         openingGate: overnight?.gate ?? null, passengers, arrivalAt, boardingAt, takeoffAt};
     }).sort((a, b) => a.takeoffAt - b.takeoffAt);
     const finalTakeoff = departures.at(-1).takeoffAt;
-    const count = overnightArrivalCounts[(day - 1) % overnightArrivalCounts.length];
+    const count = Math.min(gates.length, overnightArrivalCounts[(day - 1) % overnightArrivalCounts.length]);
     const eveningArrivals = overnightArrivalSlots.slice(0, count).map(([route, airline, number, lead]) => {
       const [destination, passengers] = routes[route];
       return {id: airlines[airline].code + number, destination, airline, aircraft: {airline},
@@ -237,11 +236,15 @@
     createLabel("BAGGAGE CLAIM", ...airport.baggageClaim.label, "baggageClaim"),
     createLabel("CAFÉ", -26, 1.84, 19.05, "cafe"),
     createLabel("SHARED SEATS", -12.5, 1, 16.55, "sharedSeats"),
-    createLabel("SECURITY", -.7, 2.75, 19.1, "security"),
-    createLabel("CHECK-IN", 25, 4.6, 21.2, "checkIn"),
+    createLabel("SECURITY", bankCenter("security"), 2.75, airport.terminalPaths.security.exitZ, "security"),
+    createLabel("CHECK-IN", bankCenter("checkIn"), 4.6, airport.terminalPaths.checkIn.deskZ, "checkIn"),
     createLabel("DEPARTURES", 13.3, 1.65, 16.9, "concourse"),
     createLabel("RWY 09 / 27", -22, .05, runwayZ - 9.4)
   ] : [];
+  function bankCenter(type) {
+    const {banks} = airport.terminalPaths[type];
+    return banks.reduce((sum, {x}) => sum + x, 0) / banks.length;
+  }
   const holdingPin = $("#map-holding");
   const holdingPinRoute = holdingPin.querySelector(".holding-route");
   const holdingPinSchedule = holdingPin.querySelector(".holding-time");
@@ -834,8 +837,9 @@
         stat("Passengers in terminal", (passengers - counts.outside) + " / " + passengers) + '</div>');
     }
     if (stage === "deplaning") {
+      const carousel = baggageCarousels.find(({id}) => id === flight.carousel);
       $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
-        stat("Baggage claim", flight.carousel === null ? "Awaiting carousel" : "Carousel " + (flight.carousel + 1)) + '</div>');
+        stat("Baggage claim", carousel ? "Carousel " + carousel.number : "Awaiting carousel") + '</div>');
     }
     const {lateOutside, lateInTerminal} = counts;
     const lateWaiting = notifiedLatePassengers(flight);
@@ -921,15 +925,16 @@
   }
 
   function paintBaggageClaim({carousels, waiting, available}, complete) {
-    $("#carousel-status").innerHTML = carousels.map((flight, index) =>
-      stat("Carousel " + (index + 1), flight?.id ?? "Available")).join("");
+    $("#carousel-status").innerHTML = carousels.map(({number, flight}) =>
+      stat("Carousel " + number, flight?.id ?? "Available")).join("");
     $("#claim-queue").hidden = waiting.length === 0;
     $("#claim-instruction").textContent = complete ? "Shift ended with baggage waiting for a carousel."
-      : available ? "Choose a carousel for each flight." : "Both carousels are in use.";
+      : available ? "Assign a carousel for each flight."
+      : carousels.length === 1 ? "The carousel is in use." : "All carousels are in use.";
     const options = waiting.map(({flight, bags, ready}) => {
-      const choices = carousels.map((occupant, index) => {
-        const name = "Carousel " + (index + 1);
-        return '<button type="button" class="secondary" data-claim-flight="' + flight.id + '" data-carousel="' + index +
+      const choices = carousels.map(({id, number, flight: occupant}) => {
+        const name = "Carousel " + number;
+        return '<button type="button" class="secondary" data-claim-flight="' + flight.id + '" data-carousel="' + id +
           '" aria-label="Assign ' + flight.id + ' to ' + name + '"' + (occupant || complete ? ' disabled=""' : "") +
           '>' + (occupant || complete ? name : "Assign " + name) + '</button>';
       }).join("");
@@ -1103,10 +1108,10 @@
     });
   }
 
-  const outboundRoutes = gates.map(({x}) => {
+  const outboundRoutes = gates.map(({x, z}) => {
     const halfTurn = Math.PI / 2;
     const path = timedTaxiPath([
-      [x, -4.75, 0], [x, -15, 0, pushbackSpeed], [x - 2.1, -22, -halfTurn, pushbackSpeed],
+      [x, z, 0], [x, -15, 0, pushbackSpeed], [x - 2.1, -22, -halfTurn, pushbackSpeed],
       [-39.7, taxiwayZ, -halfTurn], [-45, taxiwayZ - 2.3, -2.3],
       [-45, runwayZ + 3.8, Math.PI], [-40.4, runwayZ, halfTurn]
     ]);
@@ -1121,11 +1126,11 @@
     return {duration, path, pushbackEnd, runwayEntry, liftoff};
   });
 
-  const inboundRoutes = gates.map(({x}) => {
+  const inboundRoutes = gates.map(({x, z}) => {
     const path = timedTaxiPath([
       [holdingPosition.x, holdingPosition.z, holdingPosition.angle],
       [x + 6, taxiwayZ, holdingPosition.angle], [x + 1.8, -21.2, -.77],
-      [x, -17, 0], [x, -4.75, 0]
+      [x, -17, 0], [x, z, 0]
     ]);
     return {duration: path.at(-1)[0], path};
   });
@@ -1202,7 +1207,9 @@
   function aircraftPosition(flight) {
     if (flight.stage === "holding" || flight.stage === "reserved") return holdingPosition;
     const movement = state.movements.get(flight);
-    return movement ? positionAlongPath(movement) : {x: gates[flight.gate].x, z: -4.75};
+    if (movement) return positionAlongPath(movement);
+    const {x, z} = gates[flight.gate];
+    return {x, z};
   }
 
   function startTaxi(movement) {
@@ -1623,12 +1630,12 @@
   $("#claim-flights").addEventListener("click", event => {
     const button = event.target.closest("[data-claim-flight]");
     if (!button || shiftComplete()) return;
-    const {claimFlight} = button.dataset;
-    const carousel = Number(button.dataset.carousel);
+    const {claimFlight, carousel} = button.dataset;
     if (!baggage.assignCarousel(state.luggage, claimFlight, carousel)) return;
     if (shiftComplete()) finishShift();
     else {
-      announce(claimFlight + " baggage assigned to Carousel " + (carousel + 1) + ".");
+      const {number} = baggageCarousels.find(({id}) => id === carousel);
+      announce(claimFlight + " baggage assigned to Carousel " + number + ".");
       returnToMapAfter("claim");
       paint();
     }

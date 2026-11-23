@@ -45,9 +45,8 @@ const passengerFlow = (() => {
 
   function create() {
     function banks(layout) {
-      return layout.centers.map((x, index) => ({
-        x, front: layout.front, cursor: 0, service: null, status: index ? "closed" : "open",
-        desks: layout.desks?.slice(index * 2, index * 2 + 2),
+      return layout.banks.map(({id, x, desks}, index) => ({
+        id, x, front: layout.front, cursor: 0, service: null, status: index ? "closed" : "open", desks,
         lines: [-.36, -.12, .12, .36].map(offset => ({x: x + offset * layout.width, people: []}))
       }));
     }
@@ -57,7 +56,8 @@ const passengerFlow = (() => {
       boarding: gates.map(({x}, gate) => ({...makeBoardingLine(x), spots: makeLounge(x, gate)})),
       sharedSeats: sharedSeats.map(spot => ({...spot})),
       cafe: cafeSeats.map(spot => ({...spot})),
-      claimSpots: baggageClaim.carousels.map(({waitingSpots}) => waitingSpots.map(spot => ({...spot}))),
+      claimSpots: new Map(baggageClaim.carousels.map(({id, waitingSpots}) =>
+        [id, waitingSpots.map(spot => ({...spot}))])),
       claimSeats: baggageClaim.claimSeats.map(spot => ({...spot})),
       claimStanding: baggageClaim.claimStanding.map(spot => ({...spot})),
       exiting: [], arrivals: [],
@@ -567,7 +567,7 @@ const passengerFlow = (() => {
     if (!waiting?.pickup) {
       const {carousel} = bag.flight;
       if (carousel !== null) {
-        const spot = reserve(person, flow.claimSpots[carousel], 37);
+        const spot = reserve(person, flow.claimSpots.get(carousel), 37);
         if (!spot) return;
         if (waiting) waiting.owner = null;
         person.seated = false;
@@ -730,7 +730,7 @@ const passengerFlow = (() => {
     const deskFrontZ = terminalPaths.checkIn.deskZ + .57;
     useCounter(flow.checkIn, checkInTime, (person, bank) => {
       const [x] = person.position;
-      const deskX = bank.desks[x < bank.x ? 0 : 1];
+      const deskX = bank.desks[x < bank.x ? 0 : bank.desks.length - 1];
       walk(person, [point(x, deskFrontZ), point(deskX, deskFrontZ)]);
     }, (person, bank) => {
       const queue = findLine(flow.security);
