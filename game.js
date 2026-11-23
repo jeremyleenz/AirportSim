@@ -568,7 +568,13 @@
       flight.stage === "ready" && onTimePushbackAt(flight) <= warningHorizon && fitsCurfew(outboundMovement(flight)))
       .sort((a, b) => onTimePushbackAt(a) - onTimePushbackAt(b));
     const flight = flights[0];
-    paintFlightAlert("#departure-alert", flight, flight && "Ready for departure · " + flight.id, flights.length - 1);
+    let label;
+    if (flight) {
+      const minutes = Math.ceil((onTimePushbackAt(flight) - state.now) / secondsPerMinute);
+      const timing = minutes > 0 ? "due in " + minutes + " min" : minutes === 0 ? "due now" : "overdue";
+      label = "Pushback " + timing + " · " + flight.id;
+    }
+    paintFlightAlert("#departure-alert", flight, label, flights.length - 1);
   }
 
   function paintFlights() {
