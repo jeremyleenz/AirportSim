@@ -9,6 +9,7 @@ function createBaggage(airport) {
   const batchSize = 2 * bagsPerTrailer;
   const batchWait = 3.5;
   const trailerSpacing = 2.18;
+  const handlerSpeed = 3.6;
   const loaderBeltSpeed = 2.2;
   const loaderTravelTime = 1.1;
   const loaderStandby = .75;
@@ -19,7 +20,7 @@ function createBaggage(airport) {
   const carouselRoutes = new Map(carousels.map(({id, loop, feed}) => [id, {loop: timedPath(loop, 0, claimSpeed), feed}]));
   const atGate = new Set(["deplaning", "parked", "boarding", "closing", "ready", "overnight"]);
   const loaderRoutes = airport.gates.map((_, gate) => {
-    const [transfer, , foot, hatch] = airport.luggageToAircraft(gate);
+    const [transfer, foot, hatch] = airport.luggageToAircraft(gate);
     const dx = hatch[0] - foot[0], dz = hatch[2] - foot[2];
     return {transfer, foot, hatch, dx, dz, angle: Math.atan2(dx, dz), length: Math.hypot(dx, dz)};
   });
@@ -137,14 +138,28 @@ function createBaggage(airport) {
     const route = tugRoutes[gate];
     const arrival = route[1].time;
     const {foot, hatch} = loaderRoutes[gate];
-    bags.forEach((bag, index) => {
-      const trailer = trailerPose(route, arrival, Math.floor(index / bagsPerTrailer));
-      const handoff = now + arrival + .35 + index * .27;
-      bag.path = timedPath([bagSlot(trailer, index % bagsPerTrailer), foot, hatch], handoff, 4.5, loaderBeltSpeed);
-      bag.loading = true;
-    });
-    const returnAt = bags.at(-1).path[0].time + .6;
-    animation.trip = {bags, route, start: now, arrival, returnAt, finish: returnAt + route.at(-1).time - arrival};
+    const crews = [0, 1].map(index => ({trailer: trailerPose(route, arrival, index), transfers: [], freeAt: now + arrival + .2}));
+    let nextBeltAt = now + arrival;
+    for (let slotIndex = 0; slotIndex < bagsPerTrailer; slotIndex++) {
+      for (const [index, crew] of crews.entries()) {
+        const bag = bags[index * bagsPerTrailer + slotIndex];
+        if (!bag) continue;
+        const slot = bagSlot(crew.trailer, slotIndex);
+        const pickup = [slot[0], .56, crew.trailer.z - 1.28];
+        const placement = [foot[0] + .34 + index * .11, foot[1] + .06, foot[2] + .30 + index * .28];
+        const path = timedPath([slot, pickup, placement, foot, hatch], 0, handlerSpeed, loaderBeltSpeed);
+        const start = Math.max(crew.freeAt, nextBeltAt - path.at(-2).time);
+        for (const step of path) step.time += start;
+        const [, pickedUp, carried, onBelt] = path;
+        crew.freeAt = onBelt.time + carried.time - pickedUp.time + .12;
+        crew.transfers.push({path, backAt: crew.freeAt - .12});
+        nextBeltAt = onBelt.time + .36;
+        bag.path = path;
+        bag.loading = true;
+      }
+    }
+    const returnAt = Math.max(...crews.map(crew => crew.freeAt));
+    animation.trip = {bags, crews, route, start: now, arrival, returnAt, finish: returnAt + route.at(-1).time - arrival};
   }
 
   function collect(animation, flight, bags, now) {
@@ -290,8 +305,8 @@ function createBaggage(airport) {
       const retreat = 3.6 * (1 - ease) / length;
       const x = foot[0] - dx * retreat, z = foot[2] - dz * retreat;
       moving.push({mesh: meshes.truck, x, z, angle});
-      for (let i = 0; i < 8; i++) {
-        const t = (i / 8 + loader.offset) % 1;
+      for (let i = 0; i < 13; i++) {
+        const t = (i / 13 + loader.offset) % 1;
         moving.push({mesh: meshes.roller, x: x + dx * t, y: foot[1] + (hatch[1] - foot[1]) * t - .01,
           z: z + dz * t, angle, castShadow: false});
       }
@@ -321,10 +336,27 @@ function createBaggage(airport) {
     });
   }
 
+  function drawRampCrew(trip, meshes, now, moving) {
+    if (!trip?.crews || now < trip.start + trip.arrival || now >= trip.returnAt) return;
+    for (const {transfers} of trip.crews) {
+      if (!transfers.length) continue;
+      const {path, backAt} = transfers.find(transfer => now < transfer.backAt) ?? transfers.at(-1);
+      const [, pickup, placement, onBelt] = path;
+      const returning = now >= onBelt.time;
+      const carryTime = returning ? placement.time - (now - onBelt.time) : now;
+      const pose = poseOnPath([pickup, placement], Math.max(pickup.time, Math.min(placement.time, carryTime)));
+      const walking = now >= pickup.time && (now < placement.time || returning && now < backAt);
+      const x = pose.x - Math.sin(pose.angle) * .40, z = pose.z - Math.cos(pose.angle) * .40;
+      const angle = pose.angle + (now >= pickup.time && !returning ? 0 : Math.PI);
+      moving.push({mesh: meshes.crew[walking ? Math.floor(now * 10) % 2 : 0], x, z, angle});
+    }
+  }
+
   function actors(animation, suitcases, loaders, train, now) {
     const moving = [];
     drawLoaders(animation, loaders, moving);
     drawTrain(animation.trip, train, suitcases, now, moving);
+    drawRampCrew(animation.trip, loaders, now, moving);
     for (const bag of animation.items) {
       if (!isActive(bag, now) || now < bag.path[0].time || now >= bag.path.at(-1).time) continue;
       moving.push({mesh: suitcases[bag.person.index % suitcases.length], ...poseOnPath(bag.path, now), castShadow: false});

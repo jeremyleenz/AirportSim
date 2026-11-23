@@ -32,6 +32,8 @@ function createAirport(layout) {
   const securityBelt = {...layout.security.belt, surfaceY: floor + layout.security.belt.surfaceHeight};
   const securityQueue = {...layout.security, belt: securityBelt};
   const baggageColors = ["#c96445", "#376582", "#cf9d45", "#586a52"];
+  const cargoHatchZ = 4.2;
+  const cargoSillY = 1.23;
 
   function claimCarousel({id, number, x: left, z}) {
     const right = left + 6.55, radius = .55, height = floor + .43;
@@ -120,9 +122,8 @@ function createAirport(layout) {
   }
 
   function luggageToAircraft(gate) {
-    const {x} = gates[gate];
-    const [, height, apronZ] = baggageTransfer;
-    return [baggageTransfer, [x + 4.45, height, apronZ], [x + 3.05, height, .45], [x + 1.08, 1.21, -.58]];
+    const {x, z} = gates[gate];
+    return [baggageTransfer, [x + 4.85, .53, z + cargoHatchZ + 2.4], [x + 1.08, cargoSillY, z + cargoHatchZ]];
   }
 
   function boardingPath(x) {
@@ -586,8 +587,10 @@ function createAirport(layout) {
         [side * .716, 2.19, 7.12], [side * .776, 1.94, 7.22]], cabin, [side, .3, .3]);
       mesh.face([[side * .08, 1.89, 7.74], [side * .08, 2.11, 7.42],
         [side * .663, 2.17, 7.17], [side * .726, 1.93, 7.34]], cabin, [side * .4, .4, .7]);
-      mesh.face([[side * 1.21, 1.4, 3.66], [side * 1.21, 1.56, 3.66],
-        [side * 1.19, 1.56, 5.36], [side * 1.156, 1.4, 5.36]], livery, [side, 0, 0]);
+      mesh.face([[side * 1.075, cargoSillY, cargoHatchZ - .49], [side * 1.205, 1.68, cargoHatchZ - .49],
+        [side * 1.205, 1.68, cargoHatchZ + .49], [side * 1.075, cargoSillY, cargoHatchZ + .49]], belly, [side, -.24, 0]);
+      mesh.face([[side * 1.092, cargoSillY + .02, cargoHatchZ - .43], [side * 1.209, 1.63, cargoHatchZ - .43],
+        [side * 1.209, 1.63, cargoHatchZ + .43], [side * 1.092, cargoSillY + .02, cargoHatchZ + .43]], cabin, [side, -.24, 0]);
     }
     mesh.box(0, .10, 5.55, .24, .36, .37, ink);
     mesh.box(0, .43, 5.55, .12, .61, .12, rim);
@@ -803,20 +806,25 @@ function createAirport(layout) {
     const [foot, hatch] = luggageToAircraft(0).slice(-2);
     const length = Math.hypot(hatch[0] - foot[0], hatch[2] - foot[2]);
     const yellow = "#e7ab53";
-    const truck = new Mesh().box(0, .10, length / 2, 1.12, .16, length + .45, yellow)
-      .box(.55, .26, length * .68, .46, .31, .59, "#4c6d75")
-      .box(.55, .57, length * .68, .49, .07, .63, yellow)
-      .box(0, .23, length * .72, .54, .49, .19, "#81918b");
+    const truck = new Mesh().box(0, .13, length * .35, 1.34, .22, length * .76, yellow)
+      .box(.68, .35, length * .35, .50, .48, .75, "#4c6d75")
+      .box(.68, .83, length * .35, .55, .08, .79, yellow)
+      .box(0, .32, length * .65, .60, .49, .23, "#81918b");
     const lower = foot[1] - .022, upper = hatch[1] - .022;
-    truck.face([[-.36, lower, 0], [-.36, upper, length], [.36, upper, length], [.36, lower, 0]], "#344e54");
+    truck.face([[-.46, lower, 0], [-.46, upper, length], [.46, upper, length], [.46, lower, 0]], "#344e54", [0, 1, 0]);
     for (const side of [-1, 1]) {
-      for (const z of [.23, length - .22]) truck.box(side * .54, .025, z, .19, .29, .32, ink);
-      const x = side * .36;
+      for (const z of [.24, length * .65]) truck.box(side * .63, .025, z, .22, .32, .43, ink);
+      const x = side * .46;
       truck.face([[x, lower - .085, 0], [x, upper - .085, length], [x, upper + .095, length],
-        [x, lower + .095, 0]], "#d3dcd2", [side, 0, 0]);
+        [x, lower + .095, 0]], yellow, [side, 0, 0]);
     }
-    const roller = new Mesh().box(0, 0, 0, .69, .027, .068, "#7f9696");
-    return {truck, roller};
+    const roller = new Mesh().box(0, 0, 0, .89, .027, .073, "#7f9696");
+    const crew = [-.10, .10].map(stride => traveler("#efaf47", "#bb896a", stride, false)
+      .box(0, .36, 0, .29, .055, .30, "#e7e4c7")
+      .box(-.14, .46, .18, .095, .088, .31, "#efaf47")
+      .box(.14, .46, .18, .095, .088, .31, "#efaf47")
+      .box(0, .69, .04, .24, .075, .26, yellow));
+    return {truck, roller, crew};
   }
 
   const carryOnOffset = [.22, .02, -.12];
