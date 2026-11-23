@@ -181,6 +181,8 @@ button, h1, h2, h3, p { margin: 0; }
 .flight-status[data-stage="reserved"], .flight-status[data-stage="closing"] { color: var(--amber); background: #493c30; }
 .flight-progress { display: grid; grid-column: 1 / -1; gap: 5px; padding: 6px 1px 0; border-top: 1px solid #8fa8a338; color: var(--muted); font-size: .75rem; }
 .flight-load { display: flex; align-items: center; justify-content: space-between; gap: 8px; white-space: nowrap; }
+.flight-progress-caption, .flight-passenger-heading { color: var(--light); font-size: .76rem; font-weight: 700; }
+.flight-passenger-heading { margin-bottom: 7px; }
 .flight-progress b { color: var(--light); font-family: var(--mono); }
 .flight-progress-track { display: block; width: 42%; height: 3px; border-radius: 3px; overflow: hidden; background: #304248; }
 .flight-progress-track span { display: block; height: 100%; background: var(--mint); }

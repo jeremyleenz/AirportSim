@@ -642,8 +642,12 @@
       return;
     }
     const {entrance, checkIn, security, gate, gateQueue, boarded, boarding, missed, outside} = occupancy.byFlight.get(flight.id);
+    const turnaround = isArriving(flight) || flight.stage === "deplaning";
     button.querySelector(".flight-progress").hidden = flight.stage === "scheduled" && outside === flight.passengers;
-    button.querySelector(".flight-load b").textContent = boarded + " / " + flight.passengers;
+    button.querySelector(".flight-progress-caption").hidden = !turnaround;
+    button.querySelector(".flight-load b").textContent = turnaround ? flight.passengers : boarded + " / " + flight.passengers;
+    button.querySelector(".flight-load-unit").textContent = turnaround ? "passengers" : "boarded";
+    button.querySelector(".flight-progress-track").hidden = turnaround;
     button.querySelector(".flight-progress-track span").style.width = boarded / flight.passengers * 100 + "%";
     const stages = [[entrance, "waiting at entrance"], [checkIn, "at check-in"], [security, "at security"], [gate + gateQueue, "at gate"],
       [boarding, "walking to aircraft"], [outside, "yet to arrive"], [missed, "empty seats"]];
@@ -785,7 +789,8 @@
           '<span class="flight-boarding" hidden><span class="boarding-label"></span><time></time></span>' +
           '<span class="takeoff-alert" hidden></span></span>' +
           '<span class="flight-chevron" aria-hidden="true"></span>' +
-          '<span class="flight-progress"><span class="flight-load"><span><b></b> boarded</span>' +
+          '<span class="flight-progress"><span class="flight-load"><strong class="flight-progress-caption" hidden>Next departure</strong>' +
+          '<span><b></b> <span class="flight-load-unit"></span></span>' +
           '<span class="flight-progress-track" aria-hidden="true"><span></span></span></span>' +
           '<span class="flight-stages"></span></span>';
         button.addEventListener("click", () => {
@@ -886,8 +891,10 @@
       $("#detail-content").innerHTML = '<p class="detail-copy">Taxiing to gate ' + gates[flight.gate].name + '.</p>';
     } else if (stage === "deplaning") {
       const {remaining, onBridge} = flight.deplaning;
-      $("#detail-content").innerHTML = '<div class="flow-stats">' + stat("Arrivals still aboard", remaining) +
-        stat("Arrivals on jet bridge", onBridge) + '</div>';
+      const carousel = airport.baggageClaim.carousels.find(({id}) => id === flight.carousel);
+      $("#detail-content").innerHTML = '<h3 class="flight-passenger-heading">Arriving passengers</h3><div class="flow-stats">' +
+        stat("Still aboard", remaining) + stat("On jet bridge", onBridge) +
+        stat("Baggage claim", carousel ? "Carousel " + carousel.number : "Awaiting carousel") + '</div>';
     } else if (stage === "overnight") {
       $("#detail-content").innerHTML = '<p class="detail-copy">Stays at ' + gates[flight.gate].name + ' for tomorrow’s departures.</p>';
     } else if (stage === "outbound") {
@@ -908,11 +915,6 @@
       $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
         stat("Passengers past entrance", (passengers - counts.outside - counts.entrance) + " / " + passengers) +
         (counts.entrance ? stat("Waiting at entrance", counts.entrance) : "") + '</div>');
-    }
-    if (stage === "deplaning") {
-      const carousel = airport.baggageClaim.carousels.find(({id}) => id === flight.carousel);
-      $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
-        stat("Baggage claim", carousel ? "Carousel " + carousel.number : "Awaiting carousel") + '</div>');
     }
     const {lateOutside, lateAtEntrance, lateInTerminal} = counts;
     const lateWaiting = notifiedLatePassengers(flight);
