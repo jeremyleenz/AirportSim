@@ -12,23 +12,21 @@ In-game prompts guide players through gate assignment and dispatch as those acti
 
 ## 2. Carry the treasury and save progress (complete for MVP)
 
-The closing treasury carries into the next day after staffing, handling costs, and fines. The shift report shows the opening and closing balances and the time spent waiting for a free baggage carousel. At airports with two carousels, it also shows time spent waiting for the player to assign an available carousel.
+The closing treasury carries into the next day after base operating costs, extra staffing, ground handling, and fines. The base rate covers one staffed check-in counter, one staffed security lane, and keeping the terminal open. The shift report shows the opening and closing balances, the cost breakdown, and the time spent waiting for a free baggage carousel. At airports with two carousels, it also shows time spent waiting for the player to assign an available carousel.
 
-At the end of each shift, the game saves the next day, treasury, timetable, and overnight aircraft in the browser. Reopening starts the simulation at the saved morning.
+At the end of each shift, the game saves the next day, treasury, timetable, and overnight aircraft in the browser. Reopening starts the simulation at the saved morning. Players can use **Reset progress** in the Terminal tab and confirm to start a fresh Day 1 with the starter airport and treasury.
 
 The base schedule stays available after a loss so players can earn money back through operations.
 
-## 3. Offer the first capacity upgrades
+## 3. Offer the first capacity upgrades (complete for MVP)
 
-Let players buy a second baggage carousel, a third security lane, or a third check-in desk between shifts. Set prices so a decent first shift makes at least one upgrade affordable. Players decide what to buy based on the bottlenecks they encountered during the shift. Show where each upgrade will go on the purchase confirmation screen.
+Players can buy a second baggage carousel, a third security lane, or a third check-in desk between shifts. A decent first shift can fund one upgrade. Players choose what to buy based on the bottlenecks they encountered. The purchase confirmation previews the facility’s fixed placement.
 
-- **Second carousel** goes in baggage claim where passengers and baggage handling can reach it. It lets two arrivals use baggage claim at once. Once installed, players choose which carousel each arrival uses.
-- **Third security lane** adds screening capacity when staffed. Place it where passengers can queue and pass through to the gates.
-- **Third check-in desk** adds check-in capacity when staffed. Place it in the public terminal with queue space and a connection to baggage handling.
+- **Second carousel** adds capacity near the arrivals exit so two flights can use baggage claim at once. Players then choose which carousel each arrival uses.
+- **Third security lane** adds a screening lane beside the café that players can staff when queues build.
+- **Third check-in desk** adds a desk with its own queue and baggage belt. The second desk shifts toward baggage claim to make room.
 
-Save each completed purchase with the updated treasury and the facility’s position. Restore the purchased facility in that position when the game reopens.
-
-The first playable milestone is finishing Day 1, buying an upgrade between shifts, then closing and reopening the game to run Day 2 with the upgrade in place. The base schedule remains available after each upgrade.
+Each completed purchase saves the updated treasury and the facility’s placement. Upgrades are available the next morning and are restored when the game reopens. The base schedule remains available after each upgrade.
 
 ## 4. Add airport layout customisation
 
@@ -56,11 +54,13 @@ Let players drop optional contracts between shifts to reduce traffic when they n
 
 ## 7. Add richer amenities
 
+Passengers already use the café, shared seating, and toilets. Future upgrades give players more control over amenity capacity and placement and make the effects visible during a shift.
+
 Start with a small **retail kiosk**. Use existing passenger wait time to test spending and concession revenue before developing a full restaurant.
 
 - **Restaurants** once the spending model supports a fuller food and drink service.
 - **Additional shared seating** once passenger satisfaction has a clear effect on gameplay. Let players place seats in accessible waiting areas and see where passengers use them.
-- **Toilets** once passenger needs can affect their experience.
+- **Additional toilets** once restroom availability has a clear effect on the passenger experience.
 - **Travelators** once walking distances can affect whether passengers reach their gates on time.
 
 ## Longer-term ideas
