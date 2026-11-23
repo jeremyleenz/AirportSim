@@ -47,7 +47,7 @@ const airportLayouts = (() => {
     },
     security: {
       ...regional.security,
-      banks: [{id: "security-1", x: -9.75}, {id: "security-2", x: -3.15}]
+      banks: [{id: "security-1", x: -7.85}, {id: "security-2", x: -3.15}]
     },
     baggageClaim: {
       ...regional.baggageClaim,
@@ -61,7 +61,8 @@ const airportLayouts = (() => {
     sharedBenches: regional.sharedBenches.map(bench =>
       bench.x > 0 ? {...bench, x: -12.5} : {...bench, x: -36, aisleX: -34.42})
   };
-  const [laneOne, laneTwo] = starter.security.banks;
+  const laneTwoX = starter.security.banks[1].x;
+  const middleLaneSpacing = 3.3;
   const [deskOne, deskTwo] = starter.checkIn.banks;
   const westLaneX = -11.05;
   const nearSecurityDeskX = 3.25;
@@ -74,8 +75,8 @@ const airportLayouts = (() => {
     },
     security: {
       name: "Third security lane", price: 78000, description: "Add a screening lane you can staff when queues build.",
-      sites: [{id: "west", name: "Beside the café", x: westLaneX, firstLaneX: (westLaneX + laneTwo.x) / 2},
-        {id: "middle", name: "Between the lanes", x: (laneOne.x + laneTwo.x) / 2}]
+      sites: [{id: "west", name: "Beside the café", x: westLaneX, firstLaneX: (westLaneX + laneTwoX) / 2},
+        {id: "middle", name: "Between the lanes", x: laneTwoX - middleLaneSpacing, firstLaneX: laneTwoX - 2 * middleLaneSpacing}]
     },
     checkIn: {
       name: "Third check-in desk", price: 56000, description: "Add a desk with its own queue and baggage belt.",
