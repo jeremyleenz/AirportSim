@@ -2,8 +2,6 @@
 
 (() => {
   const $ = selector => document.querySelector(selector);
-  const {gates, runwayZ, taxiwayZ, floor} = airport;
-  const baggageCarousels = airport.baggageClaim.carousels;
   const mobileLayout = window.matchMedia("(max-width: 760px), (pointer: coarse) and (max-height: 500px)");
   const game = $(".game");
   const currency = new Intl.NumberFormat("en-US", {style: "currency", currency: "USD", maximumFractionDigits: 0});
@@ -41,7 +39,6 @@
   const taxiSpeed = 4;
   const pushbackSpeed = 2.5;
   const taxiSeparation = 24;
-  const holdingPosition = {x: 44, z: taxiwayZ, angle: -Math.PI / 2};
   const planeIcon = '<svg class="icon" aria-hidden="true"><use href="#plane"/></svg>';
   const airlines = [
     {code: "PL", symbol: "#197f79", ui: "#8fd8ca"},
@@ -140,28 +137,30 @@
       savedOpeningText = window.localStorage.getItem(progressKey);
       const saved = JSON.parse(savedOpeningText);
       if (!saved) return null;
-      const {day, cash, seed, parked} = saved;
+      const {day, cash, seed, parked, upgrades} = saved;
       if (!Number.isSafeInteger(day) || day < 1 || !Number.isSafeInteger(cash) ||
           !Number.isInteger(seed) || seed < 0 || seed >= 2 ** 32 || !Array.isArray(parked)) return null;
       const overnightAircraft = parked.map(({gate: gateName, airline: code}) => ({
-        gate: gates.findIndex(({name}) => name === gateName),
+        gate: airportLayouts.starter.gates.findIndex(({id}) => id === gateName),
         aircraft: {airline: airlines.findIndex(({code: airlineCode}) => airlineCode === code)}
       }));
       if (overnightAircraft.some(({gate, aircraft}) => gate < 0 || aircraft.airline < 0) ||
           new Set(overnightAircraft.map(({gate}) => gate)).size !== overnightAircraft.length) return null;
-      return {day, cash, seed, overnightAircraft};
+      const purchased = Object.fromEntries(Object.entries(airportLayouts.upgrades).flatMap(([type, {sites}]) =>
+        sites.some(({id}) => id === upgrades?.[type]) ? [[type, upgrades[type]]] : []));
+      return {day, cash, seed, overnightAircraft, upgrades: purchased};
     } catch {
       return null;
     }
   }
 
-  function saveOpening({day, cash, seed, overnightAircraft}) {
+  function saveOpening({day, cash, seed, overnightAircraft, upgrades}) {
     const parked = overnightAircraft.map(({gate, aircraft}) => ({gate: gates[gate].name, airline: airlines[aircraft.airline].code}));
     try {
       const storage = window.localStorage;
       // A shift in an older tab must not overwrite progress saved since it opened.
       if (storage.getItem(progressKey) !== savedOpeningText) return false;
-      const checkpoint = JSON.stringify({day, cash, seed, parked});
+      const checkpoint = JSON.stringify({day, cash, seed, parked, upgrades});
       storage.setItem(progressKey, checkpoint);
       savedOpeningText = checkpoint;
       return true;
@@ -171,6 +170,13 @@
   }
 
   const savedOpening = loadOpening();
+  const upgradeOffers = airportLayouts.upgrades;
+  let purchasedUpgrades = savedOpening?.upgrades ?? {};
+  let airport = createAirport(airportLayouts.withUpgrades(purchasedUpgrades));
+  let passengerFlow = createPassengerFlow(airport);
+  let baggage = createBaggage(airport);
+  const {gates, runwayZ, taxiwayZ, floor} = airport;
+  const holdingPosition = {x: 44, z: taxiwayZ, angle: -Math.PI / 2};
   let state = savedOpening
     ? createShift(savedOpening.day, savedOpening.overnightAircraft, savedOpening.cash, savedOpening.seed)
     : createShift(1, [{gate: 0, aircraft: {airline: 0}}]);
@@ -193,14 +199,15 @@
     renderer = world.createRenderer($("#scene"));
     scene = airport.scene();
     planes = airlines.map(airline => airport.aircraft(airline.symbol));
-    const {checkIn, security} = airport.terminalPaths;
-    counterMarkers = {
-      checkIn: queueEntranceMarkers(checkIn),
-      security: queueEntranceMarkers(security)
-    };
+    counterMarkers = buildCounterMarkers();
   } catch (error) {
     console.error(error);
     $("#map-error").hidden = false;
+  }
+
+  function buildCounterMarkers() {
+    const {checkIn, security} = airport.terminalPaths;
+    return {checkIn: queueEntranceMarkers(checkIn), security: queueEntranceMarkers(security)};
   }
 
   function queueEntranceMarkers({width, front}) {
@@ -890,7 +897,7 @@
         stat("Passengers in terminal", (passengers - counts.outside) + " / " + passengers) + '</div>');
     }
     if (stage === "deplaning") {
-      const carousel = baggageCarousels.find(({id}) => id === flight.carousel);
+      const carousel = airport.baggageClaim.carousels.find(({id}) => id === flight.carousel);
       $("#detail-content").insertAdjacentHTML("beforeend", '<div class="flow-stats">' +
         stat("Baggage claim", carousel ? "Carousel " + carousel.number : "Awaiting carousel") + '</div>');
     }
@@ -1026,7 +1033,7 @@
       Math.ceil(state.luggage.claimStats.delayedPassengers / baggageDelaysPerSatisfactionPoint));
     const satisfaction = Math.max(55, baseSatisfaction - baggageLoss);
     const staffingSpent = staffingCost("checkIn") + staffingCost("security");
-    $("#cash").textContent = currency.format(treasuryBalance());
+    $("#cash").textContent = currency.format(nextOpening?.cash ?? treasuryBalance());
     $("#passengers").textContent = occupancy.total;
     $("#satisfaction").textContent = satisfaction + "%";
     $(".clock-day").textContent = formatDay(operatingDay(minutes)).toUpperCase();
@@ -1111,7 +1118,8 @@
     $("#objective-title").textContent = state.closedAtCurfew ? "Curfew reached"
       : complete ? "Operating day complete" : parking ? "Park overnight arrivals"
         : assigning ? "Assign baggage carousels" : "Dispatch " + goal + " flights";
-    $("#view-report").hidden = !complete;
+    $("#between-shifts").hidden = !complete;
+    if (nextOpening) $("#continue-shift").textContent = "Start " + formatDay(nextOpening.day);
 
     const gate = selectedGate();
     mapPins.forEach(({element, count, late}, index) => {
@@ -1374,7 +1382,8 @@
   }
 
   function finishShift() {
-    nextOpening = {day: state.day + 1, cash: treasuryBalance(), seed: newShiftSeed(), overnightAircraft: parkedAircraft()};
+    nextOpening = {day: state.day + 1, cash: treasuryBalance(), seed: newShiftSeed(), overnightAircraft: parkedAircraft(),
+      upgrades: purchasedUpgrades};
     openingSaved = saveOpening(nextOpening);
     mapAction = null;
     state.paused = true;
@@ -1535,6 +1544,150 @@
       : "Progress could not be saved. Keep this tab open to carry on.";
     if (!report.open) report.showModal();
   }
+
+  const upgradeShop = $("#upgrade-shop");
+  const upgradeOffersList = $("#upgrade-offers");
+  const upgradeSites = $("#upgrade-sites");
+  const upgradeNote = $("#upgrade-note");
+  const purchaseUpgrade = $("#buy-upgrade");
+  const previewCanvas = $("#upgrade-preview");
+  let upgradeType = null, upgradeSite = null;
+  let previewRenderer, previewObjects, previewFocus;
+
+  function drawUpgradePreview() {
+    if (upgradeShop.open && upgradeType && previewRenderer && previewObjects) {
+      previewRenderer.render(previewObjects, previewFocus);
+    }
+  }
+
+  function previewUpgrade(offer) {
+    if (previewCanvas.hidden) return;
+    try {
+      previewRenderer ??= world.createRenderer(previewCanvas);
+      previewRenderer.view.zoom = 5;
+      const site = upgradeSite ?? offer.sites[0];
+      const layout = airportLayouts.withUpgrades({...nextOpening.upgrades, [upgradeType]: site.id});
+      const preview = createAirport(layout);
+      let x = site.x, z, width, depth;
+      if (upgradeType === "carousel") {
+        const {left, right, z: beltZ} = preview.baggageClaim.carousels.at(-1);
+        x = (left + right) / 2;
+        z = beltZ;
+        width = right - left + 2;
+        depth = 2.05;
+      } else {
+        const bank = preview.terminalPaths[upgradeType];
+        z = upgradeType === "security" ? bank.checkpointZ : bank.deskZ;
+        width = bank.width + .15;
+        depth = upgradeType === "security" ? 4.2 : 1.26;
+      }
+      const edge = new world.Mesh().path([[-width / 2, -depth / 2], [width / 2, -depth / 2],
+        [width / 2, depth / 2], [-width / 2, depth / 2], [-width / 2, -depth / 2]], .14, floor + .052, "#f2cc61");
+      previewFocus = [x, floor, z];
+      previewObjects = [...preview.terminalScene(), {mesh: edge, x, z, castShadow: false}];
+      drawUpgradePreview();
+    } catch {
+      previewCanvas.hidden = true;
+    }
+  }
+
+  function paintUpgradePlacement() {
+    const offer = upgradeOffers[upgradeType];
+    const affordable = nextOpening.cash >= offer.price;
+    purchaseUpgrade.disabled = !upgradeSite || !affordable;
+    purchaseUpgrade.textContent = "Buy for " + currency.format(offer.price);
+    const moved = upgradeSite?.firstDeskX ? "Desk 1" : upgradeSite?.firstLaneX ? "Lane 1" : null;
+    upgradeNote.textContent = !affordable ? "You need " + currency.format(offer.price - nextOpening.cash) + " more to buy this upgrade."
+      : moved ? moved + " shifts to make room at this location." : "";
+    previewUpgrade(offer);
+  }
+
+  function paintUpgradeShop() {
+    $("#upgrade-opening").textContent = "Available from " + formatDay(nextOpening.day);
+    $("#upgrade-budget").textContent = currency.format(nextOpening.cash);
+    $("#upgrade-placement").hidden = !upgradeType;
+    $("#upgrade-confirm").hidden = !upgradeType;
+    upgradeOffersList.hidden = Boolean(upgradeType);
+    upgradeNote.textContent = "";
+    if (!upgradeType) {
+      upgradeOffersList.innerHTML = Object.entries(upgradeOffers).map(([type, offer]) => {
+        const site = offer.sites.find(({id}) => id === nextOpening.upgrades[type]);
+        return '<button type="button" class="upgrade-offer" data-upgrade="' + type + '"' + (site ? ' disabled' : '') +
+          '><span class="detail-stat"><strong>' + offer.name + '</strong><b>' + (site ? 'Purchased' : currency.format(offer.price)) +
+          '</b></span><span class="detail-copy">' + (site ? site.name : offer.description) + '</span></button>';
+      }).join("");
+      return;
+    }
+    const offer = upgradeOffers[upgradeType];
+    $("#upgrade-name").textContent = offer.name;
+    upgradeSites.innerHTML = offer.sites.map(({id, name}) => '<label class="upgrade-site"><input type="radio" name="upgrade-site" value="' +
+      id + '"><span>' + name + '</span></label>').join("");
+    paintUpgradePlacement();
+  }
+
+  function buyUpgrade(type, siteId) {
+    if (!nextOpening || !Object.hasOwn(upgradeOffers, type) || nextOpening.upgrades[type]) return false;
+    const {price, sites} = upgradeOffers[type];
+    if (nextOpening.cash < price || !sites.some(({id}) => id === siteId)) return false;
+    const opening = {...nextOpening, cash: nextOpening.cash - price, upgrades: {...nextOpening.upgrades, [type]: siteId}};
+    if (!saveOpening(opening)) return false;
+    nextOpening = opening;
+    openingSaved = true;
+    return true;
+  }
+
+  function openUpgradeShop() {
+    if (!nextOpening || upgradeShop.open) return;
+    if (report.open) report.close();
+    if (mobileLayout.matches) showMobileView("operations");
+    upgradeType = null;
+    upgradeSite = null;
+    paintUpgradeShop();
+    upgradeShop.showModal();
+  }
+
+  $("#view-upgrades").addEventListener("click", openUpgradeShop);
+  $("#report-upgrades").addEventListener("click", openUpgradeShop);
+  $("#close-upgrades").addEventListener("click", () => upgradeShop.close());
+  upgradeShop.addEventListener("close", () => {
+    previewObjects = null;
+    $("#view-upgrades").focus({preventScroll: true});
+  });
+  upgradeOffersList.addEventListener("click", event => {
+    const choice = event.target.closest("button[data-upgrade]");
+    if (!choice || choice.disabled) return;
+    upgradeType = choice.dataset.upgrade;
+    upgradeSite = null;
+    paintUpgradeShop();
+    upgradeSites.querySelector("input").focus();
+  });
+  $("#back-to-upgrades").addEventListener("click", () => {
+    const previous = upgradeType;
+    upgradeType = null;
+    upgradeSite = null;
+    previewObjects = null;
+    paintUpgradeShop();
+    upgradeOffersList.querySelector('[data-upgrade="' + previous + '"]').focus();
+  });
+  upgradeSites.addEventListener("change", event => {
+    upgradeSite = upgradeOffers[upgradeType].sites.find(({id}) => id === event.target.value);
+    paintUpgradePlacement();
+  });
+  purchaseUpgrade.addEventListener("click", () => {
+    if (!upgradeSite) return;
+    if (!buyUpgrade(upgradeType, upgradeSite.id)) {
+      upgradeNote.textContent = "The purchase could not be saved. Check browser storage and try again.";
+      return;
+    }
+    const {name} = upgradeOffers[upgradeType];
+    upgradeType = null;
+    upgradeSite = null;
+    previewObjects = null;
+    paintUpgradeShop();
+    upgradeNote.textContent = name + " purchased for " + formatDay(nextOpening.day) + ".";
+    $("#close-upgrades").focus();
+    paint();
+  });
 
   const aircraftSelection = $("#aircraft-selection");
   const aircraftDelayPins = new Map();
@@ -1698,7 +1851,7 @@
     if (!baggage.assignCarousel(state.luggage, claimFlight, carousel)) return;
     if (shiftComplete()) finishShift();
     else {
-      const {number} = baggageCarousels.find(({id}) => id === carousel);
+      const {number} = airport.baggageClaim.carousels.find(({id}) => id === carousel);
       announce(claimFlight + " baggage assigned to Carousel " + number + ".");
       returnToMapAfter("claim");
       paint();
@@ -1725,14 +1878,28 @@
   $("#pause-toggle").addEventListener("click", togglePause);
   $("#view-report").addEventListener("click", showShiftReport);
   $("#close-report").addEventListener("click", () => report.close());
-  startNextDay.addEventListener("click", () => {
+  function beginNextDay() {
     if (!nextOpening) return;
-    const {day, cash, seed, overnightAircraft} = nextOpening;
+    const {day, cash, seed, overnightAircraft, upgrades} = nextOpening;
     if (!openingSaved) openingSaved = saveOpening(nextOpening);
     nextOpening = null;
+    if (purchasedUpgrades !== upgrades) {
+      purchasedUpgrades = upgrades;
+      airport = createAirport(airportLayouts.withUpgrades(purchasedUpgrades));
+      passengerFlow = createPassengerFlow(airport);
+      baggage = createBaggage(airport);
+      if (renderer) {
+        scene = airport.scene();
+        counterMarkers = buildCounterMarkers();
+      }
+      for (const mark of mapSigns) {
+        if (Object.hasOwn(staffingRates, mark.section)) mark.x = bankCenter(mark.section);
+      }
+    }
     state = createShift(day, overnightAircraft, cash, seed);
     scheduleRows = buildScheduleRows();
     flow = passengerFlow.create();
+    buildStaffingIndicators();
     occupancyDirty = true;
     $("#upcoming").open = false;
     report.close();
@@ -1744,9 +1911,11 @@
         : "Terminal open. Awaiting the first aircraft.");
     paint();
     (mobileLayout.matches ? $("#show-operations") : $("#flights-tab")).focus({preventScroll: true});
-  });
+  }
+  startNextDay.addEventListener("click", beginNextDay);
+  $("#continue-shift").addEventListener("click", beginNextDay);
   report.addEventListener("close", () => {
-    if (!shiftComplete()) return;
+    if (!shiftComplete() || upgradeShop.open) return;
     if (mobileLayout.matches) showMobileView("operations");
     $("#view-report").focus();
   });
@@ -1761,14 +1930,16 @@
     else returnToMapAfter("staffing", type);
     paint();
   }
+  function buildStaffingIndicators() {
+    for (const type of Object.keys(staffingRates)) {
+      $("#staffing-" + type + " .staffing-lanes").innerHTML = flow[type].map((_, index) =>
+        "<li><span>" + (type === "checkIn" ? "Station " : "Lane ") + (index + 1) + "</span><strong></strong></li>").join("");
+    }
+  }
+
+  buildStaffingIndicators();
   for (const type of Object.keys(staffingRates)) {
     const panel = $("#staffing-" + type);
-    const indicators = panel.querySelector(".staffing-lanes");
-    flow[type].forEach((_, index) => {
-      const indicator = document.createElement("li");
-      indicator.innerHTML = "<span>" + (type === "checkIn" ? "Station " : "Lane ") + (index + 1) + "</span><strong></strong>";
-      indicators.append(indicator);
-    });
     for (const action of ["open", "close"]) {
       panel.querySelector('[data-staffing="' + action + '"]').addEventListener("click", () => changeStaffing(type, action));
     }
@@ -1892,7 +2063,7 @@
     canvas.addEventListener("pointerleave", () => canvas.removeAttribute("data-aircraft-hover"));
   }
   window.addEventListener("keydown", event => {
-    if (report.open || event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+    if (report.open || upgradeShop.open || event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
     if (event.code === "Space" && !["BUTTON", "INPUT", "TEXTAREA"].includes(event.target.tagName)) {
       event.preventDefault();
       togglePause();
@@ -1905,6 +2076,7 @@
   let requestDraw = true;
   let lastFrame = performance.now(), lastPaint = 0, lastDraw = 0;
   window.addEventListener("resize", () => {
+    drawUpgradePreview();
     const {view} = renderer ?? {};
     const wasFitted = view?.zoom === fittedZoom && view.x === 0 && view.y === 0;
     fittedZoom = mapFitZoom();

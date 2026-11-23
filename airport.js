@@ -1,6 +1,6 @@
 "use strict";
 
-const airport = (function createAirport(layout) {
+function createAirport(layout) {
   const {Mesh} = world;
   const {runwayZ, taxiwayZ, standZ, apronLeft, apronRight} = layout.airfield;
   const gates = layout.gates.map(({id, x}) => ({id, name: id, x, z: standZ}));
@@ -450,10 +450,10 @@ const airport = (function createAirport(layout) {
       const right = Math.max(...positions) + width / 2 + extra;
       mesh.rect((left + right) / 2, floor + .022, (checkpointZ + endZ) / 2, right - left, endZ - checkpointZ, color);
     };
-    queueMat(securityQueue, 27.25, 2, "#cbd8d1");
+    queueMat(securityQueue, 27.25, .65, "#cbd8d1");
     securityCheckpoint(mesh);
 
-    queueMat(checkInQueue, 26.75, 1.15, "#d4d9ce");
+    queueMat(checkInQueue, 26.75, .6, "#d4d9ce");
     checkInDesks.forEach((x, index) => desk(mesh, x, checkInQueue.deskZ, index % 2 ? "#87a5a2" : "#6c9b91"));
     for (const {x} of checkInQueue.banks) queue(mesh, x, checkInQueue);
     for (const x of [-34.5, -12.8]) planter(mesh, x, floor, 26.95, 1.3);
@@ -900,16 +900,20 @@ const airport = (function createAirport(layout) {
     return moving;
   }
 
-  function scene() {
-    const fixed = [
+  function terminalScene() {
+    return [
       {mesh: ground(), castShadow: false},
       {mesh: terminal()},
       {mesh: baggageClaimHall()},
       {mesh: details()},
       {mesh: baggageBelt()},
-      ...baggageClaim.carousels.map(carousel => ({mesh: baggageCarousel(carousel), facilityId: carousel.id}))
+      ...baggageClaim.carousels.map(carousel => ({mesh: baggageCarousel(carousel), facilityId: carousel.id})),
+      ...(restrooms ? [{mesh: drawRestrooms(), x: restrooms.x, z: restrooms.frontZ, facilityId: restrooms.id}] : [])
     ];
-    if (restrooms) fixed.push({mesh: drawRestrooms(), x: restrooms.x, z: restrooms.frontZ, facilityId: restrooms.id});
+  }
+
+  function scene() {
+    const fixed = terminalScene();
     const cars = [
       vehicle("#7da5ad"),
       vehicle("#e0e4d6"), vehicle("#bb7e6c"), vehicle("#719692")
@@ -939,6 +943,6 @@ const airport = (function createAirport(layout) {
       claimedLuggage: baggageColors.map(claimedSuitcase), baggageLoader: baggageLoader(), baggageTrain: baggageTrain()};
   }
 
-  return {gates, aircraft, scene, passengerActors, carryOnPosition, terminalPaths, floor, runwayZ, taxiwayZ, luggageFromDesk, luggageToAircraft,
+  return {gates, aircraft, scene, terminalScene, passengerActors, carryOnPosition, terminalPaths, floor, runwayZ, taxiwayZ, luggageFromDesk, luggageToAircraft,
     baggageClaim, baggageColors};
-})(airportLayouts.starter);
+}

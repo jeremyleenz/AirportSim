@@ -1,6 +1,6 @@
 # Airport Ops expansion roadmap
 
-Start with a small airport and give players time to learn its operations. Airport improvements should make a comparable shift easier to run. Players can take on more traffic when they’re ready.
+Start with a small airport and give players time to learn its operations. Airport improvements relieve bottlenecks. Players choose when to take on more traffic through optional airline contracts.
 
 ## 1. Start with a smaller airport (complete for MVP)
 
@@ -18,16 +18,17 @@ At the end of each shift, the game saves the next day, treasury, timetable, and 
 
 The base schedule stays available after a loss so players can earn money back through operations.
 
-## 3. Offer the first two improvements
+## 3. Offer the first capacity upgrades
 
-Let players buy and place a second carousel or more shared seating between shifts. Set prices so a decent first shift makes either purchase affordable. Give both improvements player-chosen positions in suitable areas.
+Let players buy and place a second baggage carousel, a third security lane, or a third check-in desk between shifts. Set prices so a decent first shift makes at least one upgrade affordable. Players decide what to buy based on the bottlenecks they encountered during the shift. Offer a choice of sites with a map preview for each upgrade.
 
-- **Second carousel** can go anywhere in baggage claim that passengers can reach and baggage handling can serve. It lets two arrivals use baggage claim at once. Players still choose which carousel each arrival uses.
-- **Shared seating** can be placed and moved within accessible waiting areas. Show where passengers sit during the next shift and whether seats near the busiest gates are getting more use.
+- **Second carousel** goes in baggage claim where passengers and baggage handling can reach it. It lets two arrivals use baggage claim at once. Players still choose which carousel each arrival uses.
+- **Third security lane** adds screening capacity when staffed. Place it where passengers can queue and pass through to the gates.
+- **Third check-in desk** adds check-in capacity when staffed. Place it in the public terminal with queue space and a connection to baggage handling.
 
-Save each completed purchase with the updated treasury and the improvement’s chosen position. Restore the carousel and seating in those positions when the game reopens.
+Save each completed purchase with the updated treasury and the facility’s chosen position. Restore the purchased facility in that position when the game reopens.
 
-Give the next shift a comparable workload so players can tell whether their purchase helped. The first playable milestone is finishing Day 1, using the report to buy and place an improvement, then closing and reopening the game to run Day 2 with the improvement in place.
+The first playable milestone is finishing Day 1, buying and placing an upgrade between shifts, then closing and reopening the game to run Day 2 with the upgrade in place. The base schedule remains available after each upgrade.
 
 ## 4. Add airport layout customisation
 
@@ -39,9 +40,9 @@ Show the cost and affected passenger routes before players apply a change. Let t
 
 Extend the browser save to cover every facility the player can place or move. Save the facility positions and updated treasury when the player applies the layout, and restore that layout on reopening.
 
-## 5. Add more operational expansion
+## 5. Add a third gate and expand capacity further
 
-Offer a third gate, additional check-in counters, and additional security lanes. Use observed bottlenecks to decide which to develop first. Show players when flights held because all gates were occupied or queues persisted with every available counter or lane staffed.
+Offer a third gate. Show when inbound flights held because all gates were occupied so players can judge when they need another stand. Use queue and baggage wait data to guide any further expansion of check-in, security, or baggage claim.
 
 Use the planning mode to fit added capacity into the airport. A new gate, for example, may require extending the concourse and connecting the stand to a taxiway.
 
@@ -49,7 +50,7 @@ Use the planning mode to fit added capacity into the airport. A new gate, for ex
 
 Start with one base airline and offer a small optional contract between shifts. Show the proposed arrival and departure times, passenger and baggage volumes, and expected revenue. A contract in a quieter window may fit the current airport. A contract during a busy arrival bank may justify building capacity first.
 
-Purchases increase capacity. Signing a contract adds flights to the timetable. Keeping those decisions independent gives players control over the difficulty as their airport grows.
+The base timetable can vary day to day. Players can operate the base schedule or choose when to add flights by signing optional contracts. Buying an upgrade leaves that choice with the player.
 
 Let players drop optional contracts between shifts to reduce traffic when they need time to recover.
 
@@ -58,6 +59,7 @@ Let players drop optional contracts between shifts to reduce traffic when they n
 Start with a small **retail kiosk**. Use existing passenger wait time to test spending and concession revenue before developing a full restaurant.
 
 - **Restaurants** once the spending model supports a fuller food and drink service.
+- **Additional shared seating** once passenger satisfaction has a clear effect on gameplay. Let players place seats in accessible waiting areas and see where passengers use them.
 - **Toilets** once passenger needs can affect their experience.
 - **Travelators** once walking distances can affect whether passengers reach their gates on time.
 

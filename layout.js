@@ -45,7 +45,10 @@ const airportLayouts = (() => {
       transfer: [13.65, .22, 6.15],
       banks: [{id: "check-in-1", x: 4.35, deskOffsets: [0]}, {id: "check-in-2", x: 9.8, deskOffsets: [0]}]
     },
-    security: {...regional.security, banks: regional.security.banks.slice(0, 2)},
+    security: {
+      ...regional.security,
+      banks: [{id: "security-1", x: -9.75}, {id: "security-2", x: -3.15}]
+    },
     baggageClaim: {
       ...regional.baggageClaim,
       side: "east", outerX: 25.05, exitX: 14.1,
@@ -58,5 +61,54 @@ const airportLayouts = (() => {
     sharedBenches: regional.sharedBenches.map(bench =>
       bench.x > 0 ? {...bench, x: -12.5} : {...bench, x: -36, aisleX: -34.42})
   };
-  return {regional, starter};
+  const [laneOne, laneTwo] = starter.security.banks;
+  const [deskOne, deskTwo] = starter.checkIn.banks;
+  const westLaneX = -11.05;
+  const nearSecurityDeskX = 3.25;
+  const carouselX = starter.baggageClaim.carousels[0].x;
+  const upgrades = {
+    carousel: {
+      name: "Second baggage carousel", price: 62000, description: "Handle two baggage claims at once.",
+      sites: [{id: "near-belt", name: "Near Carousel 1", x: carouselX, z: 24.35},
+        {id: "near-exit", name: "Near arrivals exit", x: carouselX, z: 25.05}]
+    },
+    security: {
+      name: "Third security lane", price: 78000, description: "Add a screening lane you can staff when queues build.",
+      sites: [{id: "west", name: "Beside the café", x: westLaneX, firstLaneX: (westLaneX + laneTwo.x) / 2},
+        {id: "middle", name: "Between the lanes", x: (laneOne.x + laneTwo.x) / 2}]
+    },
+    checkIn: {
+      name: "Third check-in desk", price: 56000, description: "Add a desk with its own queue and baggage belt.",
+      sites: [{id: "middle", name: "Between the desks", x: (deskOne.x + deskTwo.x) / 2},
+        {id: "near-security", name: "Near security", x: nearSecurityDeskX, firstDeskX: (nearSecurityDeskX + deskTwo.x) / 2}]
+    }
+  };
+
+  function withUpgrades(purchased) {
+    const carousel = upgrades.carousel.sites.find(({id}) => id === purchased.carousel);
+    const lane = upgrades.security.sites.find(({id}) => id === purchased.security);
+    const desk = upgrades.checkIn.sites.find(({id}) => id === purchased.checkIn);
+    const {baggageClaim, security, checkIn} = starter;
+    return {
+      ...starter,
+      baggageClaim: carousel ? {
+        ...baggageClaim,
+        carousels: [...baggageClaim.carousels, {id: "carousel-2", number: 2, x: carousel.x, z: carousel.z}],
+        benchRows: [{z: 28.18, direction: -1}],
+        standingRows: baggageClaim.standingRows.slice(0, 3)
+      } : baggageClaim,
+      security: lane ? {
+        ...security, width: 3.05,
+        banks: [...security.banks.map((bank, index) => index === 0 && lane.firstLaneX ? {...bank, x: lane.firstLaneX} : bank),
+          {id: "security-3", x: lane.x}]
+      } : security,
+      checkIn: desk ? {
+        ...checkIn, width: 2.15,
+        banks: [...checkIn.banks.map((bank, index) => index === 0 && desk.firstDeskX ? {...bank, x: desk.firstDeskX} : bank),
+          {id: "check-in-3", x: desk.x, deskOffsets: [0]}]
+      } : checkIn
+    };
+  }
+
+  return {regional, starter, upgrades, withUpgrades};
 })();

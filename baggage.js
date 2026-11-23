@@ -1,6 +1,6 @@
 "use strict";
 
-const baggage = (() => {
+function createBaggage(airport) {
   const beltSpeed = 5;
   const tugSpeed = 7;
   const bagsPerTrailer = 6;
@@ -332,4 +332,4 @@ const baggage = (() => {
   }
 
   return {create, checkedIn, arrived, claimBoard, assignCarousel, advance, actors};
-})();
+}

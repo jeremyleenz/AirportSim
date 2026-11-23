@@ -280,14 +280,14 @@ button.flight-alert:hover { background: #584933; }
 #arrival-holding-status:not([data-gates-full]) { border-color: transparent; background: transparent; color: var(--muted); font-weight: 600; }
 #arrival-alert, #boarding-open-alert, #departure-alert { border-color: #679982; background: #244039; color: #d0f8df; }
 #arrival-alert:hover, #boarding-open-alert:hover, #departure-alert:hover { background: #34564b; }
-#shift-report { width: min(550px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 0; overflow: hidden; border: 1px solid #436257; border-radius: 13px; color: var(--light); background: var(--panel); box-shadow: 0 18px 60px #0b1518a8; }
-#shift-report[open] { display: flex; flex-direction: column; }
-#shift-report::backdrop { background: #0b151bc8; }
+.shift-dialog { width: min(550px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 0; overflow: hidden; border: 1px solid #436257; border-radius: 13px; color: var(--light); background: var(--panel); box-shadow: 0 18px 60px #0b1518a8; }
+.shift-dialog[open] { display: flex; flex-direction: column; }
+.shift-dialog::backdrop { background: #0b151bc8; }
 .report-head, .report-actions { padding: 15px 18px; background: #192e31; }
 .report-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); }
 .report-head p { color: var(--mint); font: 650 .72rem var(--mono); }
 .report-head h2 { margin: 3px 0 0; font-size: 1.55rem; letter-spacing: -.035em; }
-#close-report { border: 1px solid var(--line); background: var(--card); border-radius: 7px; min-width: 44px; min-height: 44px; font-size: 1.45rem; }
+.dialog-close { border: 1px solid var(--line); background: var(--card); border-radius: 7px; min-width: 44px; min-height: 44px; font-size: 1.45rem; }
 .report-body { padding: 16px 18px; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 #report-closure { margin: 0 0 12px; color: var(--amber); font-size: .87rem; font-weight: 650; }
 .report-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin: 0 0 15px; }
@@ -309,7 +309,26 @@ button.flight-alert:hover { background: #584933; }
 .report-flights .report-late { color: var(--amber); }
 .report-actions { border-top: 1px solid var(--line); }
 .report-actions .detail-copy { margin: 0 0 8px; }
-.report-actions .primary { margin: 0; }
+.between-shifts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.between-shifts button { margin: 0; }
+#continue-shift { grid-column: 1 / -1; }
+.upgrade-body { display: grid; gap: 12px; }
+.upgrade-offers { display: grid; gap: 8px; }
+.upgrade-offer { display: grid; gap: 5px; text-align: left; width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+.upgrade-offer:hover:not(:disabled) { border-color: #7fb39a; background: #243a3d; }
+.upgrade-offer strong { color: var(--light); font-size: .92rem; }
+.upgrade-offer .detail-copy { margin: 0; }
+.upgrade-offer:disabled b { color: var(--mint); }
+#upgrade-placement { display: grid; gap: 10px; }
+.upgrade-sites { padding: 0; margin: 0; border: 0; min-width: 0; }
+.upgrade-sites legend { padding: 0; margin-bottom: 6px; color: var(--muted); font-size: .84rem; }
+#upgrade-sites { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.upgrade-site { display: flex; align-items: center; gap: 7px; min-height: 44px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; color: var(--light); font-size: .83rem; cursor: pointer; }
+.upgrade-site:has(:checked) { border-color: var(--mint); background: #243d37; }
+.upgrade-site input { margin: 0; accent-color: var(--mint); }
+#upgrade-preview { width: 100%; height: clamp(150px, 29dvh, 240px); border-radius: 8px; }
+#upgrade-note { margin: 0; }
+#upgrade-note:empty { display: none; }
 @media (max-height: 780px) and (min-width: 761px) {
   .topbar { height: 65px; }
   .panel-head { padding-top: 15px; padding-bottom: 12px; }

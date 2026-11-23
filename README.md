@@ -8,6 +8,8 @@ See the [expansion roadmap](ROADMAP.md) for the planned progression, airport imp
 
 At the end of a shift, the game saves the next day, closing treasury, overnight aircraft, and opening schedule to this browser. Reopening returns to the start of that saved day, paused. An unfinished shift restarts from opening.
 
+Between shifts, open **Airport upgrades** to buy a second baggage carousel, a third security lane, or a third check-in desk. You can buy several upgrades if the treasury covers them. Choose and preview a location for each purchase. The game saves the purchase and location together with the updated treasury. Purchased facilities are available the next morning.
+
 ## Package for deployment
 
 Run `make package` from the repository to copy the game to `dist/` and create `airport-sim.zip`. The ZIP has `index.html` at its root and contains all the files needed to play. Rerun the command after changes to make a new package.

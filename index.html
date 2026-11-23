@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=35">
-  <script defer src="renderer.js"></script>
-  <script defer src="layout.js?v=9"></script>
-  <script defer src="airport.js?v=25"></script>
-  <script defer src="passengers.js?v=29"></script>
-  <script defer src="baggage.js?v=17"></script>
-  <script defer src="game.js?v=70"></script>
+  <link rel="stylesheet" href="styles.css?v=36">
+  <script defer src="renderer.js?v=2"></script>
+  <script defer src="layout.js?v=12"></script>
+  <script defer src="airport.js?v=27"></script>
+  <script defer src="passengers.js?v=30"></script>
+  <script defer src="baggage.js?v=18"></script>
+  <script defer src="game.js?v=72"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -91,7 +91,11 @@
           <div><p id="objective-curfew"></p><strong id="objective-title"></strong><div class="objective-progress"><div id="goal-bar"></div></div></div>
           <span id="goal-count"></span>
         </div>
-        <button type="button" id="view-report" class="primary" hidden>View shift report</button>
+        <div id="between-shifts" class="between-shifts" hidden>
+          <button type="button" id="view-upgrades" class="secondary">Airport upgrades</button>
+          <button type="button" id="view-report" class="secondary">View shift report</button>
+          <button type="button" id="continue-shift" class="primary">Start new shift</button>
+        </div>
         <section id="flight-view" aria-labelledby="flight-board-title">
           <div class="section-head"><h2 id="flight-board-title">Flight board</h2><span id="gate-count"></span></div>
           <div class="runway-strip" aria-label="Airfield status">
@@ -206,10 +210,10 @@
     </div>
     <div class="event"><svg class="icon"><use href="#info"/></svg><span id="event" role="status">Terminal open. Passengers are arriving.</span></div>
   </footer>
-  <dialog id="shift-report" aria-labelledby="report-title">
+  <dialog id="shift-report" class="shift-dialog" aria-labelledby="report-title">
     <div class="report-head">
       <div><p>Northpoint Regional</p><h2 id="report-title">Shift report</h2></div>
-      <button type="button" id="close-report" aria-label="Close shift report">×</button>
+      <button type="button" id="close-report" class="dialog-close" aria-label="Close shift report">×</button>
     </div>
     <div class="report-body">
       <p id="report-closure" hidden></p>
@@ -234,7 +238,33 @@
     </div>
     <div class="report-actions">
       <p id="report-save-status" class="detail-copy"></p>
-      <button type="button" id="restart-shift" class="primary" autofocus>Start new shift</button>
+      <div class="between-shifts">
+        <button type="button" id="report-upgrades" class="secondary">Airport upgrades</button>
+        <button type="button" id="restart-shift" class="primary" autofocus>Start new shift</button>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="upgrade-shop" class="shift-dialog" aria-labelledby="upgrade-title">
+    <div class="report-head">
+      <div><p id="upgrade-opening"></p><h2 id="upgrade-title">Airport upgrades</h2></div>
+      <button type="button" id="close-upgrades" class="dialog-close" aria-label="Close airport upgrades" autofocus>×</button>
+    </div>
+    <div class="report-body upgrade-body">
+      <div class="detail-stat"><span>Available treasury</span><b id="upgrade-budget"></b></div>
+      <div id="upgrade-offers" class="upgrade-offers"></div>
+      <section id="upgrade-placement" aria-labelledby="upgrade-name" hidden>
+        <h3 id="upgrade-name"></h3>
+        <fieldset class="upgrade-sites">
+          <legend>Choose a location</legend>
+          <div id="upgrade-sites"></div>
+        </fieldset>
+        <canvas id="upgrade-preview" aria-label="Isometric preview of the upgrade location"></canvas>
+      </section>
+      <p id="upgrade-note" class="detail-copy" role="status"></p>
+    </div>
+    <div id="upgrade-confirm" class="report-actions between-shifts" hidden>
+      <button type="button" id="back-to-upgrades" class="secondary">Back to upgrades</button>
+      <button type="button" id="buy-upgrade" class="primary" disabled>Buy upgrade</button>
     </div>
   </dialog>
 </body>

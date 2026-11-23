@@ -347,8 +347,12 @@ const world = (() => {
       return hit.flightId;
     }
 
-    function render(objects) {
+    function render(objects, focus) {
       resize();
+      if (focus) {
+        view.x = -dot(cameraX, focus) * view.scale;
+        view.y = dot(cameraY, focus) * view.scale;
+      }
       const halfW = view.width / (2 * view.scale), halfH = view.height / (2 * view.scale);
       const viewMatrix = matrix(cameraX, cameraY, cameraZ, halfW, halfH,
         -.01 + 2 * view.x / view.width, -.02 - 2 * view.y / view.height);

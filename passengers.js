@@ -1,6 +1,6 @@
 "use strict";
 
-const passengerFlow = (() => {
+function createPassengerFlow(airport) {
   const {gates, floor, terminalPaths, baggageClaim} = airport;
   const {queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats, cafeDoorX, airsideExit, concourseRight, restroomStalls,
     security: securityLayout} = terminalPaths;
@@ -889,4 +889,4 @@ const passengerFlow = (() => {
   }
 
   return {manifest, create, openCounter, closeCounter, startDeplaning, closeBoarding, advance, snapshot};
-})();
+}
