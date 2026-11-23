@@ -28,6 +28,7 @@
   const lateNoticeMinutes = 12;
   const takeoffWarningMinutes = 10;
   const pushbackWarningMinutes = 5;
+  const flightReminderSeconds = 9;
   const departureGraceMinutes = 5;
   const finePerLateMinute = 25;
   const taxiSpeed = 4;
@@ -95,7 +96,7 @@
 
   function createShift(day = 1) {
     const timetable = createTimetable();
-    return {day, cash: startingCash, now: 0, speed: 1, paused: false, closedAtCurfew: false, missedPassengers: 0, delayMinutes: 0,
+    return {day, cash: startingCash, now: 0, playTime: 0, speed: 1, paused: false, closedAtCurfew: false, missedPassengers: 0, delayMinutes: 0,
       staffingCosts: {checkIn: 0, security: 0},
       timetable, flights: timetable.map(makeFlight), results: [], selected: timetable[0].id, view: "flights", staffingFocus: null,
       movements: new Map(), taxiQueue: [], nextDeparture: null, luggage: baggage.create()};
@@ -523,6 +524,11 @@
     return changed;
   }
 
+  function reminderActive(flight, field) {
+    const started = flight[field] ??= state.playTime;
+    return state.playTime - started < flightReminderSeconds;
+  }
+
   function paintLateAlert(complete) {
     const flights = complete ? [] : state.flights.filter(notifiedLatePassengers);
     const flight = flights.at(-1);
@@ -533,7 +539,8 @@
   }
 
   function paintBoardingAlert(complete) {
-    const flights = complete ? [] : state.flights.filter(boardingOpen);
+    const flights = complete ? [] : state.flights.filter(flight =>
+      boardingOpen(flight) && reminderActive(flight, "boardingReminderAt"));
     const flight = flights[0];
     const label = flight && "Boarding open · " + flight.id + " · " + gates[flight.gate].name;
     if (paintFlightAlert("#boarding-open-alert", flight, label, flights.length - 1)) {
@@ -545,7 +552,8 @@
     const arrivals = complete ? [] : state.flights.filter(flight => flight.stage === "holding")
       .sort((a, b) => a.arrivalAt - b.arrivalAt);
     const gatesFull = arrivals.length > 0 && availableGate() < 0;
-    const actionable = gatesFull ? [] : arrivals.filter(flight => flight.waitedForGate);
+    const actionable = gatesFull ? [] : arrivals.filter(flight =>
+      flight.waitedForGate && reminderActive(flight, "gateReminderAt"));
     const status = $("#arrival-holding-status");
     status.hidden = !arrivals.length || actionable.length > 0;
     status.toggleAttribute("data-gates-full", gatesFull);
@@ -562,15 +570,20 @@
     return flight.takeoffAt - outboundRoutes[flight.gate].liftoff;
   }
 
+  function pushbackMinutesRemaining(flight) {
+    return Math.ceil((onTimePushbackAt(flight) - state.now) / secondsPerMinute - 1e-9);
+  }
+
   function paintDepartureAlert(complete) {
     const warningHorizon = state.now + pushbackWarningMinutes * secondsPerMinute;
     const flights = complete || state.nextDeparture ? [] : state.flights.filter(flight =>
-      flight.stage === "ready" && onTimePushbackAt(flight) <= warningHorizon && fitsCurfew(outboundMovement(flight)))
+      flight.stage === "ready" && onTimePushbackAt(flight) <= warningHorizon && fitsCurfew(outboundMovement(flight)) &&
+      (pushbackMinutesRemaining(flight) >= 0 || reminderActive(flight, "overdueReminderAt")))
       .sort((a, b) => onTimePushbackAt(a) - onTimePushbackAt(b));
     const flight = flights[0];
     let label;
     if (flight) {
-      const minutes = Math.ceil((onTimePushbackAt(flight) - state.now) / secondsPerMinute);
+      const minutes = pushbackMinutesRemaining(flight);
       const timing = minutes > 0 ? "due in " + minutes + " min" : minutes === 0 ? "due now" : "overdue";
       label = "Pushback " + timing + " · " + flight.id;
     }
@@ -1251,12 +1264,16 @@
         occupancyDirty = true;
         announce(flight.id + " awaiting a gate assignment.");
       }
-      if (gatesFull && flight.stage === "holding") flight.waitedForGate = true;
+      if (gatesFull && flight.stage === "holding") {
+        flight.waitedForGate = true;
+        delete flight.gateReminderAt;
+      }
     }
   }
 
   function update(dt) {
     if (state.paused) return;
+    state.playTime += dt;
     let remaining = dt * state.speed;
     // Keep queue processing and walking on small steps at accelerated speeds.
     while (remaining > 0 && !shiftComplete()) {
