@@ -7,6 +7,7 @@
   const currency = new Intl.NumberFormat("en-US", {style: "currency", currency: "USD", maximumFractionDigits: 0});
   const startingCash = 60000;
   const progressKey = "airport-ops-opening-v1";
+  const baseOperatingRate = 8;
   const staffingRates = {checkIn: 10, security: 15};
   const counterNames = {checkIn: "Check-in station", security: "Security lane"};
   const counterStatus = {open: "Open", closing: "Closing", closed: "Closed"};
@@ -999,8 +1000,12 @@
     return Math.round(state.staffingCosts[type]);
   }
 
+  function baseOperatingCost() {
+    return Math.round(state.now * baseOperatingRate / secondsPerMinute);
+  }
+
   function treasuryBalance() {
-    return state.cash - staffingCost("checkIn") - staffingCost("security");
+    return state.cash - baseOperatingCost() - staffingCost("checkIn") - staffingCost("security");
   }
 
   function paintBaggageClaim({carousels, waiting, available, automatic}, complete) {
@@ -1098,6 +1103,7 @@
       $("#all-staffing").hidden = state.terminalFocus === null;
       $("#show-baggage").hidden = claimOpen;
       $("#show-baggage").toggleAttribute("data-action-needed", chooseClaim);
+      $("#base-operating-hourly").textContent = formatHourlyRate(baseOperatingRate);
       $("#staffing-hourly").textContent = formatHourlyRate(complete ? 0 : activeStaffingRate("checkIn") + activeStaffingRate("security"));
       $("#staffing-spent").textContent = currency.format(staffingSpent);
       $("#check-in-count").textContent = occupancy.checkIn.length - occupancy.processing.checkIn;
@@ -1547,7 +1553,8 @@
       (waiting.length ? stat("Flights without a carousel", waiting.length) : "");
     $("#report-finances").innerHTML = stat("Opening treasury", currency.format(state.openingCash)) +
       stat("Flight revenue", currency.format(revenue)) +
-      stat("Ground handling", currency.format(-handling)) + stat("Extra check-in staffing", currency.format(0 - checkIn)) +
+      stat("Ground handling", currency.format(-handling)) + stat("Base operating costs", currency.format(0 - baseOperatingCost())) +
+      stat("Extra check-in staffing", currency.format(0 - checkIn)) +
       stat("Extra security staffing", currency.format(0 - security)) + stat("Late takeoff fines", currency.format(0 - fines)) +
       stat("Closing treasury", currency.format(closingCash));
     $("#report-flights").innerHTML = results.map(({id, destination, due, takeoff, missed, fine}) => {

@@ -11,7 +11,7 @@
   <script defer src="airport.js?v=34"></script>
   <script defer src="passengers.js?v=50"></script>
   <script defer src="baggage.js?v=19"></script>
-  <script defer src="game.js?v=80"></script>
+  <script defer src="game.js?v=81"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -159,9 +159,10 @@
               </div>
             </div>
             <div class="terminal-stat staffing-summary">
+              <div class="detail-stat"><span>Base operating rate</span><b id="base-operating-hourly"></b></div>
               <div class="detail-stat"><span>Extra staffing rate</span><b id="staffing-hourly"></b></div>
-              <div class="detail-stat"><span>Spent this shift</span><b id="staffing-spent"></b></div>
-              <p>One check-in station and one security lane are included. Extra staffing reduces operating profit.</p>
+              <div class="detail-stat"><span>Extra staffing spent this shift</span><b id="staffing-spent"></b></div>
+              <p>The base rate covers one check-in station, one security lane and keeping the terminal open.</p>
             </div>
             <div class="section-head"><h2>Passenger flow</h2></div>
             <div class="terminal-stat flow-stats">
