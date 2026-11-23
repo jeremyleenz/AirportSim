@@ -457,7 +457,7 @@ function createAirport(layout) {
     checkInDesks.forEach((x, index) => desk(mesh, x, checkInQueue.deskZ, index % 2 ? "#87a5a2" : "#6c9b91"));
     for (const {x} of checkInQueue.banks) queue(mesh, x, checkInQueue);
     for (const x of [-34.5, -12.8]) planter(mesh, x, floor, 26.95, 1.3);
-    planter(mesh, terminalRight - 1.3, floor, 28, 1.1);
+    planter(mesh, terminalRight - .6, floor, 28.25, 1.1);
     planter(mesh, terminalRight - 1.15, floor, restrooms ? terminalBackZ + .8 : 15.35, 1.2);
 
     return mesh;

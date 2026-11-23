@@ -20,15 +20,15 @@ The base schedule stays available after a loss so players can earn money back th
 
 ## 3. Offer the first capacity upgrades
 
-Let players buy and place a second baggage carousel, a third security lane, or a third check-in desk between shifts. Set prices so a decent first shift makes at least one upgrade affordable. Players decide what to buy based on the bottlenecks they encountered during the shift. Offer a choice of sites with a map preview for each upgrade.
+Let players buy a second baggage carousel, a third security lane, or a third check-in desk between shifts. Set prices so a decent first shift makes at least one upgrade affordable. Players decide what to buy based on the bottlenecks they encountered during the shift. Show where each upgrade will go on the purchase confirmation screen.
 
 - **Second carousel** goes in baggage claim where passengers and baggage handling can reach it. It lets two arrivals use baggage claim at once. Once installed, players choose which carousel each arrival uses.
 - **Third security lane** adds screening capacity when staffed. Place it where passengers can queue and pass through to the gates.
 - **Third check-in desk** adds check-in capacity when staffed. Place it in the public terminal with queue space and a connection to baggage handling.
 
-Save each completed purchase with the updated treasury and the facility’s chosen position. Restore the purchased facility in that position when the game reopens.
+Save each completed purchase with the updated treasury and the facility’s position. Restore the purchased facility in that position when the game reopens.
 
-The first playable milestone is finishing Day 1, buying and placing an upgrade between shifts, then closing and reopening the game to run Day 2 with the upgrade in place. The base schedule remains available after each upgrade.
+The first playable milestone is finishing Day 1, buying an upgrade between shifts, then closing and reopening the game to run Day 2 with the upgrade in place. The base schedule remains available after each upgrade.
 
 ## 4. Add airport layout customisation
 

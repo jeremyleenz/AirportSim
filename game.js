@@ -146,8 +146,8 @@
       }));
       if (overnightAircraft.some(({gate, aircraft}) => gate < 0 || aircraft.airline < 0) ||
           new Set(overnightAircraft.map(({gate}) => gate)).size !== overnightAircraft.length) return null;
-      const purchased = Object.fromEntries(Object.entries(airportLayouts.upgrades).flatMap(([type, {sites}]) =>
-        sites.some(({id}) => id === upgrades?.[type]) ? [[type, upgrades[type]]] : []));
+      const purchased = Object.fromEntries(Object.keys(airportLayouts.upgrades).flatMap(type =>
+        airportLayouts.upgradeSite(type, upgrades?.[type]) ? [[type, upgrades[type]]] : []));
       return {day, cash, seed, overnightAircraft, upgrades: purchased};
     } catch {
       return null;
@@ -1548,11 +1548,10 @@
 
   const upgradeShop = $("#upgrade-shop");
   const upgradeOffersList = $("#upgrade-offers");
-  const upgradeSites = $("#upgrade-sites");
   const upgradeNote = $("#upgrade-note");
   const purchaseUpgrade = $("#buy-upgrade");
   const previewCanvas = $("#upgrade-preview");
-  let upgradeType = null, upgradeSite = null;
+  let upgradeType = null;
   let previewRenderer, previewObjects, previewFocus;
 
   function drawUpgradePreview() {
@@ -1561,15 +1560,14 @@
     }
   }
 
-  function previewUpgrade(offer) {
+  function previewUpgrade(site) {
     if (previewCanvas.hidden) return;
     try {
       previewRenderer ??= world.createRenderer(previewCanvas);
       previewRenderer.view.zoom = 5;
-      const site = upgradeSite ?? offer.sites[0];
       const layout = airportLayouts.withUpgrades({...nextOpening.upgrades, [upgradeType]: site.id});
       const preview = createAirport(layout);
-      let x = site.x, z, width, depth;
+      let x, z, width, depth;
       if (upgradeType === "carousel") {
         const {left, right, z: beltZ} = preview.baggageClaim.carousels.at(-1);
         x = (left + right) / 2;
@@ -1578,6 +1576,7 @@
         depth = 2.05;
       } else {
         const bank = preview.terminalPaths[upgradeType];
+        x = bank.banks.at(-1).x;
         z = upgradeType === "security" ? bank.checkpointZ : bank.deskZ;
         width = bank.width + .15;
         depth = upgradeType === "security" ? 4.2 : 1.26;
@@ -1592,17 +1591,6 @@
     }
   }
 
-  function paintUpgradePlacement() {
-    const offer = upgradeOffers[upgradeType];
-    const affordable = nextOpening.cash >= offer.price;
-    purchaseUpgrade.disabled = !upgradeSite || !affordable;
-    purchaseUpgrade.textContent = "Buy for " + currency.format(offer.price);
-    const moved = upgradeSite?.firstDeskX ? "Desk 1" : upgradeSite?.firstLaneX ? "Lane 1" : null;
-    upgradeNote.textContent = !affordable ? "You need " + currency.format(offer.price - nextOpening.cash) + " more to buy this upgrade."
-      : moved ? moved + " shifts to make room at this location." : "";
-    previewUpgrade(offer);
-  }
-
   function paintUpgradeShop() {
     $("#upgrade-opening").textContent = "Available from " + formatDay(nextOpening.day);
     $("#upgrade-budget").textContent = currency.format(nextOpening.cash);
@@ -1612,25 +1600,29 @@
     upgradeNote.textContent = "";
     if (!upgradeType) {
       upgradeOffersList.innerHTML = Object.entries(upgradeOffers).map(([type, offer]) => {
-        const site = offer.sites.find(({id}) => id === nextOpening.upgrades[type]);
+        const site = airportLayouts.upgradeSite(type, nextOpening.upgrades[type]);
         return '<button type="button" class="upgrade-offer" data-upgrade="' + type + '"' + (site ? ' disabled' : '') +
           '><span class="detail-stat"><strong>' + offer.name + '</strong><b>' + (site ? 'Purchased' : currency.format(offer.price)) +
           '</b></span><span class="detail-copy">' + (site ? site.name : offer.description) + '</span></button>';
       }).join("");
       return;
     }
-    const offer = upgradeOffers[upgradeType];
-    $("#upgrade-name").textContent = offer.name;
-    upgradeSites.innerHTML = offer.sites.map(({id, name}) => '<label class="upgrade-site"><input type="radio" name="upgrade-site" value="' +
-      id + '"><span>' + name + '</span></label>').join("");
-    paintUpgradePlacement();
+    const {name, price, site} = upgradeOffers[upgradeType];
+    $("#upgrade-name").textContent = name;
+    $("#upgrade-location").textContent = site.name;
+    const affordable = nextOpening.cash >= price;
+    purchaseUpgrade.disabled = !affordable;
+    purchaseUpgrade.textContent = "Buy for " + currency.format(price);
+    upgradeNote.textContent = !affordable ? "You need " + currency.format(price - nextOpening.cash) + " more to buy this upgrade."
+      : site.note ?? "";
+    previewUpgrade(site);
   }
 
-  function buyUpgrade(type, siteId) {
+  function buyUpgrade(type) {
     if (!nextOpening || !Object.hasOwn(upgradeOffers, type) || nextOpening.upgrades[type]) return false;
-    const {price, sites} = upgradeOffers[type];
-    if (nextOpening.cash < price || !sites.some(({id}) => id === siteId)) return false;
-    const opening = {...nextOpening, cash: nextOpening.cash - price, upgrades: {...nextOpening.upgrades, [type]: siteId}};
+    const {price, site} = upgradeOffers[type];
+    if (nextOpening.cash < price) return false;
+    const opening = {...nextOpening, cash: nextOpening.cash - price, upgrades: {...nextOpening.upgrades, [type]: site.id}};
     if (!saveOpening(opening)) return false;
     nextOpening = opening;
     openingSaved = true;
@@ -1642,7 +1634,6 @@
     if (report.open) report.close();
     if (mobileLayout.matches) showMobileView("operations");
     upgradeType = null;
-    upgradeSite = null;
     paintUpgradeShop();
     upgradeShop.showModal();
   }
@@ -1658,31 +1649,24 @@
     const choice = event.target.closest("button[data-upgrade]");
     if (!choice || choice.disabled) return;
     upgradeType = choice.dataset.upgrade;
-    upgradeSite = null;
     paintUpgradeShop();
-    upgradeSites.querySelector("input").focus();
+    $("#upgrade-name").focus();
   });
   $("#back-to-upgrades").addEventListener("click", () => {
     const previous = upgradeType;
     upgradeType = null;
-    upgradeSite = null;
     previewObjects = null;
     paintUpgradeShop();
     upgradeOffersList.querySelector('[data-upgrade="' + previous + '"]').focus();
   });
-  upgradeSites.addEventListener("change", event => {
-    upgradeSite = upgradeOffers[upgradeType].sites.find(({id}) => id === event.target.value);
-    paintUpgradePlacement();
-  });
   purchaseUpgrade.addEventListener("click", () => {
-    if (!upgradeSite) return;
-    if (!buyUpgrade(upgradeType, upgradeSite.id)) {
+    if (!upgradeType) return;
+    if (!buyUpgrade(upgradeType)) {
       upgradeNote.textContent = "The purchase could not be saved. Check browser storage and try again.";
       return;
     }
     const {name} = upgradeOffers[upgradeType];
     upgradeType = null;
-    upgradeSite = null;
     previewObjects = null;
     paintUpgradeShop();
     upgradeNote.textContent = name + " purchased for " + formatDay(nextOpening.day) + ".";

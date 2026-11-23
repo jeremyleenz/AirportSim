@@ -320,12 +320,7 @@ button.flight-alert:hover { background: #584933; }
 .upgrade-offer .detail-copy { margin: 0; }
 .upgrade-offer:disabled b { color: var(--mint); }
 #upgrade-placement { display: grid; gap: 10px; }
-.upgrade-sites { padding: 0; margin: 0; border: 0; min-width: 0; }
-.upgrade-sites legend { padding: 0; margin-bottom: 6px; color: var(--muted); font-size: .84rem; }
-#upgrade-sites { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-.upgrade-site { display: flex; align-items: center; gap: 7px; min-height: 44px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; color: var(--light); font-size: .83rem; cursor: pointer; }
-.upgrade-site:has(:checked) { border-color: var(--mint); background: #243d37; }
-.upgrade-site input { margin: 0; accent-color: var(--mint); }
+#upgrade-location { margin: 3px 0 0; }
 #upgrade-preview { width: 100%; height: clamp(150px, 29dvh, 240px); border-radius: 8px; }
 #upgrade-note { margin: 0; }
 #upgrade-note:empty { display: none; }

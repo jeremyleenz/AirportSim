@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=36">
+  <link rel="stylesheet" href="styles.css?v=37">
   <script defer src="renderer.js?v=2"></script>
-  <script defer src="layout.js?v=13"></script>
-  <script defer src="airport.js?v=27"></script>
+  <script defer src="layout.js?v=15"></script>
+  <script defer src="airport.js?v=28"></script>
   <script defer src="passengers.js?v=30"></script>
   <script defer src="baggage.js?v=19"></script>
-  <script defer src="game.js?v=73"></script>
+  <script defer src="game.js?v=75"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -253,12 +253,11 @@
       <div class="detail-stat"><span>Available treasury</span><b id="upgrade-budget"></b></div>
       <div id="upgrade-offers" class="upgrade-offers"></div>
       <section id="upgrade-placement" aria-labelledby="upgrade-name" hidden>
-        <h3 id="upgrade-name"></h3>
-        <fieldset class="upgrade-sites">
-          <legend>Choose a location</legend>
-          <div id="upgrade-sites"></div>
-        </fieldset>
-        <canvas id="upgrade-preview" aria-label="Isometric preview of the upgrade location"></canvas>
+        <div>
+          <h3 id="upgrade-name" tabindex="-1"></h3>
+          <p id="upgrade-location" class="detail-copy"></p>
+        </div>
+        <canvas id="upgrade-preview" aria-label="Isometric preview of the upgrade location" aria-describedby="upgrade-location"></canvas>
       </section>
       <p id="upgrade-note" class="detail-copy" role="status"></p>
     </div>
