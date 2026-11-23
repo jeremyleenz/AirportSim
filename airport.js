@@ -75,12 +75,6 @@ function createAirport(layout) {
   const toiletBowlOffset = .76;
   const toiletSeatHeight = .30;
   const {sharedBenches, cafeTables, restrooms} = layout;
-  // Run the line along the lobby edge before taking it through the doorway.
-  const restroomQueuePath = restrooms && [
-    [claimDoorX + 4.9, floor, restrooms.doorZ + .92], [claimDoorX + .66, floor, restrooms.doorZ + .92],
-    [claimDoorX + .66, floor, restrooms.doorZ + .39], [restrooms.aisleX - .65, floor, restrooms.doorZ + .39],
-    [restrooms.aisleX - .65, floor, restrooms.dividerZ + .65]
-  ];
   const restroomStalls = Array.from({length: restrooms?.roomCount ?? 0}, (_, index) => {
     const {x, frontZ, roomSize, roomCount, aisleX, approachZ, doorZ} = restrooms;
     const left = (index - roomCount / 2) * roomSize;
@@ -867,7 +861,7 @@ function createAirport(layout) {
 
   const terminalPaths = {
     queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats, cafeDoorX, airsideExit,
-    restroomStalls, restroomQueuePath,
+    restroomStalls,
     restroomLabel: restrooms ? [restrooms.x, floor + 2.6, restrooms.frontZ - restrooms.roomSize / 2] : null,
     concourseLeft, concourseRight,
     checkIn: checkInQueue,
