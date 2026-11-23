@@ -126,6 +126,7 @@
   }
 
   let state = createShift(1, [{gate: 0, aircraft: {airline: 0}}]);
+  let mapAction = null;
   const statusText = {
     scheduled: "Expected",
     parked: "At gate", deplaning: "Deplaning", boarding: "Boarding", closing: "Boarding closed", ready: "Ready", holding: "Holding",
@@ -191,7 +192,7 @@
     }
     if (claim) {
       label.setAttribute("aria-controls", "baggage-claim");
-      label.addEventListener("click", revealBaggageClaim);
+      label.addEventListener("click", () => revealBaggageClaim(true));
     }
     $("#map-labels").append(label);
     return {element: label, x, y, z, count, section, decorative: !shortcut};
@@ -248,6 +249,7 @@
   }
 
   function select(id, stand = null) {
+    if (id !== state.selected || stand === null) mapAction = null;
     const arrival = state.flights.find(flight => flight.id === id && flight.stage === "holding");
     if (arrival && stand !== null && !flightAtGate(stand)) arrival.preferredGate = stand;
     state.selected = id;
@@ -258,10 +260,23 @@
   }
 
   function showMobileView(view) {
+    mapAction = null;
     game.dataset.mobileView = view;
     $("#show-map").setAttribute("aria-pressed", String(view === "map"));
     $("#show-operations").setAttribute("aria-pressed", String(view === "operations"));
     requestDraw = true;
+  }
+
+  function openOperationsFromMap(kind, target) {
+    if (!mobileLayout.matches) return;
+    showMobileView("operations");
+    mapAction = {kind, target};
+  }
+
+  function returnToMapAfter(kind, target) {
+    if (!mobileLayout.matches || mapAction?.kind !== kind || mapAction.target !== target) return;
+    showMobileView("map");
+    $("#show-map").focus({preventScroll: true});
   }
 
   function revealFlight(focus = true) {
@@ -273,13 +288,12 @@
   function selectFromMap(id, stand = null) {
     if (shiftComplete()) return;
     select(id, stand);
-    if (mobileLayout.matches) {
-      showMobileView("operations");
-    }
+    openOperationsFromMap("flight", id);
     revealFlight(mobileLayout.matches);
   }
 
   function notifyTab(view, staffingFocus = null) {
+    mapAction = null;
     if (state.view !== view || state.staffingFocus !== staffingFocus) $(".panel-body").scrollTop = 0;
     state.view = view;
     state.staffingFocus = staffingFocus;
@@ -287,15 +301,16 @@
   }
 
   function revealStaffing(type) {
-    if (mobileLayout.matches) showMobileView("operations");
     notifyTab("terminal", type);
+    openOperationsFromMap("staffing", type);
     $("#terminal-view").scrollIntoView({block: "start", inline: "nearest"});
     $("#staffing-" + type + " h3").focus({preventScroll: true});
   }
 
-  function revealBaggageClaim() {
-    if (mobileLayout.matches) showMobileView("operations");
+  function revealBaggageClaim(fromMap = false) {
     notifyTab("terminal");
+    if (fromMap) openOperationsFromMap("claim");
+    else if (mobileLayout.matches) showMobileView("operations");
     $("#baggage-claim").scrollIntoView({block: "start", inline: "nearest"});
     $("#baggage-claim-title").focus({preventScroll: true});
   }
@@ -1214,7 +1229,10 @@
       if (flight.stage === "reserved") {
         announce(gates[gate].name + " reserved for " + flight.id + ".");
       }
+    } else {
+      return;
     }
+    returnToMapAfter("flight", flight.id);
     paint();
   }
 
@@ -1227,6 +1245,7 @@
     flight.stage = flight.manifest.some(person => person.zone === "boarding") ? "closing" : "ready";
     occupancyDirty = true;
     announce(flight.id + " boarding closed. " + missed + " missed the flight.");
+    returnToMapAfter("flight", flight.id);
     paint();
   }
 
@@ -1250,6 +1269,7 @@
   }
 
   function finishShift() {
+    mapAction = null;
     state.paused = true;
     occupancyDirty = true;
     announce(state.closedAtCurfew ? "Curfew reached. Your shift report is ready."
@@ -1504,7 +1524,7 @@
   $("#flights-tab").addEventListener("click", () => notifyTab("flights"));
   $("#schedule-tab").addEventListener("click", () => notifyTab("schedule"));
   $("#terminal-tab").addEventListener("click", () => notifyTab("terminal"));
-  $("#claim-alert").addEventListener("click", revealBaggageClaim);
+  $("#claim-alert").addEventListener("click", () => revealBaggageClaim());
   $("#claim-flights").addEventListener("click", event => {
     const button = event.target.closest("[data-claim-flight]");
     if (!button || shiftComplete()) return;
@@ -1514,6 +1534,7 @@
     if (shiftComplete()) finishShift();
     else {
       announce(claimFlight + " baggage assigned to Carousel " + (carousel + 1) + ".");
+      returnToMapAfter("claim");
       paint();
     }
   });
@@ -1532,6 +1553,7 @@
   }
   $("#show-map").addEventListener("click", () => showMobileView("map"));
   $("#show-operations").addEventListener("click", () => showMobileView("operations"));
+  mobileLayout.addEventListener("change", () => { mapAction = null; });
   $("#flight-action").addEventListener("click", command);
   $("#close-boarding").addEventListener("click", closeSelectedBoarding);
   $("#pause-toggle").addEventListener("click", togglePause);
@@ -1558,13 +1580,15 @@
     if (mobileLayout.matches) showMobileView("operations");
     $("#view-report").focus();
   });
-  function changeStaffing(type, action) {
+  function changeStaffing(type, action, fromFlight = false) {
     if (shiftComplete()) return;
     const bank = action === "open" ? passengerFlow.openCounter(flow, type) : passengerFlow.closeCounter(flow, type);
     if (!bank) return;
     const label = counterNames[type] + " " + (flow[type].indexOf(bank) + 1);
     announce(label + (bank.status === "closing" ? " will close after its queue clears." : " is now " + bank.status + "."));
     occupancyDirty = true;
+    if (fromFlight) returnToMapAfter("flight", state.selected);
+    else returnToMapAfter("staffing", type);
     paint();
   }
   for (const type of Object.keys(staffingRates)) {
@@ -1580,7 +1604,7 @@
     }
   }
   const flightUpgrade = $("#flight-upgrade");
-  flightUpgrade.addEventListener("click", () => changeStaffing("security", "open"));
+  flightUpgrade.addEventListener("click", () => changeStaffing("security", "open", true));
   $("#fast-forward-toggle").addEventListener("click", () => {
     state.speed = state.speed === fastForwardSpeed ? 1 : fastForwardSpeed;
     paint();
