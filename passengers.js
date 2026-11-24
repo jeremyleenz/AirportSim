@@ -20,7 +20,9 @@ function createPassengerFlow(airport) {
   const point = (x, z) => [x, floor, z];
   const entranceSpots = makeEntranceSpots();
   const claimEntrance = point(baggageClaim.entranceX, baggageClaim.entranceZ);
-  const arrivalsConcourse = point(airsideExit.x, baggageClaim.entranceZ);
+  const arrivalsConcourse = point(airsideExit.x, baggageClaim.aisleZ);
+  const claimAccess = baggageClaim.approachZ === undefined ? [claimEntrance, arrivalsConcourse]
+    : [point(baggageClaim.entranceX, baggageClaim.approachZ), claimEntrance, arrivalsConcourse];
   const arrivalExitPath = [point(airsideExit.x, airsideExit.thresholdZ),
     [airsideExit.x, .04, airsideExit.z], [airsideExit.x, .04, 31.6]];
 
@@ -272,7 +274,7 @@ function createPassengerFlow(airport) {
     visit.leaveAt ??= now + visit.duration;
     if (now >= visit.leaveAt) {
       visit.leaving = true;
-      if (visit.sits) person.angle = 0;
+      if (visit.sits) person.angle = visit.stall.exitAngle ?? 0;
       walk(person, visit.exit);
     }
     return false;
@@ -773,7 +775,7 @@ function createPassengerFlow(airport) {
     if (zone === "checkIn" || zone === "landside" || (zone === "security" && z >= securityLayout.checkpointZ)) {
       return [point(x, corridorZ), point(0, corridorZ), point(0, entranceZ + .6)];
     }
-    const toExit = [claimEntrance, arrivalsConcourse, ...arrivalExitPath];
+    const toExit = [...claimAccess, ...arrivalExitPath];
     if (person.cafeUntil !== undefined) return [...leaveCafePath(person), ...toExit];
     if (person.restroomVisit) {
       const {exit, leaving, approachIndex} = person.restroomVisit;
@@ -836,7 +838,7 @@ function createPassengerFlow(airport) {
     const [doorX] = bridge.at(-1);
     const aisleX = x - 9.35;
     const path = [...bridge.slice(1), point(doorX, 8.62), point(aisleX, 8.62),
-      point(aisleX, baggageClaim.entranceZ), claimEntrance, arrivalsConcourse];
+      point(aisleX, baggageClaim.approachZ ?? baggageClaim.entranceZ), ...claimAccess];
     flight.deplaning = {remaining: flight.incomingPassengers, onBridge: 0, nextAt: now + .65,
       door: bridge[0], bridgeWaypoints: bridge.length - 1, path, arrivalBags};
   }
@@ -913,7 +915,7 @@ function createPassengerFlow(airport) {
         changed = true;
       }
       if (person.zone === "arrivalsExit" && now >= person.restroomAt &&
-          person.route?.index === arrival.path.length - 2) {
+          person.route?.index === arrival.path.length - claimAccess.length) {
         const resume = person.route.points.slice(person.route.index);
         if (startRestroomVisit(person, flow, now)) {
           person.restroomVisit.resume = resume;

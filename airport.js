@@ -11,13 +11,15 @@ function createAirport(layout) {
   };
   const {grass, asphalt, apron, concrete, warm, frame, glass, pale, white, paint, ink, teal} = colors;
   const {floor, left: terminalLeft, right: terminalRight, back: terminalBackZ, front: terminalFrontZ, cafeBoundaryX,
-    cafeDoorX} = layout.terminal;
-  const {side, outerX: claimOuterX, doorZ, doorWidth, exitX, exitWidth, benchRows: claimBenchRows,
-    standingRows: claimStandingRows} = layout.baggageClaim;
-  const claimDoorX = side === "east" ? terminalRight : terminalLeft;
-  const claimLeft = Math.min(claimOuterX, claimDoorX);
-  const claimRight = Math.max(claimOuterX, claimDoorX);
-  const claimRoom = {left: claimLeft, right: claimRight, back: terminalBackZ, front: terminalFrontZ, doorZ, doorWidth};
+    cafeDoorX, securityEndX} = layout.terminal;
+  const {side, outerX: claimOuterX, leftX: claimInsetX, backZ: claimBackZ, doorZ, doorWidth, exitX, exitWidth,
+    benchRows: claimBenchRows, standingRows: claimStandingRows, approachZ: claimApproachZ,
+    aisleZ: claimAisleZ = doorZ, label: claimLabel} = layout.baggageClaim;
+  const claimDoorX = layout.baggageClaim.doorX ?? (side === "east" ? terminalRight : terminalLeft);
+  const claimLeft = claimInsetX ?? Math.min(claimOuterX, claimDoorX);
+  const claimRight = claimInsetX === undefined ? Math.max(claimOuterX, claimDoorX) : claimOuterX;
+  const claimRoom = {left: claimLeft, right: claimRight, back: claimBackZ ?? terminalBackZ,
+    front: terminalFrontZ, doorZ, doorWidth};
   const buildingLeft = Math.min(terminalLeft, claimLeft);
   const buildingRight = Math.max(terminalRight, claimRight);
   const airsideExit = {x: exitX, z: claimRoom.front + 1.25, thresholdZ: claimRoom.front, width: exitWidth};
@@ -55,8 +57,11 @@ function createAirport(layout) {
   }
 
   const seatOffset = side === "east" ? 1.6 : 0;
-  const claimBenches = [{x: claimLeft + seatOffset + 3.05, tint: "#698c7e"}, {x: claimLeft + seatOffset + 6.85, tint: "#557b88"}];
-  const claimSeats = claimBenchRows.flatMap(({z, direction}) => claimBenches.flatMap(({x}) =>
+  const claimBenchGroups = claimBenchRows.flatMap(({z, direction, centers = [claimLeft + seatOffset + 4.85]}) =>
+    centers.map(center => ({z, direction, center, benches: [
+      {x: center - 1.8, tint: "#698c7e"}, {x: center + 2, tint: "#557b88"}
+    ]})));
+  const claimSeats = claimBenchGroups.flatMap(({z, direction, benches}) => benches.flatMap(({x}) =>
     benchSeats(x, z, direction === 1 ? 0 : Math.PI, x).map(spot => ({...spot, aisleZ: z + direction * .65}))));
   const claimStanding = Array.from({length: claimStandingRows.length * 9}, (_, index) => {
     const row = Math.floor(index / 9);
@@ -67,9 +72,11 @@ function createAirport(layout) {
   const baggageClaim = {
     entranceZ: claimRoom.doorZ,
     entranceX: claimDoorX,
+    approachZ: claimApproachZ,
+    aisleZ: claimAisleZ,
     carousels: layout.baggageClaim.carousels.map(claimCarousel),
     claimSeats, claimStanding,
-    label: [(claimRoom.left + claimRoom.right) / 2, 1.1, (claimRoom.back + claimRoom.front) / 2]
+    label: claimLabel ?? [(claimRoom.left + claimRoom.right) / 2, 1.1, (claimRoom.back + claimRoom.front) / 2]
   };
   const queueRows = 9;
   const queueSpacing = .47;
@@ -78,13 +85,14 @@ function createAirport(layout) {
   const toiletSeatHeight = .30;
   const {sharedBenches, cafeTables, restrooms} = layout;
   const restroomStalls = Array.from({length: restrooms?.roomCount ?? 0}, (_, index) => {
-    const {x, frontZ, roomSize, roomCount, aisleX, approachZ, doorZ} = restrooms;
+    const {x, frontZ, roomSize, roomCount, aisleX, approachZ, doorZ, direction = 1} = restrooms;
     const left = (index - roomCount / 2) * roomSize;
     const doorX = left + roomSize / 2;
-    const stallX = x + doorX;
+    const stallX = x + doorX * direction;
     return {left, right: left + roomSize, doorX,
-      position: [stallX, floor, frontZ - roomSize + 1.54],
-      seatedPosition: [stallX, floor + toiletSeatHeight - .29, frontZ - roomSize + toiletBowlOffset + .13],
+      position: [stallX, floor, frontZ + (1.54 - roomSize) * direction],
+      seatedPosition: [stallX, floor + toiletSeatHeight - .29, frontZ + (toiletBowlOffset + .13 - roomSize) * direction],
+      exitAngle: direction === 1 ? 0 : Math.PI,
       approach: [aisleX, floor, approachZ], entryPath: [
         [aisleX, floor, doorZ], [stallX, floor, doorZ], [stallX, floor, frontZ]
       ]};
@@ -366,8 +374,27 @@ function createAirport(layout) {
       mesh.rect(portalX, floor + .026, checkpointZ, portalWidth, 1.2, "#97b8ac");
       queue(mesh, x, securityQueue);
     }
-    partition(left, terminalRight);
+    partition(left, securityEndX ?? terminalRight);
+    if (securityEndX !== undefined && securityEndX !== claimInsetX && restrooms?.lobbyEntryZ === undefined) {
+      securityPartition(mesh, securityEndX, (checkpointZ + terminalFrontZ) / 2, terminalFrontZ - checkpointZ, false);
+    }
     securityPartition(mesh, cafeBoundaryX, (checkpointZ + terminalFrontZ) / 2, terminalFrontZ - checkpointZ, false);
+  }
+
+  function terminalSideWall(mesh, x, endZ, doors) {
+    let startZ = terminalBackZ;
+    for (const {z, width} of doors.sort((a, b) => a.z - b.z)) {
+      const near = z - width / 2;
+      wall(mesh, x, (startZ + near) / 2, near - startZ, false, 1.15);
+      startZ = z + width / 2;
+    }
+    wall(mesh, x, (startZ + endZ) / 2, endZ - startZ, false, 1.15);
+  }
+
+  function concourseDoor(mesh, x, z, width) {
+    for (const offset of [-width / 2, width / 2]) mesh.box(x + offset, floor, z, .14, 1.48, .25, frame);
+    mesh.box(x, floor + 1.43, z, width + .14, .16, .25, teal);
+    mesh.rect(x, floor + .04, z, width, .65, "#8fb5ac");
   }
 
   function terminal() {
@@ -398,15 +425,11 @@ function createAirport(layout) {
     }
     wall(mesh, (wallStart + buildingRight) / 2, terminalBackZ, buildingRight - wallStart, true, 2.6);
     for (const x of [buildingLeft, buildingRight]) wall(mesh, x, centerZ, depth, false, 2.52);
-    const sideDoors = [{z: claimRoom.doorZ, width: claimRoom.doorWidth}];
-    if (restrooms) sideDoors.push({z: restrooms.doorZ, width: restrooms.doorWidth});
-    let sideStart = terminalBackZ;
-    for (const {z, width} of sideDoors.sort((a, b) => a.z - b.z)) {
-      const near = z - width / 2;
-      wall(mesh, claimDoorX, (sideStart + near) / 2, near - sideStart, false, 1.15);
-      sideStart = z + width / 2;
+    if (claimInsetX === undefined) {
+      const sideDoors = [{z: claimRoom.doorZ, width: claimRoom.doorWidth}];
+      if (restrooms) sideDoors.push({z: restrooms.doorZ, width: restrooms.doorWidth});
+      terminalSideWall(mesh, claimDoorX, terminalFrontZ, sideDoors);
     }
-    wall(mesh, claimDoorX, (sideStart + terminalFrontZ) / 2, terminalFrontZ - sideStart, false, 1.15);
     const frontDoors = [[-9, 9], [exitLeft, exitRight]].sort((a, b) => a[0] - b[0]);
     wallStart = buildingLeft;
     for (const [left, right] of frontDoors) {
@@ -432,7 +455,9 @@ function createAirport(layout) {
     }
 
     for (const {x, z} of sharedBenches) bench(mesh, x, z, "#63836c");
-    if (restrooms) restroomLobby(mesh);
+    if (restrooms?.lobbyEntryZ !== undefined) drawToiletLobbyBesideCheckIn(mesh);
+    else if (restrooms?.direction === -1) drawEarlierConcourse(mesh);
+    else if (restrooms) restroomLobby(mesh);
 
     mesh.rect(-25, floor + .025, 22.9, 19.4, 7.7, "#c39569");
     for (let z = 19.2; z < 26.7; z += .34) mesh.rect(-25, floor + .029, z, 19.25, .027, "#ad825c");
@@ -464,7 +489,7 @@ function createAirport(layout) {
     checkInDesks.forEach((x, index) => desk(mesh, x, checkInQueue.deskZ, index % 2 ? "#87a5a2" : "#6c9b91"));
     for (const {x} of checkInQueue.banks) queue(mesh, x, checkInQueue);
     for (const x of [-34.5, -12.8]) planter(mesh, x, floor, 26.95, 1.3);
-    planter(mesh, terminalRight - .6, floor, 28.25, 1.1);
+    if (claimInsetX === undefined) planter(mesh, terminalRight - .6, floor, 28.25, 1.1);
     planter(mesh, terminalRight - 1.15, floor, restrooms ? terminalBackZ + .8 : 15.35, 1.2);
 
     return mesh;
@@ -666,42 +691,79 @@ function createAirport(layout) {
     for (let tileX = left + 1.45; tileX < right - .2; tileX += 1.45) {
       mesh.rect(tileX, floor + .028, z, .028, front - back, "#aebfbc");
     }
-    for (const edge of [doorZ - doorWidth / 2, doorZ + doorWidth / 2]) {
-      mesh.box(claimDoorX, floor, edge, .25, 1.47, .14, frame);
+    if (claimInsetX !== undefined) {
+      const doorLeft = claimDoorX - doorWidth / 2;
+      const doorRight = claimDoorX + doorWidth / 2;
+      wall(mesh, (left + doorLeft) / 2, back, doorLeft - left, true, 1.28);
+      wall(mesh, (doorRight + right) / 2, back, right - doorRight, true, 1.28);
+      wall(mesh, left, z, front - back, false, 1.28);
+      concourseDoor(mesh, claimDoorX, back, doorWidth);
+    } else {
+      for (const edge of [doorZ - doorWidth / 2, doorZ + doorWidth / 2]) {
+        mesh.box(claimDoorX, floor, edge, .25, 1.47, .14, frame);
+      }
+      mesh.box(claimDoorX, floor + 1.43, doorZ, .25, .16, doorWidth + .14, teal);
     }
-    mesh.box(claimDoorX, floor + 1.43, doorZ, .25, .16, doorWidth + .14, teal);
 
     for (const x of [exitLeft, exitRight]) mesh.box(x, floor, front, .14, 1.15, .25, frame);
     mesh.box(airsideExit.x, floor + 1.02, front, airsideExit.width + .14, .13, .25, teal);
     mesh.face([[exitLeft, floor, front], [exitLeft, .04, airsideExit.z],
       [exitRight, .04, airsideExit.z], [exitRight, floor, front]], concrete, [0, 1, 0]);
 
-    for (const {z: seatZ, direction} of claimBenchRows) {
-      const seatCenter = left + seatOffset + 4.85;
-      mesh.rect(seatCenter, floor + .031, seatZ, 8.28, 1.42, "#cbbda4");
-      for (const {x, tint} of claimBenches) bench(mesh, x, seatZ, tint, direction);
-      mesh.ring(seatCenter + .1, floor, seatZ, .16, .12, .35, frame, 8);
-      mesh.ring(seatCenter + .1, floor + .35, seatZ, .41, .41, .075, "#e4cba1", 12);
-      planter(mesh, left + seatOffset + .8, floor, seatZ, 1.35);
-      planter(mesh, left + seatOffset + 8.8, floor, seatZ, .95);
+    for (const {z: seatZ, direction, center, benches} of claimBenchGroups) {
+      mesh.rect(center, floor + .031, seatZ, 8.28, 1.42, "#cbbda4");
+      for (const {x, tint} of benches) bench(mesh, x, seatZ, tint, direction);
+      mesh.ring(center + .1, floor, seatZ, .16, .12, .35, frame, 8);
+      mesh.ring(center + .1, floor + .35, seatZ, .41, .41, .075, "#e4cba1", 12);
+      planter(mesh, center - 4.05, floor, seatZ, 1.35);
+      planter(mesh, center + 3.95, floor, seatZ, .95);
     }
     const cornerX = side === "east" ? right - 1 : left + 1;
-    if (!restrooms) planter(mesh, cornerX, floor, back + 1, 1.25);
+    if (!restrooms || claimInsetX !== undefined) planter(mesh, cornerX, floor, back + 1, 1.25);
     planter(mesh, cornerX, floor, front - 1, 1.25);
     return mesh;
   }
 
+  function drawEarlierConcourse(mesh) {
+    const {checkpointZ} = securityQueue;
+    mesh.rect((securityEndX + claimLeft) / 2, floor + .024, (checkpointZ + terminalFrontZ) / 2,
+      claimLeft - securityEndX, terminalFrontZ - checkpointZ, "#dee5da");
+    for (const x of [securityEndX + .7, claimLeft - .72]) planter(mesh, x, floor, 22.8, 1.18);
+    mesh.rect(42.1, floor + .017, 11.9, 8.8, 4.2, "#b8c9bf");
+    planter(mesh, 47.8, floor, 13.15, 1.3);
+  }
+
+  function drawToiletLobbyBesideCheckIn(mesh) {
+    const {lobbyEntryZ, aisleX, doorWidth} = restrooms;
+    const doorLeft = aisleX - doorWidth / 2;
+    const doorRight = aisleX + doorWidth / 2;
+    const depth = terminalFrontZ - lobbyEntryZ;
+    const middleZ = (lobbyEntryZ + terminalFrontZ) / 2;
+    mesh.rect((securityEndX + claimLeft) / 2, floor + .024, middleZ, claimLeft - securityEndX, depth, "#dee5da");
+    wall(mesh, securityEndX, middleZ, depth, false, 1.15);
+    wall(mesh, (securityEndX + doorLeft) / 2, lobbyEntryZ, doorLeft - securityEndX, true, 1.15);
+    wall(mesh, (doorRight + claimLeft) / 2, lobbyEntryZ, claimLeft - doorRight, true, 1.15);
+    concourseDoor(mesh, aisleX, lobbyEntryZ, doorWidth);
+    bench(mesh, securityEndX + 2.65, lobbyEntryZ + 1.15, "#789f97", 1);
+    for (const x of [securityEndX + .72, claimLeft - 1.05]) planter(mesh, x, floor, lobbyEntryZ + 1.15, 1.05);
+  }
+
   function restroomLobby(mesh) {
-    const {doorZ, doorWidth, dividerZ} = restrooms;
+    const {doorZ, doorWidth, dividerZ, lobbyLeft = claimLeft, lobbyRight = claimRight} = restrooms;
+    const doorX = restrooms.lobbyLeft ?? claimDoorX;
     const depth = dividerZ - terminalBackZ;
-    const width = claimRight - claimLeft;
-    mesh.rect((claimLeft + claimRight) / 2, floor + .03, (terminalBackZ + dividerZ) / 2, width, depth, "#dee5da");
-    wall(mesh, (claimLeft + claimRight) / 2, dividerZ, width, true, 1.15);
-    for (const offset of [-doorWidth / 2, doorWidth / 2]) mesh.box(claimDoorX, floor, doorZ + offset, .26, 1.55, .15, teal);
-    mesh.box(claimDoorX, floor + 1.46, doorZ, .28, .22, doorWidth + .2, teal);
-    mesh.rect(claimDoorX, floor + .041, doorZ, .62, doorWidth, "#8fb5ac");
-    bench(mesh, claimRight - 3.8, dividerZ - .72, "#789f97", -1);
-    for (const offset of [1.45, 6.15]) planter(mesh, claimRight - offset, floor, dividerZ - .72, 1.05);
+    const width = lobbyRight - lobbyLeft;
+    const center = (lobbyLeft + lobbyRight) / 2;
+    if (restrooms.lobbyLeft !== undefined) {
+      terminalSideWall(mesh, doorX, dividerZ, [{z: doorZ, width: doorWidth}]);
+    }
+    mesh.rect(center, floor + .03, (terminalBackZ + dividerZ) / 2, width, depth, "#dee5da");
+    wall(mesh, center, dividerZ, width, true, 1.15);
+    for (const offset of [-doorWidth / 2, doorWidth / 2]) mesh.box(doorX, floor, doorZ + offset, .26, 1.55, .15, teal);
+    mesh.box(doorX, floor + 1.46, doorZ, .28, .22, doorWidth + .2, teal);
+    mesh.rect(doorX, floor + .041, doorZ, .62, doorWidth, "#8fb5ac");
+    bench(mesh, lobbyRight - 3.8, dividerZ - .72, "#789f97", -1);
+    for (const offset of [1.45, 6.15]) planter(mesh, lobbyRight - offset, floor, dividerZ - .72, 1.05);
   }
 
   function drawRestrooms() {
@@ -870,7 +932,8 @@ function createAirport(layout) {
   const terminalPaths = {
     queueRows, queueSpacing, bridgePath, boardingPath, loungeSeats, sharedSeats, cafeSeats, cafeDoorX, airsideExit,
     restroomStalls,
-    restroomLabel: restrooms ? [restrooms.x, floor + 2.6, restrooms.frontZ - restrooms.roomSize / 2] : null,
+    restroomLabel: restrooms ? [restrooms.x, floor + 2.6,
+      restrooms.frontZ - restrooms.roomSize / 2 * (restrooms.direction ?? 1)] : null,
     concourseLeft, concourseRight,
     checkIn: checkInQueue,
     security: securityQueue
@@ -912,7 +975,7 @@ function createAirport(layout) {
     const [x, y, z] = person.position.map((value, axis) => value + (visit.stall.seatedPosition[axis] - value) * eased);
     const steps = outfit.restroomSitting;
     const mesh = steps[Math.round(progress * (steps.length - 1))];
-    return {mesh, x, y, z, angle: Math.PI * (1 - turn), castShadow: false};
+    return {mesh, x, y, z, angle: (visit.stall.exitAngle ?? 0) + Math.PI * (1 - turn), castShadow: false};
   }
 
   function passengerActors(outfits, occupancy, claimedLuggage, securityTray, now) {
@@ -941,7 +1004,8 @@ function createAirport(layout) {
       {mesh: details()},
       {mesh: baggageBelt()},
       ...baggageClaim.carousels.map(carousel => ({mesh: baggageCarousel(carousel), facilityId: carousel.id})),
-      ...(restrooms ? [{mesh: drawRestrooms(), x: restrooms.x, z: restrooms.frontZ, facilityId: restrooms.id}] : [])
+      ...(restrooms ? [{mesh: drawRestrooms(), x: restrooms.x, z: restrooms.frontZ,
+        angle: restrooms.direction === -1 ? Math.PI : 0, facilityId: restrooms.id}] : [])
     ];
   }
 

@@ -195,7 +195,7 @@
       else if (object instanceof Map) nodes.push(["map", Array.from(object, ([key, value]) => [encode(key), encode(value)])]);
       else nodes.push(["object", Object.entries(object).map(([key, value]) => [key, encode(value)])]);
     }
-    return {version: 1, nodes};
+    return {version: 1, layoutRevision: gateLayoutRevision, nodes};
   }
 
   function decodeShift(saved, day, openingCash) {
@@ -234,7 +234,7 @@
           !Array.isArray(state.flights) || !(state.movements instanceof Map) ||
           !(state.luggage?.nextFeedAt instanceof Map) || !Array.isArray(flow?.boarding) ||
           !(flow.claimSpots instanceof Map)) return null;
-      return {state, flow};
+      return {state, flow, layoutRevision: saved.layoutRevision ?? 1};
     } catch {
       return null;
     }
@@ -289,7 +289,10 @@
   let currentOpening = opening;
   const upgradeOffers = airportLayouts.upgrades;
   let purchasedUpgrades = opening.upgrades;
-  let airport = createAirport(airportLayouts.withUpgrades(purchasedUpgrades));
+  // Passengers and bags in a saved shift may already be walking routes through the original A03 layout.
+  const {currentGateLayoutRevision} = airportLayouts;
+  let gateLayoutRevision = purchasedUpgrades.gate && restoredShift ? restoredShift.layoutRevision : currentGateLayoutRevision;
+  let airport = createAirport(airportLayouts.withUpgrades(purchasedUpgrades, {gateLayoutRevision}));
   let passengerFlow = createPassengerFlow(airport);
   let baggage = createBaggage(airport);
   let gates = airport.gates;
@@ -1784,7 +1787,7 @@
     if (previewCanvas.hidden) return;
     try {
       previewRenderer ??= world.createRenderer(previewCanvas);
-      previewRenderer.view.zoom = upgradeType === "gate" ? 2.7 : 5;
+      previewRenderer.view.zoom = upgradeType === "gate" ? 2.25 : 5;
       const layout = airportLayouts.withUpgrades({...nextOpening.upgrades, [upgradeType]: site.id});
       const preview = createAirport(layout);
       let x, z, width, depth;
@@ -1809,7 +1812,7 @@
       const height = upgradeType === "gate" ? .052 : floor + .052;
       const edge = new world.Mesh().path([[-width / 2, -depth / 2], [width / 2, -depth / 2],
         [width / 2, depth / 2], [-width / 2, depth / 2], [-width / 2, -depth / 2]], .14, height, "#f2cc61");
-      previewFocus = [x, height, z];
+      previewFocus = [x, height, upgradeType === "gate" ? 8.5 : z];
       previewObjects = [...preview.terminalScene(), {mesh: edge, x, z, castShadow: false}];
       drawUpgradePreview();
     } catch {
@@ -2189,8 +2192,9 @@
     if (!openingSaved) openingSaved = saveOpening(nextOpening);
     currentOpening = nextOpening;
     nextOpening = null;
-    if (purchasedUpgrades !== upgrades) {
+    if (purchasedUpgrades !== upgrades || gateLayoutRevision !== currentGateLayoutRevision) {
       purchasedUpgrades = upgrades;
+      gateLayoutRevision = currentGateLayoutRevision;
       airport = createAirport(airportLayouts.withUpgrades(purchasedUpgrades));
       if (gates.length !== airport.gates.length) {
         gates = airport.gates;

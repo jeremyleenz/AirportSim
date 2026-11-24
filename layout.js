@@ -67,10 +67,47 @@ const airportLayouts = (() => {
       bench.x > 0 ? {...bench, x: -12.5} : {...bench, x: -36, aisleX: -34.42})
   };
   const carouselX = starter.baggageClaim.carousels[0].x;
+  const insetTerminal = {
+    ...starter.terminal, right: 50.25, securityEndX: 12.55
+  };
+  const toiletsBesideCheckIn = {
+    ...starter.restrooms, x: 18.35, frontZ: 25.95, roomSize: 2.45, direction: -1,
+    aisleX: 18.35, doorZ: 24.95
+  };
+  const insetClaim = {
+    ...starter.baggageClaim, outerX: insetTerminal.right, leftX: 24.2, backZ: 19.6, doorX: 35.6, doorZ: 19.6,
+    approachZ: 17.7, exitX: 35.6, aisleZ: 21.3,
+    benchRows: [{z: 27.55, direction: -1, centers: [29.75, 44.15]}],
+    standingRows: [20.3, 20.8],
+    label: [42.3, 1.1, 20.3],
+    carousels: [{...starter.baggageClaim.carousels[0], x: 25.8, z: 23.65}]
+  };
+  const sharedBenchesBetweenGates = [9.55, 11.25, 12.95, 14.65].map(z => ({x: 12.5, z, aisleX: 14.65}));
+  const currentGateLayoutRevision = 4;
+  const gateLayouts = {
+    2: {
+      terminal: insetTerminal, restrooms: toiletsBesideCheckIn, baggageClaim: insetClaim,
+      sharedBenches: [40, 44.3].flatMap(x => [10.65, 13.15].map(z => ({x, z, aisleX: x - 1.85})))
+    },
+    3: {
+      terminal: {...insetTerminal, securityEndX: 14.1},
+      restrooms: {...starter.restrooms, lobbyLeft: regional.terminal.right, lobbyRight: insetTerminal.right,
+        x: (regional.terminal.right + insetTerminal.right) / 2, aisleX: regional.terminal.right - 1.55},
+      baggageClaim: {...insetClaim, leftX: 14.1, benchRows: [{z: 27.55, direction: -1, centers: [19.5, 29.75, 44.15]}]},
+      sharedBenches: sharedBenchesBetweenGates
+    },
+    [currentGateLayoutRevision]: {
+      terminal: insetTerminal,
+      restrooms: {...toiletsBesideCheckIn, lobbyEntryZ: starter.security.checkpointZ},
+      baggageClaim: insetClaim,
+      sharedBenches: sharedBenchesBetweenGates
+    }
+  };
+  const expandedClaimCarousel = {x: 38.75, z: 23.65};
   const upgrades = {
     gate: {
       name: "Third gate · A03", price: 140000, description: "Handle a third aircraft at the terminal.",
-      site: {id: "east-concourse", name: "East end of the concourse", note: "The concourse extends east. Baggage claim and toilets move to the new end of the terminal."}
+      site: {id: "east-concourse", name: "East end of the concourse", note: "The concourse extends east with shared seating, a toilet lobby beside check-in and a larger baggage claim hall."}
     },
     carousel: {
       name: "Second baggage carousel", price: 115000, description: "Handle two baggage claims at once.",
@@ -99,28 +136,33 @@ const airportLayouts = (() => {
     return [...banks, added].map((bank, index) => ({...bank, x: positions[index]}));
   }
 
-  function withUpgrades(purchased) {
+  function withUpgrades(purchased, {gateLayoutRevision = currentGateLayoutRevision} = {}) {
     const gate = upgradeSite("gate", purchased.gate);
     const carousel = upgradeSite("carousel", purchased.carousel);
     const lane = upgradeSite("security", purchased.security);
     const desk = upgradeSite("checkIn", purchased.checkIn);
     const {baggageClaim, security, checkIn, restrooms, terminal, airfield} = starter;
-    const extension = gate ? regional.terminal.right - terminal.right : 0;
-    const carousels = carousel ? [...baggageClaim.carousels, {id: "carousel-2", number: 2, x: carousel.x, z: carousel.z}]
-      : baggageClaim.carousels;
+    const expanded = gate && gateLayouts[gateLayoutRevision];
+    const extension = gate && !expanded ? regional.terminal.right - terminal.right : 0;
+    const claim = expanded ? expanded.baggageClaim : baggageClaim;
+    const carousels = carousel ? [...claim.carousels,
+      {id: "carousel-2", number: 2, ...(expanded ? expandedClaimCarousel : {x: carousel.x, z: carousel.z})}]
+      : claim.carousels;
     return {
       ...starter,
       gates: gate ? regional.gates : starter.gates,
       airfield: gate ? {...airfield, apronRight: regional.airfield.apronRight} : airfield,
-      terminal: gate ? {...terminal, right: terminal.right + extension} : terminal,
-      restrooms: gate ? {...restrooms, x: restrooms.x + extension, aisleX: restrooms.aisleX + extension} : restrooms,
+      terminal: expanded ? expanded.terminal : extension ? {...terminal, right: terminal.right + extension} : terminal,
+      restrooms: expanded ? expanded.restrooms
+        : extension ? {...restrooms, x: restrooms.x + extension, aisleX: restrooms.aisleX + extension} : restrooms,
+      sharedBenches: expanded ? [...starter.sharedBenches, ...expanded.sharedBenches] : starter.sharedBenches,
       baggageClaim: {
-        ...baggageClaim,
-        outerX: baggageClaim.outerX + extension,
-        exitX: baggageClaim.exitX + extension,
+        ...claim,
+        outerX: claim.outerX + extension,
+        exitX: claim.exitX + extension,
         carousels: extension ? carousels.map(belt => ({...belt, x: belt.x + extension})) : carousels,
-        benchRows: carousel ? [{z: 28.18, direction: -1}] : baggageClaim.benchRows,
-        standingRows: carousel ? baggageClaim.standingRows.slice(0, 3) : baggageClaim.standingRows
+        benchRows: carousel && !expanded ? [{z: 28.18, direction: -1}] : claim.benchRows,
+        standingRows: carousel && !expanded ? claim.standingRows.slice(0, 3) : claim.standingRows
       },
       security: lane ? {
         ...security,
@@ -128,11 +170,11 @@ const airportLayouts = (() => {
       } : security,
       checkIn: {
         ...checkIn,
-        transfer: gate ? [checkIn.transfer[0] + extension, ...checkIn.transfer.slice(1)] : checkIn.transfer,
+        transfer: extension ? [checkIn.transfer[0] + extension, ...checkIn.transfer.slice(1)] : checkIn.transfer,
         banks: desk ? arrangeBanks(checkIn.banks, {id: "check-in-3", deskOffsets: [0]}, desk.bankXs) : checkIn.banks
       }
     };
   }
 
-  return {regional, starter, upgrades, upgradeSite, withUpgrades};
+  return {regional, starter, upgrades, upgradeSite, withUpgrades, currentGateLayoutRevision};
 })();
