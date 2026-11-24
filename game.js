@@ -1225,6 +1225,14 @@
     }
   }
 
+  function passengerSatisfaction(dispatched) {
+    const base = Math.min(100, 84 + dispatched * 2 -
+      Math.floor((occupancy.security.length - 38) / 16) - Math.ceil(state.missedPassengers / 5) - Math.floor(state.delayMinutes / 5));
+    const baggageLoss = Math.min(maxBaggageSatisfactionLoss,
+      Math.ceil(state.luggage.claimStats.delayedPassengers / baggageDelaysPerSatisfactionPoint));
+    return Math.max(55, base - baggageLoss);
+  }
+
   function paint() {
     if (occupancyDirty) {
       occupancy = passengerFlow.snapshot(state.flights, flow);
@@ -1234,15 +1242,10 @@
     const minutes = clockMinutes(state.now);
     const time = formatTime(minutes);
     const dispatched = state.results.filter(({takeoff}) => takeoff !== null).length;
-    const baseSatisfaction = Math.min(100, 84 + dispatched * 2 -
-      Math.floor((occupancy.security.length - 38) / 16) - Math.ceil(state.missedPassengers / 5) - Math.floor(state.delayMinutes / 5));
-    const baggageLoss = Math.min(maxBaggageSatisfactionLoss,
-      Math.ceil(state.luggage.claimStats.delayedPassengers / baggageDelaysPerSatisfactionPoint));
-    const satisfaction = Math.max(55, baseSatisfaction - baggageLoss);
     const staffingSpent = staffingCost("checkIn") + staffingCost("security");
     $("#cash").textContent = currency.format(nextOpening?.cash ?? treasuryBalance());
     $("#passengers").textContent = occupancy.total;
-    $("#satisfaction").textContent = satisfaction + "%";
+    $("#satisfaction").textContent = passengerSatisfaction(dispatched) + "%";
     $(".clock-day").textContent = formatDay(operatingDay(minutes)).toUpperCase();
     $("#clock").textContent = time;
     $("#clock").setAttribute("datetime", time);
@@ -1815,7 +1818,8 @@
     const profitValue = $("#report-profit");
     profitValue.textContent = currency.format(profit);
     profitValue.toggleAttribute("data-loss", profit < 0);
-    $("#report-delays").innerHTML = stat("Total departure delay", state.delayMinutes + " min");
+    $("#report-delays").innerHTML = stat("Total departure delay", state.delayMinutes + " min") +
+      stat("Final passenger satisfaction", passengerSatisfaction(departed.length) + "%");
     const overnightArrivals = state.flights.filter(isOvernightArrival);
     const arrivalSummary = $("#report-overnight-arrivals");
     arrivalSummary.hidden = overnightArrivals.length === 0;

@@ -50,6 +50,10 @@ Extend the browser save to cover every facility the player can place or move. Sa
 
 Offer more route contracts from the same or different airlines. A route in a quieter window may suit the current airport, while one during a busy arrival period may justify building capacity first. Use holding traffic, queues, and baggage waits to judge where further expansion would help.
 
+### Use passenger satisfaction to unlock premium routes
+
+Measure passenger satisfaction across the whole shift using queue waits, departure delays, missed flights, and baggage waits. Use a rolling average across several shifts to unlock premium airline contracts, such as higher-paying routes. Show the average and the requirement for the next offer between shifts.
+
 ## 7. Add richer amenities
 
 Passengers already use the café, shared seating, and toilets. Future upgrades give players more control over amenity capacity and placement and make the effects visible during a shift.
