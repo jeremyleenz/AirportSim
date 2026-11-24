@@ -563,7 +563,9 @@ function createPassengerFlow(airport) {
       const walkwayIndex = route.points.findIndex(([, , z]) => z === walkwayZ);
       if (walkwayIndex >= route.index) points.push(...route.points.slice(route.index, walkwayIndex + 1));
       // Passengers taking the direct route from the lounge still need to leave their seat row first.
-      else if (walkwayIndex < 0 && person.zone === "gate") points.push(...route.points.slice(route.index, 2));
+      else if (walkwayIndex < 0 && person.zone === "gate" && route.points.length > 1) {
+        points.push(...route.points.slice(route.index, 2));
+      }
     }
     const [x, , z] = points.at(-1) ?? person.position;
     if (z !== walkwayZ) points.push(point(x, walkwayZ));
@@ -622,11 +624,18 @@ function createPassengerFlow(airport) {
     const person = waiting[Math.floor(Math.random() * waiting.length)];
     const entry = boardingEntry(queue);
     const {position, offset} = entry;
-    const row = seatAisle(person.spot);
-    const aisleX = person.spot.aisleX;
-    const points = [point(person.position[0], row), point(aisleX, row)];
-    if (aisleX === position[0] && offset !== queue.offsets[1]) points.push(position);
-    else points.push(point(aisleX, 16.1), ...boardingApproach(queue, entry, 16.1));
+    const {spot, position: [x, , z]} = person;
+    const beyondSeatRows = !spot.seated && z > queue.spots.seats.at(-1).position[2];
+    const aisleX = beyondSeatRows ? x : spot.aisleX;
+    const row = seatAisle(spot);
+    const points = beyondSeatRows ? [] : [point(x, row), point(aisleX, row)];
+    const directOverflow = beyondSeatRows && offset === queue.length &&
+      (z >= position[2] || x >= queue.points[queue.snakeEnd][0] + 1);
+    if (directOverflow || (aisleX === position[0] && offset !== queue.offsets[1])) points.push(position);
+    else {
+      const walkwayZ = boardingWalkwayZ(person);
+      points.push(point(aisleX, walkwayZ), ...boardingApproach(queue, entry, walkwayZ));
+    }
     approachLine(person, queue, {points, offset, duration: travelTime(person.position, points)}, now + .13);
     queue.nextCall = now + .25;
   }
