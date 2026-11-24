@@ -452,8 +452,8 @@ function createPassengerFlow(airport) {
 
   function walkToGate(person, flight, queue, now) {
     const [startX] = person.position;
-    const middleZ = 16.1 + person.index % 5 * .48;
     if (wantsToQueue(person, flight, now) && hasRoom(queue, flight, now)) {
+      const middleZ = boardingWalkwayZ(person);
       const entry = boardingEntry(queue);
       const {offset} = entry;
       const points = [point(startX, middleZ), ...boardingApproach(queue, entry, middleZ)];
@@ -526,12 +526,15 @@ function createPassengerFlow(airport) {
     return now >= flight.boardingAt - leadTime;
   }
 
-  function boardingEntry(queue) {
-    const queuedLength = (queue.line.length + queue.approaching.length) * boardingSpacing;
-    const joinOffset = Math.max(queuedLength, queue.approaching.at(-1)?.offset ?? 0);
+  function boardingEntry(queue, ahead = queue.approaching.length) {
+    const joinOffset = (queue.line.length + ahead) * boardingSpacing;
     // Use the nearest opening that can fit the line once everyone has moved forward.
     const entrance = [1, queue.snakeEnd, queue.points.length - 1].find(index => joinOffset <= queue.offsets[index]);
     return {position: queue.points[entrance], offset: queue.offsets[entrance]};
+  }
+
+  function boardingWalkwayZ(person) {
+    return person.zone === "gate" ? 16.1 : 16.1 + person.index % 5 * .48;
   }
 
   function boardingApproach(queue, {position, offset}, walkwayZ) {
@@ -541,6 +544,41 @@ function createPassengerFlow(airport) {
     const entryX = x + 1;
     const turnZ = z + .92;
     return [point(entryX, walkwayZ), point(entryX, turnZ), point(x, turnZ), position];
+  }
+
+  function approachFromWalkway(person, queue, entry) {
+    const walkwayZ = boardingWalkwayZ(person);
+    const {route} = person;
+    const points = [];
+    if (route) {
+      const walkwayIndex = route.points.findIndex(([, , z]) => z === walkwayZ);
+      if (walkwayIndex >= route.index) points.push(...route.points.slice(route.index, walkwayIndex + 1));
+      // Passengers taking the direct route from the lounge still need to leave their seat row first.
+      else if (walkwayIndex < 0 && person.zone === "gate") points.push(...route.points.slice(route.index, 2));
+    }
+    const [x, , z] = points.at(-1) ?? person.position;
+    if (z !== walkwayZ) points.push(point(x, walkwayZ));
+    return [...points, ...boardingApproach(queue, entry, walkwayZ)];
+  }
+
+  function shortenBoardingApproaches(queue, now) {
+    if (!queue.approaching.some(({offset}, index) => boardingEntry(queue, index).offset < offset)) return;
+    queue.nextJoin = now;
+    for (const [index, approach] of queue.approaching.entries()) {
+      const {person} = approach;
+      const entry = boardingEntry(queue, index);
+      const points = entry.offset < approach.offset ? approachFromWalkway(person, queue, entry)
+        : person.route?.points.slice(person.route.index);
+      if (points?.length) {
+        const duration = travelTime(person.position, points);
+        const joinAt = Math.max(now + duration, queue.nextJoin);
+        walk(person, points, undefined, joinAt - duration);
+        queue.nextJoin = joinAt + .31;
+      } else {
+        queue.nextJoin += .31;
+      }
+      approach.offset = Math.min(entry.offset, approach.offset);
+    }
   }
 
   function gateQueueExit(queue, offset, walkwayZ) {
@@ -609,6 +647,7 @@ function createPassengerFlow(airport) {
         changed = true;
       }
     }
+    if (flight.stage === "boarding") shortenBoardingApproaches(queue, now);
     const tail = queue.line.at(-1);
     const next = queue.approaching[0];
     if (next && !next.person.route && (!tail || next.offset - tail.offset >= boardingSpacing)) {

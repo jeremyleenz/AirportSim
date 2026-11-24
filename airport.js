@@ -286,7 +286,7 @@ function createAirport(layout) {
 
   function boardingQueue(mesh, x) {
     const path = boardingPath(x);
-    mesh.path(path.map(([px, , z]) => [px, z]), .72, floor + .025, "#b8cbc4");
+    mesh.path(path.slice(0, -1).map(([px, , z]) => [px, z]), .72, floor + .025, "#b8cbc4");
     for (const [left, right, from, to] of [[0, null, 9.64, 14.1], [0, 2, 9.64, 12.88],
       [2, 4, 10.49, 14.04], [4, null, 9.58, 14.08]]) {
       const rail = right === null ? path[left][0] + (left === 0 ? -.91 : .91)
