@@ -198,7 +198,7 @@
     return {version: 1, layoutRevision: gateLayoutRevision, nodes};
   }
 
-  function decodeShift(saved, day, openingCash) {
+  function decodeShift(saved, day, openingCash, completed = false) {
     if (saved?.version !== 1 || !Array.isArray(saved.nodes)) return null;
     try {
       const objects = saved.nodes.map(([type]) => {
@@ -230,14 +230,34 @@
       });
       const {state, flow} = objects[0];
       if (state?.day !== day || state.openingCash !== openingCash || !Number.isFinite(state.now) ||
-          state.now < 0 || state.now >= curfewAt || typeof state.paused !== "boolean" ||
-          !Array.isArray(state.flights) || !(state.movements instanceof Map) ||
+          state.now < 0 || state.now > curfewAt || typeof state.paused !== "boolean" ||
+          !Array.isArray(state.flights) || !Array.isArray(state.results) || !(state.movements instanceof Map) ||
           !(state.luggage?.nextFeedAt instanceof Map) || !Array.isArray(flow?.boarding) ||
           !(flow.claimSpots instanceof Map)) return null;
+      if (shiftComplete(state) !== completed || (completed ? !state.paused : state.now === curfewAt)) return null;
       return {state, flow, layoutRevision: saved.layoutRevision ?? 1};
     } catch {
       return null;
     }
+  }
+
+  function decodeOpening(saved) {
+    if (!saved) return null;
+    const {day, cash, seed, parked, upgrades} = saved;
+    if (!Number.isSafeInteger(day) || day < 1 || !Number.isSafeInteger(cash) ||
+        !Number.isInteger(seed) || seed < 0 || seed >= 2 ** 32 || !Array.isArray(parked)) return null;
+    const purchased = Object.fromEntries(Object.keys(airportLayouts.upgrades).flatMap(type =>
+      airportLayouts.upgradeSite(type, upgrades?.[type]) ? [[type, upgrades[type]]] : []));
+    const savedGates = airportLayouts.withUpgrades(purchased).gates;
+    const overnightAircraft = parked.map(({gate: gateName, airline: code}) => ({
+      gate: savedGates.findIndex(({id}) => id === gateName),
+      aircraft: {airline: airlines.findIndex(({code: airlineCode}) => airlineCode === code)}
+    }));
+    if (overnightAircraft.some(({gate, aircraft}) => gate < 0 || aircraft.airline < 0) ||
+        new Set(overnightAircraft.map(({gate}) => gate)).size !== overnightAircraft.length) return null;
+    const contracts = Array.isArray(saved.contracts) ? Object.keys(routeContracts).filter(id => saved.contracts.includes(id))
+      : saved.contractActive === true ? ["canberra"] : [];
+    return {day, cash, seed, overnightAircraft, upgrades: purchased, contracts};
   }
 
   let savedOpeningText = null;
@@ -245,36 +265,31 @@
     try {
       savedOpeningText = window.localStorage.getItem(progressKey);
       const saved = JSON.parse(savedOpeningText);
-      if (!saved) return null;
-      const {day, cash, seed, parked, upgrades} = saved;
-      if (!Number.isSafeInteger(day) || day < 1 || !Number.isSafeInteger(cash) ||
-          !Number.isInteger(seed) || seed < 0 || seed >= 2 ** 32 || !Array.isArray(parked)) return null;
-      const purchased = Object.fromEntries(Object.keys(airportLayouts.upgrades).flatMap(type =>
-        airportLayouts.upgradeSite(type, upgrades?.[type]) ? [[type, upgrades[type]]] : []));
-      const savedGates = airportLayouts.withUpgrades(purchased).gates;
-      const overnightAircraft = parked.map(({gate: gateName, airline: code}) => ({
-        gate: savedGates.findIndex(({id}) => id === gateName),
-        aircraft: {airline: airlines.findIndex(({code: airlineCode}) => airlineCode === code)}
-      }));
-      if (overnightAircraft.some(({gate, aircraft}) => gate < 0 || aircraft.airline < 0) ||
-          new Set(overnightAircraft.map(({gate}) => gate)).size !== overnightAircraft.length) return null;
-      const contracts = Array.isArray(saved.contracts) ? Object.keys(routeContracts).filter(id => saved.contracts.includes(id))
-        : saved.contractActive === true ? ["canberra"] : [];
-      return {day, cash, seed, overnightAircraft, upgrades: purchased, contracts,
-        shift: decodeShift(saved.shift, day, cash)};
+      const opening = decodeOpening(saved);
+      if (!opening) return null;
+      const previousOpening = decodeOpening(saved.completed?.opening);
+      if (previousOpening?.day === opening.day - 1) {
+        const shift = decodeShift(saved.completed.shift, previousOpening.day, previousOpening.cash, true);
+        if (shift) return {...previousOpening, shift, nextOpening: opening};
+      }
+      return {...opening, shift: decodeShift(saved.shift, opening.day, opening.cash)};
     } catch {
       return null;
     }
   }
 
-  function saveOpening({day, cash, seed, overnightAircraft, upgrades, contracts = []}, activeShift) {
+  function encodeOpening({day, cash, seed, overnightAircraft, upgrades, contracts = []}) {
     const parked = overnightAircraft.map(({gate, aircraft}) => ({gate: gates[gate].name, airline: airlines[aircraft.airline].code}));
+    return {day, cash, seed, parked, upgrades, contracts};
+  }
+
+  function saveOpening(opening, activeShift, completed) {
     try {
       const storage = window.localStorage;
       // A shift in an older tab must not overwrite progress saved since it opened.
       if (storage.getItem(progressKey) !== savedOpeningText) return false;
       const shift = activeShift && encodeShift(activeShift);
-      const checkpoint = JSON.stringify({day, cash, seed, parked, upgrades, contracts, shift});
+      const checkpoint = JSON.stringify({...encodeOpening(opening), shift, completed});
       storage.setItem(progressKey, checkpoint);
       savedOpeningText = checkpoint;
       return true;
@@ -284,7 +299,7 @@
   }
 
   const savedOpening = loadOpening();
-  const {shift: restoredShift, ...opening} = savedOpening ??
+  const {shift: restoredShift, nextOpening: restoredNextOpening, ...opening} = savedOpening ??
     {day: 1, cash: startingCash, seed: newShiftSeed(), overnightAircraft: startingAircraft, upgrades: {}, contracts: []};
   let currentOpening = opening;
   const upgradeOffers = airportLayouts.upgrades;
@@ -299,8 +314,8 @@
   const {runwayZ, taxiwayZ, floor} = airport;
   const holdingPosition = {x: 44, z: taxiwayZ, angle: -Math.PI / 2};
   let state = restoredShift?.state ?? createShift(opening.day, opening.overnightAircraft, opening.cash, opening.seed, opening.contracts);
-  let nextOpening = null;
-  let openingSaved = false;
+  let nextOpening = restoredNextOpening ?? null;
+  let openingSaved = Boolean(nextOpening);
   let lastAutosave = state.playTime;
   let saveWarning = false;
   let resettingProgress = false;
@@ -311,6 +326,7 @@
     reserved: "Gate reserved", inbound: "Taxiing in", outbound: "Departing", overnight: "Parked overnight"
   };
   let flow = restoredShift?.flow ?? passengerFlow.create();
+  let completedCheckpoint;
   let occupancy = passengerFlow.snapshot(state.flights, flow);
   let occupancyDirty = false;
 
@@ -595,10 +611,10 @@
     return movement && movementElapsed(movement) >= movement.runwayEntry;
   }
 
-  function shiftComplete() {
-    return state.results.length === state.departureCount &&
-      (state.closedAtCurfew || (state.flights.every(flight => !isOvernightArrival(flight) || flight.stage === "overnight") &&
-        state.luggage.claims.every(({flight}) => flight.carousel !== null)));
+  function shiftComplete(shift = state) {
+    return shift.results.length === shift.departureCount &&
+      (shift.closedAtCurfew || (shift.flights.every(flight => !isOvernightArrival(flight) || flight.stage === "overnight") &&
+        shift.luggage.claims.every(({flight}) => flight.carousel !== null)));
   }
 
   function availableGate() {
@@ -1558,12 +1574,21 @@
     announce(flight.id + " airborne with " + boarded + " passengers. " + currency.format(net) + " net" + fineMessage + ".");
   }
 
+  function saveBetweenShifts(opening) {
+    try {
+      completedCheckpoint ??= {opening: encodeOpening(currentOpening), shift: encodeShift({state, flow})};
+      return saveOpening(opening, undefined, completedCheckpoint);
+    } catch {
+      return false;
+    }
+  }
+
   function finishShift() {
     nextOpening = {day: state.day + 1, cash: treasuryBalance(), seed: newShiftSeed(), overnightAircraft: parkedAircraft(),
       upgrades: purchasedUpgrades, contracts: currentOpening.contracts};
-    openingSaved = saveOpening(nextOpening);
     mapAction = null;
     state.paused = true;
+    openingSaved = saveBetweenShifts(nextOpening);
     occupancyDirty = true;
     announce(state.closedAtCurfew ? "Curfew reached. Your shift report is ready."
       : "Operating day complete. Your shift report is ready.");
@@ -1764,7 +1789,7 @@
     }).join("");
     const nextDay = formatDay(nextOpening.day);
     startNextDay.textContent = "Start " + nextDay;
-    $("#report-save-status").textContent = openingSaved ? "Saved in this browser. Reopening starts " + nextDay + "."
+    $("#report-save-status").textContent = openingSaved ? "Saved in this browser. Reopening returns to this report."
       : "Progress could not be saved. Keep this tab open to carry on.";
     if (!report.open) report.showModal();
   }
@@ -1852,7 +1877,7 @@
     const {price, site} = upgradeOffers[type];
     if (nextOpening.cash < price) return false;
     const opening = {...nextOpening, cash: nextOpening.cash - price, upgrades: {...nextOpening.upgrades, [type]: site.id}};
-    if (!saveOpening(opening)) return false;
+    if (!saveBetweenShifts(opening)) return false;
     nextOpening = opening;
     openingSaved = true;
     return true;
@@ -1955,7 +1980,7 @@
     if (!nextOpening || !Object.hasOwn(routeContracts, id) || nextOpening.contracts.includes(id) === active) return false;
     const contracts = active ? [...nextOpening.contracts, id] : nextOpening.contracts.filter(route => route !== id);
     const opening = {...nextOpening, contracts};
-    if (!saveOpening(opening)) return false;
+    if (!saveBetweenShifts(opening)) return false;
     nextOpening = opening;
     openingSaved = true;
     return true;
@@ -2189,7 +2214,8 @@
   function beginNextDay() {
     if (!nextOpening) return;
     const {day, cash, seed, overnightAircraft, upgrades, contracts} = nextOpening;
-    if (!openingSaved) openingSaved = saveOpening(nextOpening);
+    openingSaved = saveOpening(nextOpening);
+    completedCheckpoint = undefined;
     currentOpening = nextOpening;
     nextOpening = null;
     if (purchasedUpgrades !== upgrades || gateLayoutRevision !== currentGateLayoutRevision) {
@@ -2428,9 +2454,11 @@
   document.addEventListener("visibilitychange", () => { if (document.hidden) saveShift(); });
   window.addEventListener("pagehide", saveShift);
   $("#objective-curfew").textContent = "Operating day · Curfew " + formatTime(curfewMinutes);
-  if (restoredShift) announce(formatDay(state.day) + " restored at " + formatTime(clockMinutes(state.now)) + ".");
+  if (restoredNextOpening) announce(formatDay(state.day) + " shift report restored.");
+  else if (restoredShift) announce(formatDay(state.day) + " restored at " + formatTime(clockMinutes(state.now)) + ".");
   else if (savedOpening) announce(formatDay(savedOpening.day) + " restored at opening.");
   fit();
   paint();
+  if (restoredNextOpening) showShiftReport();
   requestAnimationFrame(frame);
 })();

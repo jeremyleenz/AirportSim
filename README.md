@@ -6,7 +6,7 @@ See the [expansion roadmap](ROADMAP.md) for the planned progression, airport imp
 
 ## Saved progress
 
-The game saves your shift in this browser as you play, when you pause, and when you leave the tab. Reopening restores the saved time, passengers, aircraft, and treasury. If you paused before leaving, the shift stays paused. At the end of a shift, the game saves the next day's opening schedule, treasury, and overnight aircraft.
+The game saves your shift in this browser as you play, when you pause, and when you leave the tab. Reopening restores the saved time, passengers, aircraft, and treasury. If you paused before leaving, the shift stays paused. Between shifts, reopening brings back the shift report and your plans for the next day. The next shift begins when you choose **Start Day**.
 
 To start over, open **Operations → Terminal** and choose **Reset progress** at the bottom. Confirming starts Day 1 and removes the current run and its upgrades.
 
