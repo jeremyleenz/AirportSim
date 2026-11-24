@@ -18,7 +18,7 @@ The base timetable cycles through a standard day, a lunchtime rush, and a late-a
 
 With one baggage carousel, arriving flights get it automatically in arrival order. Once you install a second carousel, you choose one for each flight.
 
-Baggage service credits cost $10 per passenger-minute over the first 25 minutes of waiting, up to the time lost while ready bags waited for a free or assigned carousel. The total is visible in Baggage claim during the shift and in the shift report.
+Baggage service credits cost $10 per passenger-minute after the first five minutes spent waiting for a free or assigned carousel once the bag is ready. The total is visible in Baggage claim during the shift and in the shift report. The report also counts passengers who waited over 25 minutes in total for their bags.
 
 The shift ends after all departures, overnight arrivals, and baggage claims are resolved. At the 19:00 curfew, the shift ends and the report shows any baggage claims still open.
 

@@ -38,6 +38,7 @@
   const severeDelayMinutes = 30;
   const finePerSevereLateMinute = 125;
   const baggageWaitGraceMinutes = 25;
+  const baggageCreditGraceMinutes = 5;
   const baggageCreditPerPassengerMinute = 10;
   const baggageDelaysPerSatisfactionPoint = 15;
   const maxBaggageSatisfactionLoss = 6;
@@ -316,7 +317,7 @@
   let gateLayoutRevision = purchasedUpgrades.gate && restoredShift ? restoredShift.layoutRevision : currentGateLayoutRevision;
   let airport = createAirport(airportLayouts.withUpgrades(purchasedUpgrades, {gateLayoutRevision}));
   let passengerFlow = createPassengerFlow(airport);
-  let baggage = createBaggage(airport);
+  let baggage = createBaggage(airport, baggageCreditGraceMinutes * secondsPerMinute);
   let gates = airport.gates;
   const {runwayZ, taxiwayZ, floor} = airport;
   const holdingPosition = {x: 44, z: taxiwayZ, angle: -Math.PI / 2};
@@ -2286,7 +2287,7 @@
         mapPins = gates.map(makeMapPin);
       }
       passengerFlow = createPassengerFlow(airport);
-      baggage = createBaggage(airport);
+      baggage = createBaggage(airport, baggageCreditGraceMinutes * secondsPerMinute);
       if (renderer) {
         scene = airport.scene();
         counterMarkers = buildCounterMarkers();
@@ -2508,8 +2509,8 @@
   document.addEventListener("visibilitychange", () => { if (document.hidden) saveShift(); });
   window.addEventListener("pagehide", saveShift);
   $("#objective-curfew").textContent = "Operating day · Curfew " + formatTime(curfewMinutes);
-  $("#claim-credit-rule").textContent = currency.format(baggageCreditPerPassengerMinute) + " per passenger-minute over " +
-    baggageWaitGraceMinutes + " min when a carousel delay contributed to the wait.";
+  $("#claim-credit-rule").textContent = currency.format(baggageCreditPerPassengerMinute) + " per passenger-minute after " +
+    baggageCreditGraceMinutes + " min waiting for a carousel once the bag is ready.";
   if (restoredNextOpening) announce(formatDay(state.day) + " shift report restored.");
   else if (restoredShift) announce(formatDay(state.day) + " restored at " + formatTime(clockMinutes(state.now)) + ".");
   else if (savedOpening) announce(formatDay(savedOpening.day) + " restored at opening.");

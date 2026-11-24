@@ -1,6 +1,6 @@
 "use strict";
 
-function createBaggage(airport) {
+function createBaggage(airport, carouselCreditGrace) {
   const beltSpeed = 5;
   const tugSpeed = 7;
   const bagsPerTrailer = 6;
@@ -103,7 +103,7 @@ function createBaggage(airport) {
       ({id, number, flight: animation.claims.find(({flight}) => flight.carousel === id)?.flight}));
     const waiting = animation.claims.filter(({flight}) => flight.carousel === null);
     const available = assigned.filter(({flight}) => !flight).length;
-    const creditsAccruing = animation.claims.some(({bags}) => bags.some(bag => creditsAccrueFor(bag, now, animation.claimWaitGrace)));
+    const creditsAccruing = waiting.some(({bags}) => bags.some(bag => creditsAccrueFor(bag, now)));
     return {carousels: assigned, waiting, available, automatic, creditsAccruing};
   }
 
@@ -219,10 +219,9 @@ function createBaggage(airport) {
     return !bag.claimed && !bag.cancelled;
   }
 
-  function creditsAccrueFor(bag, now, grace) {
-    const overGrace = now - bag.claimWaitAt - grace;
-    return pending(bag) && overGrace > 0 &&
-      (overGrace < (bag.carouselWaitSeconds ?? 0) || (bag.flight.carousel === null && now >= readyForBeltAt(bag)));
+  function creditsAccrueFor(bag, now) {
+    return pending(bag) && bag.claimWaitAt !== undefined && now >= readyForBeltAt(bag) &&
+      bag.carouselWaitSeconds > carouselCreditGrace;
   }
 
   function measureClaimWaits(animation, now, dt) {
@@ -242,13 +241,10 @@ function createBaggage(airport) {
           if (blocked > 0) {
             claimStats[waitCause] += blocked;
             bag.carouselWaitSeconds = (bag.carouselWaitSeconds ?? 0) + blocked;
+            // Charge only time in this step so loading an older shift never rebills past waits.
+            const billable = Math.max(0, Math.min(blocked, bag.carouselWaitSeconds - carouselCreditGrace));
+            claimStats.creditWaitSeconds = (claimStats.creditWaitSeconds ?? 0) + billable;
           }
-        }
-        const credited = bag.creditedWaitSeconds ?? 0;
-        const billable = Math.min(bag.carouselWaitSeconds ?? 0, now - bag.claimWaitAt - claimWaitGrace);
-        if (billable > credited) {
-          claimStats.creditWaitSeconds = (claimStats.creditWaitSeconds ?? 0) + (billable - credited);
-          bag.creditedWaitSeconds = billable;
         }
         if (bag.claimed || bag.cancelled) delete bag.claimWaitAt;
       }
