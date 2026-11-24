@@ -36,7 +36,7 @@
   const departureGraceMinutes = 5;
   const finePerLateMinute = 25;
   const severeDelayMinutes = 30;
-  const finePerSevereLateMinute = 75;
+  const finePerSevereLateMinute = 125;
   const baggageWaitGraceMinutes = 25;
   const baggageDelaysPerSatisfactionPoint = 15;
   const maxBaggageSatisfactionLoss = 6;
