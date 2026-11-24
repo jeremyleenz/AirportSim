@@ -80,9 +80,16 @@ function createPassengerFlow(airport) {
     return spots;
   }
 
-  function create() {
+  function create(savedFlow) {
+    const leftToRight = (a, b) => a.x - b.x;
+    if (savedFlow) {
+      savedFlow.checkIn.sort(leftToRight);
+      savedFlow.security.sort(leftToRight);
+      return savedFlow;
+    }
+
     function banks(layout) {
-      return layout.banks.map(({id, x, desks}, index) => ({
+      return layout.banks.slice().sort(leftToRight).map(({id, x, desks}, index) => ({
         id, x, front: layout.front, cursor: 0, service: null, status: index ? "closed" : "open", desks,
         lines: [-.36, -.12, .12, .36].map(offset => ({x: x + offset * layout.width, people: []}))
       }));
@@ -663,13 +670,15 @@ function createPassengerFlow(airport) {
     return changed;
   }
 
+  function nextCounterToOpen(flow, zone) {
+    return flow[zone].find(bank => bank.status !== "open");
+  }
+
   function openCounter(flow, zone) {
-    const banks = flow[zone];
-    const reopening = banks.find(bank => bank.status === "closing");
-    const newBank = reopening ?? banks.find(bank => bank.status === "closed");
+    const newBank = nextCounterToOpen(flow, zone);
     if (!newBank) return null;
     newBank.status = "open";
-    const open = banks.filter(bank => bank.status === "open").map(bank => ({
+    const open = flow[zone].filter(bank => bank.status === "open").map(bank => ({
       bank, waiting: bank.lines.reduce((total, line) => total + line.people.length, 0)
     }));
     while (true) {
@@ -1128,5 +1137,5 @@ function createPassengerFlow(airport) {
     return {...people, byFlight, processing, total: people.visible.length};
   }
 
-  return {manifest, create, openCounter, closeCounter, startDeplaning, closeBoarding, advance, snapshot};
+  return {manifest, create, nextCounterToOpen, openCounter, closeCounter, startDeplaning, closeBoarding, advance, snapshot};
 }

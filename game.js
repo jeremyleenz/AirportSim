@@ -325,7 +325,7 @@
     parked: "At gate", deplaning: "Deplaning", boarding: "Boarding", closing: "Boarding closed", ready: "Ready", holding: "Holding",
     reserved: "Gate reserved", inbound: "Taxiing in", outbound: "Departing", overnight: "Parked overnight"
   };
-  let flow = restoredShift?.flow ?? passengerFlow.create();
+  let flow = passengerFlow.create(restoredShift?.flow);
   let completedCheckpoint;
   let occupancy = passengerFlow.snapshot(state.flights, flow);
   let occupancyDirty = false;
@@ -1126,7 +1126,7 @@
   }
 
   function paintOpenStaffing(button, type, unit) {
-    const action = flow[type].some(bank => bank.status === "closing") ? "Reopen" : "Open";
+    const action = passengerFlow.nextCounterToOpen(flow, type)?.status === "closing" ? "Reopen" : "Open";
     if (button.dataset.action === action) return;
     button.dataset.action = action;
     button.innerHTML = action + " " + unit + (action === "Open"
