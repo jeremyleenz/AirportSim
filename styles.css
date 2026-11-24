@@ -338,6 +338,21 @@ button.flight-alert:hover { background: #584933; }
 #upgrade-note:empty { display: none; }
 #flight-airline { margin-bottom: 7px; }
 .schedule-airline { display: block; color: var(--muted); font-size: .72rem; }
+.contract-offer[data-contract-state="active"] { border-color: #4c7564; background: #203934; }
+.contract-offer[data-contract-state="active"]:hover { background: #29483f; }
+.detail-stat .contract-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid #8b6b47;
+  border-radius: 999px;
+  color: var(--amber);
+  background: #302a20;
+}
+.contract-badge-icon::before { content: "+"; }
+[data-contract-state="active"] .contract-badge { color: #102b23; background: var(--mint); border-color: var(--mint); }
+[data-contract-state="active"] .contract-badge-icon::before { content: "✓"; }
 #contract-detail { display: grid; gap: 12px; }
 #contract-airline { margin-top: -8px; }
 #contract-note:empty { display: none; }

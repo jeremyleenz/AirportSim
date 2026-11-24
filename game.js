@@ -1986,6 +1986,7 @@
   const openContractDialog = registerPlanningDialog(contractDialog, $("#close-contracts"));
   const contractAction = $("#contract-action");
   const contractOffers = $("#contract-offers");
+  const contractDetail = $("#contract-detail");
   let selectedContract = null;
 
   function paintContract() {
@@ -1993,18 +1994,23 @@
     const extraFlights = contracts.reduce((total, id) => total + routeContracts[id].services.length, 0);
     $("#contract-opening").textContent = formatDay(nextOpening.day) + " · " + (scheduleSlots.length + extraFlights) + " departures";
     contractOffers.hidden = selectedContract !== null;
-    $("#contract-detail").hidden = selectedContract === null;
+    contractDetail.hidden = selectedContract === null;
     $("#contract-actions").hidden = selectedContract === null;
     if (!selectedContract) {
-      contractOffers.innerHTML = Object.entries(routeContracts).map(([id, {airline, destination, services}]) =>
-        '<button type="button" class="upgrade-offer" data-contract="' + id + '"><span class="detail-stat"><strong>' + destination +
-        '</strong><b>' + (contracts.includes(id) ? "Active" : "Available") + '</b></span><span class="detail-copy">' +
-        airlines[airline].name + " · " + services.length + (services.length === 1 ? " daily flight" : " daily flights") + '</span></button>').join("");
+      contractOffers.innerHTML = Object.entries(routeContracts).map(([id, {airline, destination, services}]) => {
+        const active = contracts.includes(id);
+        return '<button type="button" class="upgrade-offer contract-offer" data-contract="' + id +
+          '" data-contract-state="' + (active ? "active" : "available") + '"><span class="detail-stat"><strong>' + destination +
+          '</strong><b class="contract-badge"><span class="contract-badge-icon" aria-hidden="true"></span>' +
+          (active ? "Active" : "Available") + '</b></span><span class="detail-copy">' +
+          airlines[airline].name + " · " + services.length + (services.length === 1 ? " daily flight" : " daily flights") + '</span></button>';
+      }).join("");
       return;
     }
     const {airline, destination, incomingPassengers, passengers, services} = routeContracts[selectedContract];
     const {code, name} = airlines[airline];
     const active = contracts.includes(selectedContract);
+    contractDetail.dataset.contractState = active ? "active" : "available";
     $("#contract-route").textContent = destination;
     $("#contract-airline").textContent = name;
     $("#contract-status").textContent = active ? "Active next shift" : "Available";
