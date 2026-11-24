@@ -230,7 +230,6 @@ button, h1, h2, h3, p { margin: 0; }
 .detail-copy { color: var(--muted); font-size: .84rem; line-height: 1.4; }
 .departure-delay { margin-top: 10px; color: var(--amber); }
 .objective { display: grid; align-items: start; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 10px; padding: 10px 11px; margin-bottom: 13px; background: #152a2a; border: 1px solid #34534a; border-radius: 9px; }
-#view-report { margin: 0 0 13px; }
 .objective .icon { color: var(--mint); margin-top: 2px; }
 .objective p { color: var(--dim); font: 650 .68rem var(--mono); text-transform: uppercase; letter-spacing: .09em; margin-bottom: 4px; }
 .objective strong { font-size: .86rem; }
@@ -333,6 +332,15 @@ button.flight-alert:hover { background: #584933; }
 #upgrade-preview { width: 100%; height: clamp(150px, 29dvh, 240px); border-radius: 8px; }
 #upgrade-note { margin: 0; }
 #upgrade-note:empty { display: none; }
+#flight-airline { margin-bottom: 7px; }
+.schedule-airline { display: block; color: var(--muted); font-size: .72rem; }
+#contract-detail { display: grid; gap: 12px; }
+#contract-airline { margin-top: -8px; }
+#contract-note:empty { display: none; }
+#preview-contract-schedule { margin: 0; }
+#tomorrow-note { margin-bottom: 10px; }
+.day-schedule tbody tr[data-proposed] { background: #234039; }
+.day-schedule tr[data-proposed] .schedule-id { color: var(--mint); }
 #reset-progress { margin-top: 20px; }
 #reset-error { color: #ffb1a9; }
 #reset-error:not(:empty) { margin-top: 12px; }

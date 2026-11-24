@@ -68,6 +68,10 @@ const airportLayouts = (() => {
   };
   const carouselX = starter.baggageClaim.carousels[0].x;
   const upgrades = {
+    gate: {
+      name: "Third gate · A03", price: 140000, description: "Handle a third aircraft at the terminal.",
+      site: {id: "east-concourse", name: "East end of the concourse", note: "The concourse extends east. Baggage claim and toilets move to the new end of the terminal."}
+    },
     carousel: {
       name: "Second baggage carousel", price: 115000, description: "Handle two baggage claims at once.",
       site: {id: "near-exit", name: "Near arrivals exit", x: carouselX, z: 25.05},
@@ -88,7 +92,7 @@ const airportLayouts = (() => {
 
   function upgradeSite(type, id) {
     const {site, legacySite} = upgrades[type];
-    return [site, legacySite].find(placement => placement.id === id);
+    return [site, legacySite].find(placement => placement && placement.id === id);
   }
 
   function arrangeBanks(banks, added, positions) {
@@ -96,26 +100,37 @@ const airportLayouts = (() => {
   }
 
   function withUpgrades(purchased) {
+    const gate = upgradeSite("gate", purchased.gate);
     const carousel = upgradeSite("carousel", purchased.carousel);
     const lane = upgradeSite("security", purchased.security);
     const desk = upgradeSite("checkIn", purchased.checkIn);
-    const {baggageClaim, security, checkIn} = starter;
+    const {baggageClaim, security, checkIn, restrooms, terminal, airfield} = starter;
+    const extension = gate ? regional.terminal.right - terminal.right : 0;
+    const carousels = carousel ? [...baggageClaim.carousels, {id: "carousel-2", number: 2, x: carousel.x, z: carousel.z}]
+      : baggageClaim.carousels;
     return {
       ...starter,
-      baggageClaim: carousel ? {
+      gates: gate ? regional.gates : starter.gates,
+      airfield: gate ? {...airfield, apronRight: regional.airfield.apronRight} : airfield,
+      terminal: gate ? {...terminal, right: terminal.right + extension} : terminal,
+      restrooms: gate ? {...restrooms, x: restrooms.x + extension, aisleX: restrooms.aisleX + extension} : restrooms,
+      baggageClaim: {
         ...baggageClaim,
-        carousels: [...baggageClaim.carousels, {id: "carousel-2", number: 2, x: carousel.x, z: carousel.z}],
-        benchRows: [{z: 28.18, direction: -1}],
-        standingRows: baggageClaim.standingRows.slice(0, 3)
-      } : baggageClaim,
+        outerX: baggageClaim.outerX + extension,
+        exitX: baggageClaim.exitX + extension,
+        carousels: extension ? carousels.map(belt => ({...belt, x: belt.x + extension})) : carousels,
+        benchRows: carousel ? [{z: 28.18, direction: -1}] : baggageClaim.benchRows,
+        standingRows: carousel ? baggageClaim.standingRows.slice(0, 3) : baggageClaim.standingRows
+      },
       security: lane ? {
         ...security,
         banks: arrangeBanks(security.banks, {id: "security-3"}, lane.bankXs)
       } : security,
-      checkIn: desk ? {
+      checkIn: {
         ...checkIn,
-        banks: arrangeBanks(checkIn.banks, {id: "check-in-3", deskOffsets: [0]}, desk.bankXs)
-      } : checkIn
+        transfer: gate ? [checkIn.transfer[0] + extension, ...checkIn.transfer.slice(1)] : checkIn.transfer,
+        banks: desk ? arrangeBanks(checkIn.banks, {id: "check-in-3", deskOffsets: [0]}, desk.bankXs) : checkIn.banks
+      }
     };
   }
 

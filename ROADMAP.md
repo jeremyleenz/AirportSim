@@ -6,7 +6,7 @@ Start with a small airport and give players time to learn its operations. Airpor
 
 The compact starter terminal has two gates, one baggage carousel, two check-in counters, and two security lanes. One counter and one lane are staffed at opening. Players can open the second of each as queues build.
 
-Day 1 starts with one overnight aircraft and a free gate for the first inbound. Early flights are staggered so players can handle an arrival and a departure before more turnarounds overlap. Each of four simulated shifts dispatched all 12 flights before curfew using the starter facilities.
+Day 1 starts with one overnight aircraft and a free gate for the first inbound. Early flights are staggered so players can handle an arrival and a departure before more turnarounds overlap. The base timetable cycles through a standard day, a lunchtime rush, and a late-afternoon rush. The first two takeoff times stay fixed.
 
 In-game prompts guide players through gate assignment and dispatch as those actions become relevant. The starter carousel is assigned automatically in arrival order.
 
@@ -28,7 +28,15 @@ Players can buy a second baggage carousel, a third security lane, or a third che
 
 Each completed purchase saves the updated treasury and the facility’s placement. Upgrades are available the next morning and are restored when the game reopens. The base schedule remains available after each upgrade.
 
-## 4. Add airport layout customisation
+## 4. Add a third gate and the first route contracts (complete for MVP)
+
+Gate A03 costs $140,000 and extends the concourse east. The upgrade preview shows the new stand and jet bridge. The 12-flight base timetable stays available, and players can buy A03 when they want more room for overlapping turnarounds.
+
+Players can sign routes independently between shifts. Pacific Link adds a late-morning Christchurch turnaround, Kōwhai Air adds two afternoon Canberra turnarounds, and Pacific Atlas adds two late-day Gold Coast turnarounds. Each preview shows flight times, daily passenger and baggage volumes, and potential earnings. Signing all three brings the schedule to 17 daily departures. Contracts are saved alongside purchases and can be ended between shifts.
+
+Tomorrow’s schedule shows the next day’s base pattern and active routes. Players can preview an unsigned route in that timetable before signing. Contract flights keep their advertised times across the three base timetable patterns.
+
+## 5. Add airport layout customisation
 
 Give players a planning mode between shifts to place new facilities and relocate existing ones. Gates, check-in counters, security lanes, baggage carousels, seating, shops, and other amenities all use the same planning mode. Apply the same principle to larger facilities, including terminals and runways, as they become available.
 
@@ -38,19 +46,9 @@ Show the cost and affected passenger routes before players apply a change. Let t
 
 Extend the browser save to cover every facility the player can place or move. Save the facility positions and updated treasury when the player applies the layout, and restore that layout on reopening.
 
-## 5. Add a third gate and expand capacity further
+## 6. Expand airline contracts and airport capacity
 
-Offer a third gate. Show when inbound flights held because all gates were occupied so players can judge when they need another stand. Use queue and baggage wait data to guide any further expansion of check-in, security, or baggage claim.
-
-Use the planning mode to fit added capacity into the airport. A new gate, for example, may require extending the concourse and connecting the stand to a taxiway.
-
-## 6. Introduce optional airline contracts
-
-Start with one base airline and offer a small optional contract between shifts. Show the proposed arrival and departure times, passenger and baggage volumes, and expected revenue. A contract in a quieter window may fit the current airport. A contract during a busy arrival bank may justify building capacity first.
-
-The base timetable can vary day to day. Players can operate the base schedule or choose when to add flights by signing optional contracts. Buying an upgrade leaves that choice with the player.
-
-Let players drop optional contracts between shifts to reduce traffic when they need time to recover.
+Offer more route contracts from the same or different airlines. A route in a quieter window may suit the current airport, while one during a busy arrival period may justify building capacity first. Use holding traffic, queues, and baggage waits to judge where further expansion would help.
 
 ## 7. Add richer amenities
 

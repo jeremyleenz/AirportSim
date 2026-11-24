@@ -14,6 +14,7 @@
   const counterNames = {checkIn: "Check-in station", security: "Security lane"};
   const counterStatus = {open: "Open", closing: "Closing", closed: "Closed"};
   const handlingCost = 2000;
+  const baseFlightRevenue = 3800;
   const passengerFare = 41;
   const startMinutes = 8 * 60 + 42;
   const secondsPerMinute = 3.4;
@@ -44,10 +45,11 @@
   const taxiSeparation = 24;
   const planeIcon = '<svg class="icon" aria-hidden="true"><use href="#plane"/></svg>';
   const airlines = [
-    {code: "PL", symbol: "#197f79", ui: "#8fd8ca"},
-    {code: "SA", symbol: "#bd6d43", ui: "#efb08b"},
-    {code: "PA", symbol: "#5674a7", ui: "#a4bfe9"},
-    {code: "NR", symbol: "#8b698c", ui: "#d3a9d3"}
+    {code: "PL", name: "Pacific Link", symbol: "#197f79", ui: "#8fd8ca"},
+    {code: "SA", name: "Southern Arc", symbol: "#bd6d43", ui: "#efb08b"},
+    {code: "PA", name: "Pacific Atlas", symbol: "#5674a7", ui: "#a4bfe9"},
+    {code: "NR", name: "Northreach", symbol: "#8b698c", ui: "#d3a9d3"},
+    {code: "KA", name: "Kōwhai Air", symbol: "#a38b36", ui: "#e1ce84"}
   ];
   const routes = [
     ["Melbourne", 96], ["Brisbane", 90], ["Auckland", 110],
@@ -61,26 +63,53 @@
     [1, 3, 509, 222, 286], [2, 0, 320, 255, 321], [3, 1, 128, 290, 356],
     [4, 2, 437, 324, 391], [5, 3, 203, 360, 428], [0, 0, 218, 399, 469]
   ];
+  const timetablePatterns = [
+    {name: "Standard day", offsets: {}},
+    {name: "Lunchtime rush", offsets: {216: -16, 509: -16, 320: -16}},
+    {name: "Late-afternoon rush", offsets: {437: 18, 203: 18}}
+  ];
   const overnightArrivalCounts = [2, 1, 0, 1];
   const overnightArrivalSlots = [[5, 0, 702, 28], [4, 2, 704, 14]];
+  const routeContracts = {
+    christchurch: {airline: 0, destination: "Christchurch", passengers: 72, incomingPassengers: 43,
+      services: [{number: 642, arrivalMinute: 118, takeoffMinute: 175}]},
+    canberra: {airline: 4, destination: "Canberra", passengers: 88, incomingPassengers: 54,
+      services: [{number: 604, arrivalMinute: 336, takeoffMinute: 402}, {number: 606, arrivalMinute: 433, takeoffMinute: 499}]},
+    "gold-coast": {airline: 2, destination: "Gold Coast", passengers: 92, incomingPassengers: 56,
+      services: [{number: 712, arrivalMinute: 409, takeoffMinute: 477}, {number: 714, arrivalMinute: 481, takeoffMinute: 548}]}
+  };
 
-  function createTimetable(day, overnightAircraft, random) {
+  function timetablePattern(day) {
+    return timetablePatterns[(day - 1) % timetablePatterns.length];
+  }
+
+  function createTimetable(day, overnightAircraft, random, contracts) {
+    const {offsets} = timetablePattern(day);
     const departures = scheduleSlots.map(([route, airline, number, arrivalMinute, takeoffMinute], index) => {
       const [destination, passengers] = routes[route];
       const overnight = overnightAircraft[index];
       const aircraft = overnight?.aircraft ?? {airline};
       // Offset arrival and takeoff together to preserve each flight's turnaround time.
-      const offset = index < 2 ? 0 : Math.floor(random() * (2 * scheduleVariationMinutes + 1)) - scheduleVariationMinutes;
+      const variation = index < 2 ? 0 : Math.floor(random() * (2 * scheduleVariationMinutes + 1)) - scheduleVariationMinutes;
+      const offset = (offsets[number] ?? 0) + variation;
       const arrivalAt = overnight ? null : (arrivalMinute + offset) * secondsPerMinute;
       const departureMinute = takeoffMinute + offset;
       const lead = passengers >= largeFlightCapacity ? largeFlightBoardingLeadMinutes : boardingLeadMinutes;
       const boardingAt = Math.max(0, departureMinute - lead) * secondsPerMinute;
       const takeoffAt = departureMinute * secondsPerMinute;
-      return {id: airlines[aircraft.airline].code + number, destination, airline: aircraft.airline, aircraft,
+      return {id: airlines[airline].code + number, destination, airline, aircraft,
         openingGate: overnight?.gate ?? null, passengers, arrivalAt, boardingAt, takeoffAt};
-    }).sort((a, b) => a.takeoffAt - b.takeoffAt);
+    });
+    for (const contract of contracts) {
+      const {airline, destination, passengers, incomingPassengers, services} = routeContracts[contract];
+      departures.push(...services.map(({number, arrivalMinute, takeoffMinute}) => ({
+        id: airlines[airline].code + number, destination, airline, aircraft: {airline}, contract,
+        openingGate: null, passengers, incomingPassengers, arrivalAt: arrivalMinute * secondsPerMinute,
+        boardingAt: (takeoffMinute - boardingLeadMinutes) * secondsPerMinute, takeoffAt: takeoffMinute * secondsPerMinute})));
+    }
+    departures.sort((a, b) => a.takeoffAt - b.takeoffAt);
     const finalTakeoff = departures.at(-1).takeoffAt;
-    const count = Math.min(gates.length, overnightArrivalCounts[(day - 1) % overnightArrivalCounts.length]);
+    const count = overnightArrivalCounts[(day - 1) % overnightArrivalCounts.length];
     const eveningArrivals = overnightArrivalSlots.slice(0, count).map(([route, airline, number, lead]) => {
       const [destination, passengers] = routes[route];
       return {id: airlines[airline].code + number, destination, airline, aircraft: {airline},
@@ -103,7 +132,7 @@
   function makeFlight(plan, index, random) {
     const {arrivalAt, takeoffAt, openingGate: gate} = plan;
     const stage = gate === null ? "scheduled" : "parked";
-    const incomingPassengers = arrivalAt === null ? 0 : Math.round(plan.passengers * (.55 + index * 3 % 5 * .04));
+    const incomingPassengers = arrivalAt === null ? 0 : plan.incomingPassengers ?? Math.round(plan.passengers * (.55 + index * 3 % 5 * .04));
     const passengers = isOvernightArrival(plan) ? 0 : plan.passengers;
     let manifest = [];
     if (passengers) {
@@ -120,16 +149,24 @@
     return Math.floor(Math.random() * 2 ** 32);
   }
 
-  function createShift(day, overnightAircraft, openingCash = startingCash, seed = newShiftSeed()) {
-    const random = () => {
+  function shiftRandom(seed) {
+    return () => {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       return seed / 2 ** 32;
     };
-    const timetable = createTimetable(day, overnightAircraft, random);
+  }
+
+  function createShift(day, overnightAircraft, openingCash = startingCash, seed = newShiftSeed(), contracts = []) {
+    const random = shiftRandom(seed);
+    const timetable = createTimetable(day, overnightAircraft, random, contracts);
     const departureCount = timetable.filter(plan => !isOvernightArrival(plan)).length;
+    // Each contracted service has its own random sequence so signing a route preserves the base flight manifests.
+    let baseIndex = 0;
+    const flights = timetable.map(plan => plan.contract ? makeFlight(plan, 0, shiftRandom(seed ^ Math.floor(plan.takeoffAt)))
+      : makeFlight(plan, baseIndex++, random));
     return {day, openingCash, cash: openingCash, now: 0, playTime: 0, speed: 1, paused: false, closedAtCurfew: false,
       missedPassengers: 0, delayMinutes: 0, staffingCosts: {checkIn: 0, security: 0},
-      timetable, departureCount, flights: timetable.map((plan, index) => makeFlight(plan, index, random)),
+      timetable, departureCount, flights,
       results: [], selected: overnightAircraft.length ? timetable[0].id : null,
       view: "flights", terminalFocus: null, gateFromMap: null,
       movements: new Map(), taxiQueue: [], nextDeparture: null, luggage: baggage.create(baggageWaitGraceMinutes * secondsPerMinute)};
@@ -212,28 +249,32 @@
       const {day, cash, seed, parked, upgrades} = saved;
       if (!Number.isSafeInteger(day) || day < 1 || !Number.isSafeInteger(cash) ||
           !Number.isInteger(seed) || seed < 0 || seed >= 2 ** 32 || !Array.isArray(parked)) return null;
+      const purchased = Object.fromEntries(Object.keys(airportLayouts.upgrades).flatMap(type =>
+        airportLayouts.upgradeSite(type, upgrades?.[type]) ? [[type, upgrades[type]]] : []));
+      const savedGates = airportLayouts.withUpgrades(purchased).gates;
       const overnightAircraft = parked.map(({gate: gateName, airline: code}) => ({
-        gate: airportLayouts.starter.gates.findIndex(({id}) => id === gateName),
+        gate: savedGates.findIndex(({id}) => id === gateName),
         aircraft: {airline: airlines.findIndex(({code: airlineCode}) => airlineCode === code)}
       }));
       if (overnightAircraft.some(({gate, aircraft}) => gate < 0 || aircraft.airline < 0) ||
           new Set(overnightAircraft.map(({gate}) => gate)).size !== overnightAircraft.length) return null;
-      const purchased = Object.fromEntries(Object.keys(airportLayouts.upgrades).flatMap(type =>
-        airportLayouts.upgradeSite(type, upgrades?.[type]) ? [[type, upgrades[type]]] : []));
-      return {day, cash, seed, overnightAircraft, upgrades: purchased, shift: decodeShift(saved.shift, day, cash)};
+      const contracts = Array.isArray(saved.contracts) ? Object.keys(routeContracts).filter(id => saved.contracts.includes(id))
+        : saved.contractActive === true ? ["canberra"] : [];
+      return {day, cash, seed, overnightAircraft, upgrades: purchased, contracts,
+        shift: decodeShift(saved.shift, day, cash)};
     } catch {
       return null;
     }
   }
 
-  function saveOpening({day, cash, seed, overnightAircraft, upgrades}, activeShift) {
+  function saveOpening({day, cash, seed, overnightAircraft, upgrades, contracts = []}, activeShift) {
     const parked = overnightAircraft.map(({gate, aircraft}) => ({gate: gates[gate].name, airline: airlines[aircraft.airline].code}));
     try {
       const storage = window.localStorage;
       // A shift in an older tab must not overwrite progress saved since it opened.
       if (storage.getItem(progressKey) !== savedOpeningText) return false;
       const shift = activeShift && encodeShift(activeShift);
-      const checkpoint = JSON.stringify({day, cash, seed, parked, upgrades, shift});
+      const checkpoint = JSON.stringify({day, cash, seed, parked, upgrades, contracts, shift});
       storage.setItem(progressKey, checkpoint);
       savedOpeningText = checkpoint;
       return true;
@@ -244,16 +285,17 @@
 
   const savedOpening = loadOpening();
   const {shift: restoredShift, ...opening} = savedOpening ??
-    {day: 1, cash: startingCash, seed: newShiftSeed(), overnightAircraft: startingAircraft, upgrades: {}};
+    {day: 1, cash: startingCash, seed: newShiftSeed(), overnightAircraft: startingAircraft, upgrades: {}, contracts: []};
   let currentOpening = opening;
   const upgradeOffers = airportLayouts.upgrades;
   let purchasedUpgrades = opening.upgrades;
   let airport = createAirport(airportLayouts.withUpgrades(purchasedUpgrades));
   let passengerFlow = createPassengerFlow(airport);
   let baggage = createBaggage(airport);
-  const {gates, runwayZ, taxiwayZ, floor} = airport;
+  let gates = airport.gates;
+  const {runwayZ, taxiwayZ, floor} = airport;
   const holdingPosition = {x: 44, z: taxiwayZ, angle: -Math.PI / 2};
-  let state = restoredShift?.state ?? createShift(opening.day, opening.overnightAircraft, opening.cash, opening.seed);
+  let state = restoredShift?.state ?? createShift(opening.day, opening.overnightAircraft, opening.cash, opening.seed, opening.contracts);
   let nextOpening = null;
   let openingSaved = false;
   let lastAutosave = state.playTime;
@@ -356,7 +398,7 @@
     label.append(count);
     return count;
   }
-  const mapPins = gates.map(({x, name}, gate) => {
+  function makeMapPin({x, name}, gate) {
     const button = document.createElement("button");
     button.className = "map-gate";
     button.type = "button";
@@ -372,19 +414,25 @@
     });
     if (renderer) $("#map-labels").append(button);
     return {element: button, x: x + 2.9, y: 2.85, z: 7.93, count, late};
-  });
-  const mapSigns = renderer ? [
-    createLabel("ENTRANCE", -2.2, 1.1, 32.15, "entrance"),
-    createLabel("ARRIVALS EXIT", airport.terminalPaths.airsideExit.x, 1.2, airport.terminalPaths.airsideExit.z + 3.45),
-    createLabel("BAGGAGE CLAIM", ...airport.baggageClaim.label, "baggageClaim"),
-    createLabel("CAFÉ", -26, 1.84, 19.05, "cafe"),
-    createLabel("SHARED SEATS", airport.terminalPaths.sharedSeats[1].position[0], 1, 16.55, "sharedSeats"),
-    ...(airport.terminalPaths.restroomLabel ? [createLabel("TOILETS", ...airport.terminalPaths.restroomLabel)] : []),
-    createLabel("SECURITY", bankCenter("security"), 2.75, airport.terminalPaths.security.exitZ, "security"),
-    createLabel("CHECK-IN", bankCenter("checkIn"), 4.6, airport.terminalPaths.checkIn.deskZ, "checkIn"),
-    createLabel("DEPARTURES", 1.7, 1.65, 15.55, "concourse"),
-    createLabel("RWY 09 / 27", -22, .05, runwayZ - 9.4)
-  ] : [];
+  }
+  let mapPins = gates.map(makeMapPin);
+  function buildMapSigns() {
+    if (!renderer) return [];
+    const {airsideExit, restroomLabel, sharedSeats, security, checkIn} = airport.terminalPaths;
+    return [
+      createLabel("ENTRANCE", -2.2, 1.1, 32.15, "entrance"),
+      createLabel("ARRIVALS EXIT", airsideExit.x, 1.2, airsideExit.z + 3.45),
+      createLabel("BAGGAGE CLAIM", ...airport.baggageClaim.label, "baggageClaim"),
+      createLabel("CAFÉ", -26, 1.84, 19.05, "cafe"),
+      createLabel("SHARED SEATS", sharedSeats[1].position[0], 1, 16.55, "sharedSeats"),
+      ...(restroomLabel ? [createLabel("TOILETS", ...restroomLabel)] : []),
+      createLabel("SECURITY", bankCenter("security"), 2.75, security.exitZ, "security"),
+      createLabel("CHECK-IN", bankCenter("checkIn"), 4.6, checkIn.deskZ, "checkIn"),
+      createLabel("DEPARTURES", 1.7, 1.65, 15.55, "concourse"),
+      createLabel("RWY 09 / 27", -22, .05, runwayZ - 9.4)
+    ];
+  }
+  let mapSigns = buildMapSigns();
   function bankCenter(type) {
     const {banks} = airport.terminalPaths[type];
     return banks.reduce((sum, {x}) => sum + x, 0) / banks.length;
@@ -407,7 +455,10 @@
     const flight = state.flights.find(({id, stage}) => stage === "holding" && id === holdingStatus.dataset.flight);
     if (flight) selectFromMap(flight.id);
   });
-  $("#lounge-counts").innerHTML = gates.map(({name}) => stat(name, 0)).join("");
+  buildLoungeCounts();
+  function buildLoungeCounts() {
+    $("#lounge-counts").innerHTML = gates.map(({name}) => stat(name, 0)).join("");
+  }
 
   function announce(message) {
     $("#event").textContent = message;
@@ -566,7 +617,13 @@
   const gatePicker = $("#gate-picker");
   const gatePickerLegend = gatePicker.querySelector("legend");
 
-  const gateOptions = gates.map(({name}, index) => {
+  let gateOptions = buildGateOptions();
+  function buildGateOptions() {
+    const list = $("#gate-options");
+    list.replaceChildren();
+    return gates.map(makeGateOption);
+  }
+  function makeGateOption({name}, index) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "gate-choice";
@@ -575,7 +632,7 @@
     button.addEventListener("click", () => assignGate(index));
     $("#gate-options").append(button);
     return {button, name, label: button.querySelector("small")};
-  });
+  }
 
   function paintGatePicker(flight, gate) {
     gatePicker.hidden = flight?.stage !== "holding";
@@ -671,7 +728,7 @@
 
   function buildScheduleRows() {
     const {timetable} = state;
-    const rows = timetable.map(({id, destination, arrivalAt, boardingAt, takeoffAt}) => {
+    const rows = timetable.map(({id, airline, destination, arrivalAt, boardingAt, takeoffAt}) => {
       const row = document.createElement("tr");
       const arrival = arrivalAt === null ? '<span class="schedule-initial">Overnight</span>' : scheduleTime(arrivalAt);
       const name = takeoffAt === null ? "From " + destination : destination;
@@ -679,9 +736,10 @@
       const takeoff = takeoffAt === null ? '<span class="schedule-initial">Overnight</span>' : scheduleTime(takeoffAt);
       row.innerHTML = '<th scope="row"><button type="button" class="schedule-flight">' + name +
         '</button><span class="schedule-destination" hidden>' + name + '</span><span class="schedule-id">' +
-        id + '<span class="schedule-gate"></span></span></th><td>' + arrival + '</td><td>' + boarding +
+        id + '<span class="schedule-gate"></span></span><span class="schedule-airline"></span></th><td>' + arrival + '</td><td>' + boarding +
         '</td><td>' + takeoff + '<span class="schedule-status"></span></td>';
       const button = row.querySelector("button");
+      row.querySelector(".schedule-airline").textContent = airlines[airline].name;
       button.setAttribute("aria-label", "Open " + name + " " + id + " on flight board");
       button.addEventListener("click", () => {
         const flight = state.flights.find(item => item.id === id);
@@ -957,6 +1015,7 @@
     flightDetail.hidden = !flight && gate < 0;
     if (flightDetail.hidden) return;
     $("#stand-heading").hidden = Boolean(flight);
+    $("#flight-airline").hidden = !flight;
     action.hidden = !flight || ["holding", "boarding", "deplaning", "scheduled", "overnight"].includes(flight.stage);
     if (!flight) {
       $("#stand-name").textContent = "Gate " + gates[gate].name;
@@ -964,6 +1023,7 @@
       return;
     }
     const {stage, passengers, id} = flight;
+    $("#flight-airline").textContent = airlines[flight.airline].name;
     const counts = occupancy.byFlight.get(id);
     const arriving = isArriving(flight);
     if (stage === "scheduled" || stage === "holding") {
@@ -1282,7 +1342,8 @@
     });
   }
 
-  const outboundRoutes = gates.map(({x, z}) => {
+  let outboundRoutes = gates.map(outboundRoute);
+  function outboundRoute({x, z}) {
     const halfTurn = Math.PI / 2;
     const path = timedTaxiPath([
       [x, z, 0], [x, -15, 0, pushbackSpeed], [x - 2.1, -22, -halfTurn, pushbackSpeed],
@@ -1298,16 +1359,17 @@
       [liftoff, 42, runwayZ, halfTurn], [duration, 86, runwayZ, halfTurn, 16, .23]
     );
     return {duration, path, pushbackEnd, runwayEntry, liftoff};
-  });
+  }
 
-  const inboundRoutes = gates.map(({x, z}) => {
+  let inboundRoutes = gates.map(inboundRoute);
+  function inboundRoute({x, z}) {
     const path = timedTaxiPath([
       [holdingPosition.x, holdingPosition.z, holdingPosition.angle],
       [x + 6, taxiwayZ, holdingPosition.angle], [x + 1.8, -21.2, -.77],
       [x, -17, 0], [x, z, 0]
     ]);
     return {duration: path.at(-1)[0], path};
-  });
+  }
 
   function outboundMovement(flight) {
     return {flight, start: state.now, ...outboundRoutes[flight.gate]};
@@ -1476,7 +1538,7 @@
 
   function finishDeparture({flight, start, liftoff}) {
     const boarded = flight.manifest.filter(person => person.zone === "boarded").length;
-    const revenue = 3800 + boarded * passengerFare;
+    const revenue = baseFlightRevenue + boarded * passengerFare;
     const liftoffMinute = clockMinutes(start + liftoff);
     const due = clockMinutes(flight.takeoffAt);
     const lateMinutes = Math.max(0, liftoffMinute - due);
@@ -1495,7 +1557,7 @@
 
   function finishShift() {
     nextOpening = {day: state.day + 1, cash: treasuryBalance(), seed: newShiftSeed(), overnightAircraft: parkedAircraft(),
-      upgrades: purchasedUpgrades};
+      upgrades: purchasedUpgrades, contracts: currentOpening.contracts};
     openingSaved = saveOpening(nextOpening);
     mapAction = null;
     state.paused = true;
@@ -1599,6 +1661,7 @@
 
   const report = $("#shift-report");
   const startNextDay = $("#restart-shift");
+  const tomorrowDialog = $("#tomorrow-schedule");
   const resetDialog = $("#reset-dialog");
   const resetError = $("#reset-error");
 
@@ -1616,6 +1679,34 @@
     resettingProgress = true;
     window.location.reload();
   });
+
+  function showTomorrowSchedule(previewRoute = null) {
+    if (!nextOpening || tomorrowDialog.open) return;
+    const {day, seed, overnightAircraft, contracts} = nextOpening;
+    const proposed = previewRoute && !contracts.includes(previewRoute) ? previewRoute : null;
+    const included = proposed ? [...contracts, proposed] : contracts;
+    const timetable = createTimetable(day, overnightAircraft, shiftRandom(seed), included);
+    $("#tomorrow-day").textContent = formatDay(day) + " · " + timetablePattern(day).name;
+    const note = $("#tomorrow-note");
+    note.hidden = !proposed;
+    note.textContent = proposed ? "Includes the proposed " + routeContracts[proposed].destination + " route." : "";
+    $("#tomorrow-rows").innerHTML = timetable.map(flight => {
+      const {id, destination, arrivalAt, boardingAt, takeoffAt, contract} = flight;
+      const overnight = isOvernightArrival(flight);
+      const isProposed = proposed !== null && contract === proposed;
+      const arrival = arrivalAt === null ? '<span class="schedule-initial">Overnight</span>' : scheduleTime(arrivalAt);
+      const takeoff = overnight ? '<span class="schedule-initial">Parks</span>' : scheduleTime(takeoffAt);
+      return '<tr' + (isProposed ? ' data-proposed' : '') + '><th scope="row">' + (overnight ? 'From ' : '') + destination +
+        '<span class="schedule-id">' + id + (isProposed ? ' · Proposed' : '') + '</span></th><td>' + arrival + '</td><td>' +
+        (boardingAt === null ? '—' : scheduleTime(boardingAt)) + '</td><td>' + takeoff + '</td></tr>';
+    }).join("");
+    $("#tomorrow-schedule .report-body").scrollTop = 0;
+    tomorrowDialog.showModal();
+  }
+
+  $("#view-tomorrow").addEventListener("click", () => showTomorrowSchedule());
+  $("#report-tomorrow").addEventListener("click", () => showTomorrowSchedule());
+  $("#close-tomorrow").addEventListener("click", () => tomorrowDialog.close());
 
   function showShiftReport() {
     if (!nextOpening) return;
@@ -1693,11 +1784,16 @@
     if (previewCanvas.hidden) return;
     try {
       previewRenderer ??= world.createRenderer(previewCanvas);
-      previewRenderer.view.zoom = 5;
+      previewRenderer.view.zoom = upgradeType === "gate" ? 2.7 : 5;
       const layout = airportLayouts.withUpgrades({...nextOpening.upgrades, [upgradeType]: site.id});
       const preview = createAirport(layout);
       let x, z, width, depth;
-      if (upgradeType === "carousel") {
+      if (upgradeType === "gate") {
+        x = preview.gates.at(-1).x;
+        z = 1.8;
+        width = 21.4;
+        depth = 21.8;
+      } else if (upgradeType === "carousel") {
         const {left, right, z: beltZ} = preview.baggageClaim.carousels.at(-1);
         x = (left + right) / 2;
         z = beltZ;
@@ -1710,9 +1806,10 @@
         width = bank.width + .15;
         depth = upgradeType === "security" ? 4.2 : 1.26;
       }
+      const height = upgradeType === "gate" ? .052 : floor + .052;
       const edge = new world.Mesh().path([[-width / 2, -depth / 2], [width / 2, -depth / 2],
-        [width / 2, depth / 2], [-width / 2, depth / 2], [-width / 2, -depth / 2]], .14, floor + .052, "#f2cc61");
-      previewFocus = [x, floor, z];
+        [width / 2, depth / 2], [-width / 2, depth / 2], [-width / 2, -depth / 2]], .14, height, "#f2cc61");
+      previewFocus = [x, height, z];
       previewObjects = [...preview.terminalScene(), {mesh: edge, x, z, castShadow: false}];
       drawUpgradePreview();
     } catch {
@@ -1801,6 +1898,97 @@
     upgradeNote.textContent = name + " purchased for " + formatDay(nextOpening.day) + ".";
     $("#close-upgrades").focus();
     paint();
+  });
+
+  const contractDialog = $("#airline-contracts");
+  const contractAction = $("#contract-action");
+  const contractOffers = $("#contract-offers");
+  let selectedContract = null;
+
+  function paintContract() {
+    const {contracts} = nextOpening;
+    const extraFlights = contracts.reduce((total, id) => total + routeContracts[id].services.length, 0);
+    $("#contract-opening").textContent = formatDay(nextOpening.day) + " · " + (scheduleSlots.length + extraFlights) + " departures";
+    contractOffers.hidden = selectedContract !== null;
+    $("#contract-detail").hidden = selectedContract === null;
+    $("#contract-actions").hidden = selectedContract === null;
+    if (!selectedContract) {
+      contractOffers.innerHTML = Object.entries(routeContracts).map(([id, {airline, destination, services}]) =>
+        '<button type="button" class="upgrade-offer" data-contract="' + id + '"><span class="detail-stat"><strong>' + destination +
+        '</strong><b>' + (contracts.includes(id) ? "Active" : "Available") + '</b></span><span class="detail-copy">' +
+        airlines[airline].name + " · " + services.length + (services.length === 1 ? " daily flight" : " daily flights") + '</span></button>').join("");
+      return;
+    }
+    const {airline, destination, incomingPassengers, passengers, services} = routeContracts[selectedContract];
+    const {code, name} = airlines[airline];
+    const active = contracts.includes(selectedContract);
+    $("#contract-route").textContent = destination;
+    $("#contract-airline").textContent = name;
+    $("#contract-status").textContent = active ? "Active next shift" : "Available";
+    $("#contract-services").innerHTML = services.map(({number, arrivalMinute, takeoffMinute}) =>
+      '<tr><th scope="row">' + code + number + '</th><td>' + scheduleTime(arrivalMinute * secondsPerMinute) +
+      '</td><td>' + scheduleTime(takeoffMinute * secondsPerMinute) + '</td></tr>').join("");
+    const count = services.length;
+    const bagsIn = count * Math.round(incomingPassengers * .60);
+    const bagsOut = count * Math.round(passengers * .58);
+    $("#contract-traffic").innerHTML = stat("Arriving passengers per day", count * incomingPassengers) +
+      stat("Departure seats per day", count * passengers) +
+      stat("Estimated bags in / out", bagsIn + " / " + bagsOut) +
+      stat("Daily net at full boarding", currency.format(count * (baseFlightRevenue + passengers * passengerFare - handlingCost)));
+    contractAction.textContent = active ? "End contract" : "Sign route contract";
+  }
+
+  function openContracts() {
+    if (!nextOpening || contractDialog.open) return;
+    if (report.open) report.close();
+    if (mobileLayout.matches) showMobileView("operations");
+    selectedContract = null;
+    $("#contract-note").textContent = "";
+    paintContract();
+    contractDialog.showModal();
+  }
+
+  function setRouteContract(id, active) {
+    if (!nextOpening || !Object.hasOwn(routeContracts, id) || nextOpening.contracts.includes(id) === active) return false;
+    const contracts = active ? [...nextOpening.contracts, id] : nextOpening.contracts.filter(route => route !== id);
+    const opening = {...nextOpening, contracts};
+    if (!saveOpening(opening)) return false;
+    nextOpening = opening;
+    openingSaved = true;
+    return true;
+  }
+
+  $("#view-contracts").addEventListener("click", openContracts);
+  $("#report-contracts").addEventListener("click", openContracts);
+  $("#close-contracts").addEventListener("click", () => contractDialog.close());
+  $("#preview-contract-schedule").addEventListener("click", () => showTomorrowSchedule(selectedContract));
+  contractDialog.addEventListener("close", () => $("#view-contracts").focus({preventScroll: true}));
+  contractOffers.addEventListener("click", event => {
+    const choice = event.target.closest("button[data-contract]");
+    if (!choice) return;
+    selectedContract = choice.dataset.contract;
+    $("#contract-note").textContent = "";
+    paintContract();
+    $("#contract-route").focus();
+  });
+  $("#back-to-contracts").addEventListener("click", () => {
+    const previous = selectedContract;
+    selectedContract = null;
+    $("#contract-note").textContent = "";
+    paintContract();
+    contractOffers.querySelector('[data-contract="' + previous + '"]').focus();
+  });
+  contractAction.addEventListener("click", () => {
+    if (!nextOpening || !selectedContract) return;
+    const signed = !nextOpening.contracts.includes(selectedContract);
+    const note = $("#contract-note");
+    if (!setRouteContract(selectedContract, signed)) {
+      note.textContent = "The contract change could not be saved. Check browser storage and try again.";
+      return;
+    }
+    paintContract();
+    const {destination} = routeContracts[selectedContract];
+    note.textContent = destination + (signed ? " added from " : " removed from ") + formatDay(nextOpening.day) + ".";
   });
 
   const aircraftSelection = $("#aircraft-selection");
@@ -1997,24 +2185,32 @@
   $("#close-report").addEventListener("click", () => report.close());
   function beginNextDay() {
     if (!nextOpening) return;
-    const {day, cash, seed, overnightAircraft, upgrades} = nextOpening;
+    const {day, cash, seed, overnightAircraft, upgrades, contracts} = nextOpening;
     if (!openingSaved) openingSaved = saveOpening(nextOpening);
     currentOpening = nextOpening;
     nextOpening = null;
     if (purchasedUpgrades !== upgrades) {
       purchasedUpgrades = upgrades;
       airport = createAirport(airportLayouts.withUpgrades(purchasedUpgrades));
+      if (gates.length !== airport.gates.length) {
+        gates = airport.gates;
+        outboundRoutes = gates.map(outboundRoute);
+        inboundRoutes = gates.map(inboundRoute);
+        gateOptions = buildGateOptions();
+        buildLoungeCounts();
+        if (renderer) mapPins.forEach(({element}) => element.remove());
+        mapPins = gates.map(makeMapPin);
+      }
       passengerFlow = createPassengerFlow(airport);
       baggage = createBaggage(airport);
       if (renderer) {
         scene = airport.scene();
         counterMarkers = buildCounterMarkers();
       }
-      for (const mark of mapSigns) {
-        if (Object.hasOwn(staffingRates, mark.section)) mark.x = bankCenter(mark.section);
-      }
+      mapSigns.forEach(({element}) => element.remove());
+      mapSigns = buildMapSigns();
     }
-    state = createShift(day, overnightAircraft, cash, seed);
+    state = createShift(day, overnightAircraft, cash, seed, contracts);
     lastAutosave = state.playTime;
     saveWarning = false;
     scheduleRows = buildScheduleRows();
@@ -2035,7 +2231,7 @@
   startNextDay.addEventListener("click", beginNextDay);
   $("#continue-shift").addEventListener("click", beginNextDay);
   report.addEventListener("close", () => {
-    if (!shiftComplete() || upgradeShop.open) return;
+    if (!shiftComplete() || upgradeShop.open || contractDialog.open) return;
     if (mobileLayout.matches) showMobileView("operations");
     $("#view-report").focus();
   });
@@ -2185,7 +2381,8 @@
     canvas.addEventListener("pointerleave", () => canvas.removeAttribute("data-aircraft-hover"));
   }
   window.addEventListener("keydown", event => {
-    if (report.open || upgradeShop.open || resetDialog.open || event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+    if (report.open || upgradeShop.open || contractDialog.open || tomorrowDialog.open || resetDialog.open ||
+        event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
     if (event.code === "Space" && !["BUTTON", "INPUT", "TEXTAREA"].includes(event.target.tagName)) {
       event.preventDefault();
       togglePause();

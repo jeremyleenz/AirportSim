@@ -10,7 +10,11 @@ The game saves your shift in this browser as you play, when you pause, and when 
 
 To start over, open **Operations → Terminal** and choose **Reset progress** at the bottom. Confirming starts Day 1 and removes the current run and its upgrades.
 
-Between shifts, open **Airport upgrades** to buy a second baggage carousel, a third security lane, or a third check-in desk. You can buy several upgrades if the treasury covers them. The confirmation screen previews where each upgrade will go. The game saves the purchase and location together with the updated treasury. Purchased facilities are available the next morning.
+Between shifts, open **Airport upgrades** to buy a second baggage carousel, a third security lane, a third check-in desk, or Gate A03. You can buy several upgrades if the treasury covers them. The confirmation screen previews where each upgrade will go. The game saves the purchase and location together with the updated treasury. Purchased facilities are available the next morning.
+
+Open **Airline contracts** between shifts to sign or end routes to Christchurch, Canberra, and the Gold Coast. Christchurch adds one daily turnaround. Canberra and the Gold Coast each add two. With all three signed, the schedule has 17 daily departures. Contract changes start the next morning.
+
+The base timetable cycles through a standard day, a lunchtime rush, and a late-afternoon rush. Use **Tomorrow’s schedule** between shifts to see the next day’s flight times. Open it from a contract to preview how that route fits before signing.
 
 With one baggage carousel, arriving flights get it automatically in arrival order. Once you install a second carousel, you choose one for each flight.
 

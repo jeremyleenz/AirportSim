@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=40">
+  <link rel="stylesheet" href="styles.css?v=43">
   <script defer src="renderer.js?v=2"></script>
-  <script defer src="layout.js?v=16"></script>
+  <script defer src="layout.js?v=17"></script>
   <script defer src="airport.js?v=36"></script>
   <script defer src="passengers.js?v=51"></script>
   <script defer src="baggage.js?v=21"></script>
-  <script defer src="game.js?v=84"></script>
+  <script defer src="game.js?v=88"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -97,7 +97,9 @@
         </div>
         <div id="between-shifts" class="between-shifts" hidden>
           <button type="button" id="view-upgrades" class="secondary">Airport upgrades</button>
+          <button type="button" id="view-contracts" class="secondary">Airline contracts</button>
           <button type="button" id="view-report" class="secondary">View shift report</button>
+          <button type="button" id="view-tomorrow" class="secondary">Tomorrow’s schedule</button>
           <button type="button" id="continue-shift" class="primary">Start new shift</button>
         </div>
         <section id="flight-view" aria-labelledby="flight-board-title">
@@ -116,6 +118,7 @@
             <div id="stand-heading" class="detail-head" hidden>
               <p id="stand-name"></p><h3 id="stand-title" tabindex="-1">Stand available</h3>
             </div>
+            <p id="flight-airline" class="detail-copy" hidden></p>
             <div id="detail-content"></div>
             <div id="late-passengers" class="late-passengers flow-stats" hidden></div>
             <p id="departure-delay-notice" class="detail-copy departure-delay" hidden></p>
@@ -245,8 +248,48 @@
       <p id="report-save-status" class="detail-copy"></p>
       <div class="between-shifts">
         <button type="button" id="report-upgrades" class="secondary">Airport upgrades</button>
+        <button type="button" id="report-contracts" class="secondary">Airline contracts</button>
+        <button type="button" id="report-tomorrow" class="secondary">Tomorrow’s schedule</button>
         <button type="button" id="restart-shift" class="primary" autofocus>Start new shift</button>
       </div>
+    </div>
+  </dialog>
+  <dialog id="airline-contracts" class="shift-dialog" aria-labelledby="contract-title">
+    <div class="report-head">
+      <div><p id="contract-opening"></p><h2 id="contract-title">Airline contracts</h2></div>
+      <button type="button" id="close-contracts" class="dialog-close" aria-label="Close airline contracts" autofocus>×</button>
+    </div>
+    <div class="report-body upgrade-body">
+      <div id="contract-offers" class="upgrade-offers"></div>
+      <section id="contract-detail" aria-labelledby="contract-route" hidden>
+        <div class="detail-stat"><h3 id="contract-route" tabindex="-1"></h3><b id="contract-status"></b></div>
+        <p id="contract-airline" class="detail-copy"></p>
+        <table class="day-schedule" aria-label="Contract flight times">
+          <thead><tr><th scope="col">Flight</th><th scope="col">Arrival</th><th scope="col">Takeoff</th></tr></thead>
+          <tbody id="contract-services"></tbody>
+        </table>
+        <div id="contract-traffic" class="flow-stats"></div>
+        <p class="detail-copy">Net includes ground handling. Staffing and late fines are charged during the shift.</p>
+        <button type="button" id="preview-contract-schedule" class="secondary">View in tomorrow’s schedule</button>
+      </section>
+      <p id="contract-note" class="detail-copy" role="status"></p>
+    </div>
+    <div id="contract-actions" class="report-actions between-shifts" hidden>
+      <button type="button" id="back-to-contracts" class="secondary">Back to routes</button>
+      <button type="button" id="contract-action" class="primary"></button>
+    </div>
+  </dialog>
+  <dialog id="tomorrow-schedule" class="shift-dialog" aria-labelledby="tomorrow-title">
+    <div class="report-head">
+      <div><p id="tomorrow-day"></p><h2 id="tomorrow-title">Tomorrow’s schedule</h2></div>
+      <button type="button" id="close-tomorrow" class="dialog-close" aria-label="Close tomorrow’s schedule" autofocus>×</button>
+    </div>
+    <div class="report-body">
+      <p id="tomorrow-note" class="detail-copy" hidden></p>
+      <table class="day-schedule" aria-label="Next shift’s flight times">
+        <thead><tr><th scope="col">Flight</th><th scope="col">Arrival</th><th scope="col">Boarding</th><th scope="col">Takeoff</th></tr></thead>
+        <tbody id="tomorrow-rows"></tbody>
+      </table>
     </div>
   </dialog>
   <dialog id="upgrade-shop" class="shift-dialog" aria-labelledby="upgrade-title">
@@ -274,7 +317,7 @@
   <dialog id="reset-dialog" class="shift-dialog" aria-labelledby="reset-title" aria-describedby="reset-description">
     <div class="report-head"><h2 id="reset-title">Reset progress?</h2></div>
     <div class="report-body">
-      <p id="reset-description" class="detail-copy">Start a fresh Day 1 with the starter airport and treasury. This will erase your current shift and saved progress, including purchased upgrades.</p>
+      <p id="reset-description" class="detail-copy">Start a fresh Day 1 with the starter airport and treasury. This will erase your current shift, purchased upgrades, and airline contracts.</p>
       <p id="reset-error" class="detail-copy" role="alert"></p>
     </div>
     <form method="dialog" class="report-actions between-shifts">
