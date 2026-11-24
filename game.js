@@ -1693,6 +1693,28 @@
   const resetDialog = $("#reset-dialog");
   const resetError = $("#reset-error");
 
+  function registerPlanningDialog(dialog, dismissButton) {
+    const closeLabel = dismissButton.getAttribute("aria-label");
+    let opener = null;
+    dismissButton.addEventListener("click", () => dialog.close());
+    dialog.addEventListener("close", () => {
+      if (report.contains(opener)) showShiftReport();
+      opener?.focus({preventScroll: true});
+      opener = null;
+    });
+    return button => {
+      opener = button ?? null;
+      const fromReport = report.contains(opener);
+      dismissButton.textContent = fromReport ? "← Back" : "×";
+      dismissButton.toggleAttribute("data-back", fromReport);
+      dismissButton.setAttribute("aria-label", fromReport ? "Back to shift report" : closeLabel);
+      if (fromReport) report.close();
+      dialog.showModal();
+    };
+  }
+
+  const openTomorrowDialog = registerPlanningDialog(tomorrowDialog, $("#close-tomorrow"));
+
   $("#reset-progress").addEventListener("click", () => {
     resetError.textContent = "";
     resetDialog.showModal();
@@ -1708,7 +1730,7 @@
     window.location.reload();
   });
 
-  function showTomorrowSchedule(previewRoute = null) {
+  function showTomorrowSchedule(previewRoute = null, opener) {
     if (!nextOpening || tomorrowDialog.open) return;
     const {day, seed, overnightAircraft, contracts} = nextOpening;
     const proposed = previewRoute && !contracts.includes(previewRoute) ? previewRoute : null;
@@ -1729,12 +1751,11 @@
         (boardingAt === null ? '—' : scheduleTime(boardingAt)) + '</td><td>' + takeoff + '</td></tr>';
     }).join("");
     $("#tomorrow-schedule .report-body").scrollTop = 0;
-    tomorrowDialog.showModal();
+    openTomorrowDialog(opener);
   }
 
-  $("#view-tomorrow").addEventListener("click", () => showTomorrowSchedule());
-  $("#report-tomorrow").addEventListener("click", () => showTomorrowSchedule());
-  $("#close-tomorrow").addEventListener("click", () => tomorrowDialog.close());
+  $("#view-tomorrow").addEventListener("click", event => showTomorrowSchedule(null, event.currentTarget));
+  $("#report-tomorrow").addEventListener("click", event => showTomorrowSchedule(null, event.currentTarget));
 
   function showShiftReport() {
     if (!nextOpening) return;
@@ -1795,6 +1816,8 @@
   }
 
   const upgradeShop = $("#upgrade-shop");
+  const upgradeDismiss = $("#close-upgrades");
+  const openUpgradeDialog = registerPlanningDialog(upgradeShop, upgradeDismiss);
   const upgradeOffersList = $("#upgrade-offers");
   const upgradeNote = $("#upgrade-note");
   const purchaseUpgrade = $("#buy-upgrade");
@@ -1883,21 +1906,17 @@
     return true;
   }
 
-  function openUpgradeShop() {
+  function openUpgradeShop(event) {
     if (!nextOpening || upgradeShop.open) return;
-    if (report.open) report.close();
-    if (mobileLayout.matches) showMobileView("operations");
     upgradeType = null;
     paintUpgradeShop();
-    upgradeShop.showModal();
+    openUpgradeDialog(event.currentTarget);
   }
 
   $("#view-upgrades").addEventListener("click", openUpgradeShop);
   $("#report-upgrades").addEventListener("click", openUpgradeShop);
-  $("#close-upgrades").addEventListener("click", () => upgradeShop.close());
   upgradeShop.addEventListener("close", () => {
     previewObjects = null;
-    $("#view-upgrades").focus({preventScroll: true});
   });
   upgradeOffersList.addEventListener("click", event => {
     const choice = event.target.closest("button[data-upgrade]");
@@ -1924,11 +1943,12 @@
     previewObjects = null;
     paintUpgradeShop();
     upgradeNote.textContent = name + " purchased for " + formatDay(nextOpening.day) + ".";
-    $("#close-upgrades").focus();
+    upgradeDismiss.focus();
     paint();
   });
 
   const contractDialog = $("#airline-contracts");
+  const openContractDialog = registerPlanningDialog(contractDialog, $("#close-contracts"));
   const contractAction = $("#contract-action");
   const contractOffers = $("#contract-offers");
   let selectedContract = null;
@@ -1966,14 +1986,12 @@
     contractAction.textContent = active ? "End contract" : "Sign route contract";
   }
 
-  function openContracts() {
+  function openContracts(event) {
     if (!nextOpening || contractDialog.open) return;
-    if (report.open) report.close();
-    if (mobileLayout.matches) showMobileView("operations");
     selectedContract = null;
     $("#contract-note").textContent = "";
     paintContract();
-    contractDialog.showModal();
+    openContractDialog(event.currentTarget);
   }
 
   function setRouteContract(id, active) {
@@ -1988,9 +2006,7 @@
 
   $("#view-contracts").addEventListener("click", openContracts);
   $("#report-contracts").addEventListener("click", openContracts);
-  $("#close-contracts").addEventListener("click", () => contractDialog.close());
-  $("#preview-contract-schedule").addEventListener("click", () => showTomorrowSchedule(selectedContract));
-  contractDialog.addEventListener("close", () => $("#view-contracts").focus({preventScroll: true}));
+  $("#preview-contract-schedule").addEventListener("click", event => showTomorrowSchedule(selectedContract, event.currentTarget));
   contractOffers.addEventListener("click", event => {
     const choice = event.target.closest("button[data-contract]");
     if (!choice) return;
@@ -2261,7 +2277,7 @@
   startNextDay.addEventListener("click", beginNextDay);
   $("#continue-shift").addEventListener("click", beginNextDay);
   report.addEventListener("close", () => {
-    if (!shiftComplete() || upgradeShop.open || contractDialog.open) return;
+    if (!shiftComplete() || report.open || upgradeShop.open || contractDialog.open || tomorrowDialog.open) return;
     if (mobileLayout.matches) showMobileView("operations");
     $("#view-report").focus();
   });

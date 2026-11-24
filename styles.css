@@ -296,6 +296,7 @@ button.flight-alert:hover { background: #584933; }
 .report-head p { color: var(--mint); font: 650 .72rem var(--mono); }
 .report-head h2 { margin: 3px 0 0; font-size: 1.55rem; letter-spacing: -.035em; }
 .dialog-close { border: 1px solid var(--line); background: var(--card); border-radius: 7px; min-width: 44px; min-height: 44px; font-size: 1.45rem; }
+.dialog-close[data-back] { padding-inline: 12px; font-size: .86rem; font-weight: 700; white-space: nowrap; }
 .report-body { padding: 16px 18px; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 #report-closure { margin: 0 0 12px; color: var(--amber); font-size: .87rem; font-weight: 650; }
 .report-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin: 0 0 15px; }
@@ -319,6 +320,7 @@ button.flight-alert:hover { background: #584933; }
 .report-actions .detail-copy { margin: 0 0 8px; }
 .between-shifts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .between-shifts button { margin: 0; }
+#between-shifts { margin-bottom: 16px; }
 #continue-shift { grid-column: 1 / -1; }
 .upgrade-body { display: grid; gap: 12px; }
 .upgrade-offers { display: grid; gap: 8px; }
