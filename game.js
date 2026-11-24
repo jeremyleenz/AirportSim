@@ -42,6 +42,7 @@
   const baggageCreditPerPassengerMinute = 10;
   const baggageDelaysPerSatisfactionPoint = 15;
   const maxBaggageSatisfactionLoss = 6;
+  const satisfactionWindow = 3;
   const taxiSpeed = 4;
   const pushbackSpeed = 2.5;
   const taxiSeparation = 24;
@@ -81,7 +82,7 @@
       services: [{number: 712, arrivalMinute: 409, takeoffMinute: 477}, {number: 714, arrivalMinute: 481, takeoffMinute: 548}]},
     sydney: {airline: 1, destination: "Sydney", passengers: 100, incomingPassengers: 61,
       services: [{number: 246, arrivalMinute: 353, takeoffMinute: 419}]},
-    queenstown: {airline: 4, destination: "Queenstown", passengers: 82, incomingPassengers: 48,
+    queenstown: {airline: 4, destination: "Queenstown", passengers: 82, incomingPassengers: 48, minSatisfaction: 90,
       services: [{number: 648, arrivalMinute: 174, takeoffMinute: 234}, {number: 650, arrivalMinute: 263, takeoffMinute: 323}]}
   };
 
@@ -265,7 +266,9 @@
         new Set(overnightAircraft.map(({gate}) => gate)).size !== overnightAircraft.length) return null;
     const contracts = Array.isArray(saved.contracts) ? Object.keys(routeContracts).filter(id => saved.contracts.includes(id))
       : saved.contractActive === true ? ["canberra"] : [];
-    return {day, cash, seed, overnightAircraft, upgrades: purchased, contracts};
+    const satisfactionHistory = Array.isArray(saved.satisfactionHistory)
+      ? saved.satisfactionHistory.filter(score => Number.isInteger(score) && score >= 0 && score <= 100).slice(-satisfactionWindow) : [];
+    return {day, cash, seed, overnightAircraft, upgrades: purchased, contracts, satisfactionHistory};
   }
 
   let savedOpeningText = null;
@@ -286,9 +289,9 @@
     }
   }
 
-  function encodeOpening({day, cash, seed, overnightAircraft, upgrades, contracts = []}) {
+  function encodeOpening({day, cash, seed, overnightAircraft, upgrades, contracts = [], satisfactionHistory = []}) {
     const parked = overnightAircraft.map(({gate, aircraft}) => ({gate: gates[gate].name, airline: airlines[aircraft.airline].code}));
-    return {day, cash, seed, parked, upgrades, contracts};
+    return {day, cash, seed, parked, upgrades, contracts, satisfactionHistory};
   }
 
   function saveOpening(opening, activeShift, completed) {
@@ -308,7 +311,7 @@
 
   const savedOpening = loadOpening();
   const {shift: restoredShift, nextOpening: restoredNextOpening, ...opening} = savedOpening ??
-    {day: 1, cash: startingCash, seed: newShiftSeed(), overnightAircraft: startingAircraft, upgrades: {}, contracts: []};
+    {day: 1, cash: startingCash, seed: newShiftSeed(), overnightAircraft: startingAircraft, upgrades: {}, contracts: [], satisfactionHistory: []};
   let currentOpening = opening;
   const upgradeOffers = airportLayouts.upgrades;
   let purchasedUpgrades = opening.upgrades;
@@ -337,6 +340,9 @@
   let completedCheckpoint;
   let occupancy = passengerFlow.snapshot(state.flights, flow);
   let occupancyDirty = false;
+  if (nextOpening && nextOpening.satisfactionHistory.length === 0) {
+    nextOpening = {...nextOpening, satisfactionHistory: [closingSatisfaction()]};
+  }
 
   function saveShift() {
     lastAutosave = state.playTime;
@@ -1233,12 +1239,27 @@
     return Math.max(55, base - baggageLoss);
   }
 
+  function closingSatisfaction() {
+    return passengerSatisfaction(state.results.filter(({takeoff}) => takeoff !== null).length);
+  }
+
+  function averageSatisfaction(scores) {
+    return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+  }
+
+  function satisfactionProgress(scores, average) {
+    const progress = scores.length < satisfactionWindow ? " · " + scores.length + "/" + satisfactionWindow + " shifts" : "";
+    return Number(average.toFixed(1)) + "%" + progress;
+  }
+
+  function refreshOccupancy() {
+    occupancy = passengerFlow.snapshot(state.flights, flow);
+    occupancyDirty = false;
+    requestDraw = true;
+  }
+
   function paint() {
-    if (occupancyDirty) {
-      occupancy = passengerFlow.snapshot(state.flights, flow);
-      occupancyDirty = false;
-      requestDraw = true;
-    }
+    if (occupancyDirty) refreshOccupancy();
     const minutes = clockMinutes(state.now);
     const time = formatTime(minutes);
     const dispatched = state.results.filter(({takeoff}) => takeoff !== null).length;
@@ -1623,12 +1644,13 @@
   }
 
   function finishShift() {
+    refreshOccupancy();
+    const satisfactionHistory = [...currentOpening.satisfactionHistory, closingSatisfaction()].slice(-satisfactionWindow);
     nextOpening = {day: state.day + 1, cash: treasuryBalance(), seed: newShiftSeed(), overnightAircraft: parkedAircraft(),
-      upgrades: purchasedUpgrades, contracts: currentOpening.contracts};
+      upgrades: purchasedUpgrades, contracts: currentOpening.contracts, satisfactionHistory};
     mapAction = null;
     state.paused = true;
     openingSaved = saveBetweenShifts(nextOpening);
-    occupancyDirty = true;
     announce(state.closedAtCurfew ? "Curfew reached. Your shift report is ready."
       : "Operating day complete. Your shift report is ready.");
     paint();
@@ -1818,8 +1840,10 @@
     const profitValue = $("#report-profit");
     profitValue.textContent = currency.format(profit);
     profitValue.toggleAttribute("data-loss", profit < 0);
+    const {satisfactionHistory} = nextOpening;
     $("#report-delays").innerHTML = stat("Total departure delay", state.delayMinutes + " min") +
-      stat("Final passenger satisfaction", passengerSatisfaction(departed.length) + "%");
+      stat("Final passenger satisfaction", satisfactionHistory.at(-1) + "%") +
+      stat("Rolling satisfaction average", satisfactionProgress(satisfactionHistory, averageSatisfaction(satisfactionHistory)));
     const overnightArrivals = state.flights.filter(isOvernightArrival);
     const arrivalSummary = $("#report-overnight-arrivals");
     arrivalSummary.hidden = overnightArrivals.length === 0;
@@ -2001,33 +2025,53 @@
   const contractAction = $("#contract-action");
   const contractOffers = $("#contract-offers");
   const contractDetail = $("#contract-detail");
+  const contractStatusLabels = {confirmed: "Active", available: "Available", locked: "Locked"};
   let selectedContract = null;
 
+  function contractOfferStatus(id, average) {
+    if (nextOpening.contracts.includes(id)) return "confirmed";
+    const {minSatisfaction} = routeContracts[id];
+    const eligible = minSatisfaction === undefined ||
+      (nextOpening.satisfactionHistory.length >= satisfactionWindow && average >= minSatisfaction);
+    return eligible ? "available" : "locked";
+  }
+
   function paintContract() {
-    const {contracts} = nextOpening;
+    const {contracts, satisfactionHistory} = nextOpening;
+    const average = averageSatisfaction(satisfactionHistory);
     const extraFlights = contracts.reduce((total, id) => total + routeContracts[id].services.length, 0);
     $("#contract-opening").textContent = formatDay(nextOpening.day) + " · " + (scheduleSlots.length + extraFlights) + " departures";
     contractOffers.hidden = selectedContract !== null;
     contractDetail.hidden = selectedContract === null;
     $("#contract-actions").hidden = selectedContract === null;
     if (!selectedContract) {
-      contractOffers.innerHTML = Object.entries(routeContracts).map(([id, {airline, destination, services}]) => {
-        const active = contracts.includes(id);
+      contractOffers.innerHTML = Object.entries(routeContracts).map(([id, {airline, destination, services, minSatisfaction}]) => {
+        const status = contractOfferStatus(id, average);
+        const requirement = status === "locked" ?
+          " · Requires " + minSatisfaction + "% average across " + satisfactionWindow + " shifts" : "";
         return '<button type="button" class="upgrade-offer" data-contract="' + id +
-          '" data-offer-status="' + (active ? "confirmed" : "available") + '"><span class="detail-stat"><strong>' + destination +
+          '" data-offer-status="' + status + '"><span class="detail-stat"><strong>' + destination +
           '</strong><b class="offer-badge"><span class="offer-badge-icon" aria-hidden="true"></span>' +
-          (active ? "Active" : "Available") + '</b></span><span class="detail-copy">' +
-          airlines[airline].name + " · " + services.length + (services.length === 1 ? " daily flight" : " daily flights") + '</span></button>';
+          contractStatusLabels[status] + '</b></span><span class="detail-copy">' +
+          airlines[airline].name + " · " + services.length + (services.length === 1 ? " daily flight" : " daily flights") +
+          requirement + '</span></button>';
       }).join("");
       return;
     }
-    const {airline, destination, incomingPassengers, passengers, services} = routeContracts[selectedContract];
+    const {airline, destination, incomingPassengers, passengers, services, minSatisfaction} = routeContracts[selectedContract];
     const {code, name} = airlines[airline];
-    const active = contracts.includes(selectedContract);
-    contractDetail.dataset.offerStatus = active ? "confirmed" : "available";
+    const status = contractOfferStatus(selectedContract, average);
+    const active = status === "confirmed";
+    contractDetail.dataset.offerStatus = status;
     $("#contract-route").textContent = destination;
     $("#contract-airline").textContent = name;
-    $("#contract-status").textContent = active ? "Active next shift" : "Available";
+    $("#contract-status").textContent = active ? "Active next shift" : contractStatusLabels[status];
+    const requirement = $("#contract-requirement");
+    requirement.hidden = active || minSatisfaction === undefined;
+    if (!requirement.hidden) {
+      requirement.textContent = "Requires at least " + minSatisfaction + "% average satisfaction across your last " +
+        satisfactionWindow + " completed shifts. Your rolling average is " + satisfactionProgress(satisfactionHistory, average) + ".";
+    }
     $("#contract-services").innerHTML = services.map(({number, arrivalMinute, takeoffMinute}) =>
       '<tr><th scope="row">' + code + number + '</th><td>' + scheduleTime(arrivalMinute * secondsPerMinute) +
       '</td><td>' + scheduleTime(takeoffMinute * secondsPerMinute) + '</td></tr>').join("");
@@ -2039,6 +2083,7 @@
       stat("Estimated bags in / out", bagsIn + " / " + bagsOut) +
       stat("Daily net at full boarding", currency.format(count * (baseFlightRevenue + passengers * passengerFare - handlingCost)));
     contractAction.textContent = active ? "End contract" : "Sign route contract";
+    contractAction.disabled = status === "locked";
   }
 
   function openContracts(event) {
@@ -2051,6 +2096,7 @@
 
   function setRouteContract(id, active) {
     if (!nextOpening || !Object.hasOwn(routeContracts, id) || nextOpening.contracts.includes(id) === active) return false;
+    if (active && contractOfferStatus(id, averageSatisfaction(nextOpening.satisfactionHistory)) === "locked") return false;
     const contracts = active ? [...nextOpening.contracts, id] : nextOpening.contracts.filter(route => route !== id);
     const opening = {...nextOpening, contracts};
     if (!saveBetweenShifts(opening)) return false;
@@ -2078,7 +2124,7 @@
     contractOffers.querySelector('[data-contract="' + previous + '"]').focus();
   });
   contractAction.addEventListener("click", () => {
-    if (!nextOpening || !selectedContract) return;
+    if (!nextOpening || !selectedContract || contractAction.disabled) return;
     const signed = !nextOpening.contracts.includes(selectedContract);
     const note = $("#contract-note");
     if (!setRouteContract(selectedContract, signed)) {

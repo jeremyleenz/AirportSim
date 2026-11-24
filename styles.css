@@ -348,7 +348,7 @@ button.flight-alert:hover { background: #584933; }
 [data-offer-status="available"] .offer-badge-icon::before { content: "+"; }
 [data-offer-status="confirmed"] .offer-badge { color: #102b23; background: var(--mint); border-color: var(--mint); }
 [data-offer-status="confirmed"] .offer-badge-icon::before { content: "✓"; }
-[data-offer-status="unaffordable"] .offer-badge { gap: 0; color: var(--muted); background: var(--panel); border-color: #4a6066; }
+[data-offer-status="unaffordable"] .offer-badge, [data-offer-status="locked"] .offer-badge { gap: 0; color: var(--muted); background: var(--panel); border-color: #4a6066; }
 #upgrade-placement { display: grid; gap: 10px; }
 #upgrade-location { margin: 3px 0 0; }
 #upgrade-preview { width: 100%; height: clamp(150px, 29dvh, 240px); border-radius: 8px; }

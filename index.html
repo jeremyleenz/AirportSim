@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=50">
+  <link rel="stylesheet" href="styles.css?v=51">
   <script defer src="renderer.js?v=2"></script>
   <script defer src="layout.js?v=21"></script>
   <script defer src="airport.js?v=40"></script>
   <script defer src="passengers.js?v=54"></script>
   <script defer src="baggage.js?v=24"></script>
-  <script defer src="game.js?v=105"></script>
+  <script defer src="game.js?v=106"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -271,6 +271,7 @@
           <b class="offer-badge"><span class="offer-badge-icon" aria-hidden="true"></span><span id="contract-status"></span></b>
         </div>
         <p id="contract-airline" class="detail-copy"></p>
+        <p id="contract-requirement" class="detail-copy" hidden></p>
         <table class="day-schedule" aria-label="Contract flight times">
           <thead><tr><th scope="col">Flight</th><th scope="col">Arrival</th><th scope="col">Takeoff</th></tr></thead>
           <tbody id="contract-services"></tbody>
