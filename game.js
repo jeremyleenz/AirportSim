@@ -38,6 +38,7 @@
   const severeDelayMinutes = 30;
   const finePerSevereLateMinute = 125;
   const baggageWaitGraceMinutes = 25;
+  const baggageCreditPerPassengerMinute = 10;
   const baggageDelaysPerSatisfactionPoint = 15;
   const maxBaggageSatisfactionLoss = 6;
   const taxiSpeed = 4;
@@ -1180,8 +1181,12 @@
     return Math.round(state.now * baseOperatingRate / secondsPerMinute);
   }
 
+  function baggageServiceCredits() {
+    return Math.round((state.luggage.claimStats.creditWaitSeconds ?? 0) / secondsPerMinute * baggageCreditPerPassengerMinute);
+  }
+
   function treasuryBalance() {
-    return state.cash - baseOperatingCost() - staffingCost("checkIn") - staffingCost("security");
+    return state.cash - baseOperatingCost() - staffingCost("checkIn") - staffingCost("security") - baggageServiceCredits();
   }
 
   function paintBaggageClaim({carousels, waiting, available, automatic}, complete) {
@@ -1256,9 +1261,17 @@
     const scheduleOpen = state.view === "schedule";
     const flightsOpen = state.view === "flights";
     const claimOpen = terminalOpen && state.terminalFocus === "claim";
-    const claimBoard = baggage.claimBoard(state.luggage);
+    const claimBoard = baggage.claimBoard(state.luggage, state.now);
     const chooseClaim = !complete && !claimBoard.automatic && claimBoard.available > 0 && claimBoard.waiting.length > 0;
-    $("#claim-alert").hidden = !chooseClaim || claimOpen;
+    const creditsAccruing = !complete && claimBoard.creditsAccruing;
+    const baggageCredits = currency.format(baggageServiceCredits());
+    const claimAlert = $("#claim-alert");
+    claimAlert.hidden = claimOpen || (!chooseClaim && !creditsAccruing);
+    if (!claimAlert.hidden) {
+      const label = creditsAccruing ? (chooseClaim ? "Assign carousel · " + baggageCredits + " in credits"
+        : "Baggage credits · " + baggageCredits) : "Assign baggage carousel";
+      if (claimAlert.textContent !== label) claimAlert.textContent = label;
+    }
     $(".objective").hidden = !flightsOpen && !complete;
     $("#terminal-tab").setAttribute("aria-pressed", String(terminalOpen));
     $("#schedule-tab").setAttribute("aria-pressed", String(scheduleOpen));
@@ -1296,6 +1309,7 @@
       $("#exiting-count").textContent = occupancy.exiting.length;
       paintStaffing("checkIn");
       paintStaffing("security");
+      $("#claim-service-credits").textContent = baggageCredits;
       paintBaggageClaim(claimBoard, complete);
       $("#lounge-counts").querySelectorAll("b").forEach((count, index) => {
         count.textContent = occupancy.gates[index].length;
@@ -1820,6 +1834,7 @@
       stat("Ground handling", currency.format(-handling)) + stat("Base operating costs", currency.format(0 - baseOperatingCost())) +
       stat("Extra check-in staffing", currency.format(0 - checkIn)) +
       stat("Extra security staffing", currency.format(0 - security)) + stat("Late takeoff fines", currency.format(0 - fines)) +
+      stat("Baggage service credits", currency.format(0 - baggageServiceCredits())) +
       stat("Closing treasury", currency.format(closingCash));
     $("#report-flights").innerHTML = results.map(({id, destination, due, takeoff, missed, fine}) => {
       const fineLabel = fine ? " · " + currency.format(fine) + " fine" : "";
@@ -2487,6 +2502,8 @@
   document.addEventListener("visibilitychange", () => { if (document.hidden) saveShift(); });
   window.addEventListener("pagehide", saveShift);
   $("#objective-curfew").textContent = "Operating day · Curfew " + formatTime(curfewMinutes);
+  $("#claim-credit-rule").textContent = currency.format(baggageCreditPerPassengerMinute) + " per passenger-minute over " +
+    baggageWaitGraceMinutes + " min when a carousel delay contributed to the wait.";
   if (restoredNextOpening) announce(formatDay(state.day) + " shift report restored.");
   else if (restoredShift) announce(formatDay(state.day) + " restored at " + formatTime(clockMinutes(state.now)) + ".");
   else if (savedOpening) announce(formatDay(savedOpening.day) + " restored at opening.");

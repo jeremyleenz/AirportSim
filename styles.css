@@ -242,6 +242,7 @@ button, h1, h2, h3, p { margin: 0; }
 #show-baggage { width: auto; margin: 0 0 0 auto; }
 #show-baggage[data-action-needed] { color: var(--amber); border-color: #a57b4b; }
 #baggage-claim { scroll-margin-top: 10px; }
+#claim-credits { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line); }
 #claim-instruction { margin: 10px 0 6px; }
 .claim-flight { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; }
 .claim-flight strong { font-size: .85rem; }

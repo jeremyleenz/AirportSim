@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=45">
+  <link rel="stylesheet" href="styles.css?v=46">
   <script defer src="renderer.js?v=2"></script>
   <script defer src="layout.js?v=21"></script>
   <script defer src="airport.js?v=40"></script>
   <script defer src="passengers.js?v=54"></script>
-  <script defer src="baggage.js?v=21"></script>
-  <script defer src="game.js?v=97"></script>
+  <script defer src="baggage.js?v=22"></script>
+  <script defer src="game.js?v=98"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -190,6 +190,10 @@
           <div id="baggage-claim" class="terminal-stat">
             <h3 id="baggage-claim-title" tabindex="-1">Baggage claim</h3>
             <div id="carousel-status" class="flow-stats"></div>
+            <div id="claim-credits" class="flow-stats">
+              <div class="detail-stat"><span>Baggage service credits today</span><b id="claim-service-credits"></b></div>
+              <p id="claim-credit-rule" class="detail-copy"></p>
+            </div>
             <div id="claim-queue" hidden>
               <p id="claim-instruction" class="detail-copy"></p>
               <div id="claim-flights" class="flow-stats"></div>
