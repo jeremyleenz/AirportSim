@@ -528,7 +528,7 @@
       const preferred = gateOptions[state.gateFromMap]?.button;
       const gateChoice = gatePicker.hidden ? null
         : preferred && !preferred.disabled ? preferred : gatePicker.querySelector("button:enabled");
-      const action = gateChoice ?? (focus ? flightDetail.querySelector("button:not([hidden]):enabled") : null);
+      const action = gateChoice ?? flightDetail.querySelector(":is(#flight-action, #close-boarding):not([hidden]):enabled");
       if (action) {
         (gateChoice ? gatePicker : action).scrollIntoView({block: "nearest"});
         if (focus) action.focus({preventScroll: true});
@@ -647,6 +647,7 @@
 
   const flightElements = new Map();
   const flightDetail = $("#flight-detail");
+  const detailContent = $("#detail-content");
   const delayNotice = $("#departure-delay-notice");
   const gatePicker = $("#gate-picker");
   const gatePickerLegend = gatePicker.querySelector("legend");
@@ -812,24 +813,24 @@
     }
   }
 
-  function paintFlightProgress(button, flight) {
+  function paintFlightProgress(progress, flight) {
     if (isOvernightArrival(flight)) {
-      button.querySelector(".flight-progress").hidden = true;
+      progress.hidden = true;
       return;
     }
     const {entrance, checkIn, security, gate, gateQueue, boarded, boarding, missed, outside} = occupancy.byFlight.get(flight.id);
     const turnaround = isArriving(flight) || flight.stage === "deplaning";
-    button.querySelector(".flight-progress").hidden = flight.stage === "scheduled" && outside === flight.passengers;
-    button.querySelector(".flight-progress-caption").hidden = !turnaround;
-    button.querySelector(".flight-load b").textContent = turnaround ? flight.passengers : boarded + " / " + flight.passengers;
-    button.querySelector(".flight-load-unit").textContent = turnaround ? "passengers" : "boarded";
-    button.querySelector(".flight-progress-track").hidden = turnaround;
-    button.querySelector(".flight-progress-track span").style.width = boarded / flight.passengers * 100 + "%";
+    progress.hidden = flight.stage === "scheduled" && outside === flight.passengers;
+    progress.querySelector(".flight-progress-caption").hidden = !turnaround;
+    progress.querySelector(".flight-load b").textContent = turnaround ? flight.passengers : boarded + " / " + flight.passengers;
+    progress.querySelector(".flight-load-unit").textContent = turnaround ? "passengers" : "boarded";
+    progress.querySelector(".flight-progress-track").hidden = turnaround;
+    progress.querySelector(".flight-progress-track span").style.width = boarded / flight.passengers * 100 + "%";
     const stages = [[entrance, "waiting at entrance"], [checkIn, "at check-in"], [security, "at security"], [gate + gateQueue, "at gate"],
       [boarding, "walking to aircraft"], [outside, "yet to arrive"], [missed, "empty seats"]];
     const lateWaiting = notifiedLatePassengers(flight);
     const late = lateWaiting ? '<span class="flight-late-passengers">' + latePassengerLabel(lateWaiting) + '</span>' : '';
-    button.querySelector(".flight-stages").innerHTML = stages.filter(([count]) => count > 0)
+    progress.querySelector(".flight-stages").innerHTML = stages.filter(([count]) => count > 0)
       .map(([count, label]) => '<span><b>' + count + '</b> ' + label + '</span>').join("") + late;
   }
 
@@ -940,9 +941,10 @@
     $("#upcoming-count").textContent = upcoming.length;
     $("#upcoming-next").textContent = upcoming.length ? "Next at " + formatTime(clockMinutes(upcoming[0].arrivalAt)) : "";
     const active = new Set(state.flights.map(flight => flight.id));
-    for (const [id, {card}] of flightElements) {
+    for (const [id, {card, progress}] of flightElements) {
       if (!active.has(id)) {
         if (flightDetail.parentNode === card) $("#flight-view").append(flightDetail);
+        progress.remove();
         card.remove();
         flightElements.delete(id);
       }
@@ -975,15 +977,18 @@
           if (!expanded && mobileLayout.matches) revealFlight(false);
         });
         card.append(button);
-        entry = {card, button};
+        entry = {card, button, progress: button.querySelector(".flight-progress")};
         flightElements.set(flight.id, entry);
       }
-      const {card, button} = entry;
+      const {card, button, progress} = entry;
       const expected = flight.stage === "scheduled";
       const list = expected ? upcomingList : flightList;
       if (card.parentNode !== list) list.append(card);
       const expanded = flight.id === state.selected;
       card.classList.toggle("expanded", expanded);
+      // Keep live passenger rows below the controls while this card is expanded.
+      if (expanded && progress.parentNode !== flightDetail) detailContent.before(progress);
+      if (!expanded && progress.parentNode !== button) button.append(progress);
       button.setAttribute("aria-expanded", String(expanded));
       if (expanded) button.setAttribute("aria-controls", flightDetail.id);
       else button.removeAttribute("aria-controls");
@@ -1000,7 +1005,7 @@
       badge.hidden = !boarding.hidden;
       badge.dataset.stage = flight === state.nextDeparture ? "queued" : flight.stage;
       badge.textContent = flightStatus(flight);
-      paintFlightProgress(button, flight);
+      paintFlightProgress(progress, flight);
     }
     $("#flight-view").querySelector(".empty-board").hidden = shiftComplete() || upcoming.length !== state.flights.length;
     const occupied = gates.filter((_, index) => flightAtGate(index)).length;

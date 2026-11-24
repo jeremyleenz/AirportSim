@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b21">
   <title>Airport Ops — Airport Simulator</title>
-  <link rel="stylesheet" href="styles.css?v=47">
+  <link rel="stylesheet" href="styles.css?v=48">
   <script defer src="renderer.js?v=2"></script>
   <script defer src="layout.js?v=21"></script>
   <script defer src="airport.js?v=40"></script>
   <script defer src="passengers.js?v=54"></script>
   <script defer src="baggage.js?v=23"></script>
-  <script defer src="game.js?v=100"></script>
+  <script defer src="game.js?v=101"></script>
 </head>
 <body>
   <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -118,16 +118,16 @@
             <div id="stand-heading" class="detail-head" hidden>
               <p id="stand-name"></p><h3 id="stand-title" tabindex="-1">Stand available</h3>
             </div>
-            <p id="flight-airline" class="detail-copy" hidden></p>
-            <div id="detail-content"></div>
-            <div id="late-passengers" class="late-passengers flow-stats" hidden></div>
-            <p id="departure-delay-notice" class="detail-copy departure-delay" hidden></p>
             <fieldset id="gate-picker" class="gate-picker" hidden>
               <legend>Assign a gate</legend>
               <div id="gate-options" class="gate-options"></div>
             </fieldset>
             <button type="button" id="flight-action" class="primary"></button>
             <button type="button" id="close-boarding" class="secondary boarding-cutoff" hidden></button>
+            <p id="flight-airline" class="detail-copy" hidden></p>
+            <div id="detail-content"></div>
+            <div id="late-passengers" class="late-passengers flow-stats" hidden></div>
+            <p id="departure-delay-notice" class="detail-copy departure-delay" hidden></p>
             <button type="button" id="flight-upgrade" class="secondary" hidden></button>
           </div>
         </section>

@@ -161,6 +161,7 @@ button, h1, h2, h3, p { margin: 0; }
 .flight { width: 100%; text-align: left; min-height: 59px; display: grid; grid-template-columns: 34px minmax(0, 1fr) max-content 10px; align-items: center; gap: 8px; background: transparent; border: 0; border-radius: 7px; padding: 8px; }
 .flight:hover { background: #253937; }
 .flight[aria-expanded="true"] { border-radius: 7px 7px 0 0; }
+.flight-card.expanded > .flight { min-height: 76px; }
 .flight-chevron { width: 7px; height: 7px; margin-bottom: 3px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); rotate: 45deg; }
 .expanded .flight-chevron { margin: 3px 0 0; border-color: var(--mint); rotate: 225deg; }
 .airline-mark { display: grid; place-items: center; width: 34px; height: 34px; color: var(--livery); border-radius: 6px; background: color-mix(in srgb, var(--livery) 14%, #14242b); }
@@ -195,6 +196,8 @@ button, h1, h2, h3, p { margin: 0; }
 .flight-boarding time { font: 700 1.25rem/1 var(--mono); }
 .flight-detail { background: #1a2b32; border: 1px solid #33484d; border-radius: 10px; margin-top: 14px; padding: 13px; }
 .flight-card > .flight-detail { margin: 0; padding: 11px 12px 12px; border: 0; border-top: 1px solid #8fa8a338; border-radius: 0; background: transparent; }
+.flight-detail > .flight-progress { margin-bottom: 10px; padding: 0 0 8px; border-top: 0; border-bottom: 1px solid #8fa8a338; }
+.flight-detail > .gate-picker, #flight-action, #close-boarding { margin: 0 0 10px; }
 .detail-head { margin-bottom: 8px; }
 .detail-head p { color: var(--dim); }
 .detail-head h3 { font-size: 1.26rem; line-height: 1.2; letter-spacing: -.03em; margin-top: 4px; }
