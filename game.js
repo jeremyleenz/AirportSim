@@ -78,7 +78,9 @@
     "gold-coast": {airline: 2, destination: "Gold Coast", passengers: 92, incomingPassengers: 56,
       services: [{number: 712, arrivalMinute: 409, takeoffMinute: 477}, {number: 714, arrivalMinute: 481, takeoffMinute: 548}]},
     sydney: {airline: 1, destination: "Sydney", passengers: 100, incomingPassengers: 61,
-      services: [{number: 246, arrivalMinute: 353, takeoffMinute: 419}]}
+      services: [{number: 246, arrivalMinute: 353, takeoffMinute: 419}]},
+    queenstown: {airline: 4, destination: "Queenstown", passengers: 82, incomingPassengers: 48,
+      services: [{number: 648, arrivalMinute: 174, takeoffMinute: 234}, {number: 650, arrivalMinute: 263, takeoffMinute: 323}]}
   };
 
   function timetablePattern(day) {
