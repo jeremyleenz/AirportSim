@@ -34,7 +34,7 @@
   const pushbackWarningMinutes = 5;
   const flightReminderSeconds = 9;
   const departureGraceMinutes = 5;
-  const finePerLateMinute = 25;
+  const finePerLateMinute = 75;
   const severeDelayMinutes = 30;
   const finePerSevereLateMinute = 125;
   const baggageWaitGraceMinutes = 25;
