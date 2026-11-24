@@ -83,7 +83,21 @@ const airportLayouts = (() => {
     carousels: [{...starter.baggageClaim.carousels[0], x: 25.8, z: 23.65}]
   };
   const sharedBenchesBetweenGates = [9.55, 11.25, 12.95, 14.65].map(z => ({x: 12.5, z, aisleX: 14.65}));
-  const currentGateLayoutRevision = 4;
+  const seatingNook = {x: 18.55, z: 24.8};
+  const nookBenches = [23.35, 26.55].flatMap(z => [
+    {x: 16.25, z, aisleX: 14.6}, {x: 21.1, z, aisleX: 22.95}
+  ]);
+  const cornerRestroomLobby = {
+    ...starter.restrooms, lobbyLeft: regional.terminal.right, lobbyRight: insetTerminal.right,
+    x: (regional.terminal.right + insetTerminal.right) / 2, aisleX: regional.terminal.right - 1.55
+  };
+  const concourseWithToiletLobby = {
+    terminal: insetTerminal,
+    restrooms: {...toiletsBesideCheckIn, lobbyEntryZ: starter.security.checkpointZ},
+    baggageClaim: insetClaim,
+    sharedBenches: sharedBenchesBetweenGates
+  };
+  const currentGateLayoutRevision = 5;
   const gateLayouts = {
     2: {
       terminal: insetTerminal, restrooms: toiletsBesideCheckIn, baggageClaim: insetClaim,
@@ -91,23 +105,24 @@ const airportLayouts = (() => {
     },
     3: {
       terminal: {...insetTerminal, securityEndX: 14.1},
-      restrooms: {...starter.restrooms, lobbyLeft: regional.terminal.right, lobbyRight: insetTerminal.right,
-        x: (regional.terminal.right + insetTerminal.right) / 2, aisleX: regional.terminal.right - 1.55},
+      restrooms: cornerRestroomLobby,
       baggageClaim: {...insetClaim, leftX: 14.1, benchRows: [{z: 27.55, direction: -1, centers: [19.5, 29.75, 44.15]}]},
       sharedBenches: sharedBenchesBetweenGates
     },
+    4: concourseWithToiletLobby,
     [currentGateLayoutRevision]: {
-      terminal: insetTerminal,
-      restrooms: {...toiletsBesideCheckIn, lobbyEntryZ: starter.security.checkpointZ},
-      baggageClaim: insetClaim,
-      sharedBenches: sharedBenchesBetweenGates
+      ...concourseWithToiletLobby,
+      restrooms: cornerRestroomLobby,
+      seatingNook,
+      baggageClaim: {...insetClaim, singleCarouselBenchRows: [{z: 23.3, direction: 1, centers: [44.15]}]},
+      sharedBenches: [...sharedBenchesBetweenGates, ...nookBenches]
     }
   };
   const expandedClaimCarousel = {x: 38.75, z: 23.65};
   const upgrades = {
     gate: {
       name: "Third gate · A03", price: 140000, description: "Handle a third aircraft at the terminal.",
-      site: {id: "east-concourse", name: "East end of the concourse", note: "The concourse extends east with shared seating, a toilet lobby beside check-in and a larger baggage claim hall."}
+      site: {id: "east-concourse", name: "East end of the concourse", note: "The concourse extends east with shared seating, a corner toilet lobby and a larger baggage claim hall."}
     },
     carousel: {
       name: "Second baggage carousel", price: 115000, description: "Handle two baggage claims at once.",
@@ -153,6 +168,7 @@ const airportLayouts = (() => {
       gates: gate ? regional.gates : starter.gates,
       airfield: gate ? {...airfield, apronRight: regional.airfield.apronRight} : airfield,
       terminal: expanded ? expanded.terminal : extension ? {...terminal, right: terminal.right + extension} : terminal,
+      seatingNook: expanded?.seatingNook,
       restrooms: expanded ? expanded.restrooms
         : extension ? {...restrooms, x: restrooms.x + extension, aisleX: restrooms.aisleX + extension} : restrooms,
       sharedBenches: expanded ? [...starter.sharedBenches, ...expanded.sharedBenches] : starter.sharedBenches,
@@ -161,7 +177,9 @@ const airportLayouts = (() => {
         outerX: claim.outerX + extension,
         exitX: claim.exitX + extension,
         carousels: extension ? carousels.map(belt => ({...belt, x: belt.x + extension})) : carousels,
-        benchRows: carousel && !expanded ? [{z: 28.18, direction: -1}] : claim.benchRows,
+        benchRows: carousel
+          ? (expanded ? claim.benchRows : [{z: 28.18, direction: -1}])
+          : [...claim.benchRows, ...(claim.singleCarouselBenchRows ?? [])],
         standingRows: carousel && !expanded ? claim.standingRows.slice(0, 3) : claim.standingRows
       },
       security: lane ? {

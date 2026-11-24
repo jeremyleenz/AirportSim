@@ -83,7 +83,7 @@ function createAirport(layout) {
   const loungeBenches = [-7.32, 1.28, 4.17, 7.06];
   const toiletBowlOffset = .76;
   const toiletSeatHeight = .30;
-  const {sharedBenches, cafeTables, restrooms} = layout;
+  const {sharedBenches, cafeTables, restrooms, seatingNook} = layout;
   const restroomStalls = Array.from({length: restrooms?.roomCount ?? 0}, (_, index) => {
     const {x, frontZ, roomSize, roomCount, aisleX, approachZ, doorZ, direction = 1} = restrooms;
     const left = (index - roomCount / 2) * roomSize;
@@ -455,6 +455,7 @@ function createAirport(layout) {
     }
 
     for (const {x, z} of sharedBenches) bench(mesh, x, z, "#63836c");
+    if (seatingNook) drawSeatingNook(mesh);
     if (restrooms?.lobbyEntryZ !== undefined) drawToiletLobbyBesideCheckIn(mesh);
     else if (restrooms?.direction === -1) drawEarlierConcourse(mesh);
     else if (restrooms) restroomLobby(mesh);
@@ -731,6 +732,18 @@ function createAirport(layout) {
     for (const x of [securityEndX + .7, claimLeft - .72]) planter(mesh, x, floor, 22.8, 1.18);
     mesh.rect(42.1, floor + .017, 11.9, 8.8, 4.2, "#b8c9bf");
     planter(mesh, 47.8, floor, 13.15, 1.3);
+  }
+
+  function drawSeatingNook(mesh) {
+    const {x, z} = seatingNook;
+    mesh.rect(x, floor + .024, z, 9.65, 6.9, "#c7d7ca");
+    mesh.box(x, floor, z + .28, 1.7, .34, 2.45, "#8caa9c");
+    mesh.box(x, floor + .34, z + .28, 1.8, .09, 2.53, "#c2cfc0");
+    for (const [dx, dz, size] of [[-.24, -.46, .95], [.28, .24, 1.25], [-.16, .91, .83]]) {
+      planter(mesh, x + dx, floor + .41, z + dz, size);
+    }
+    planter(mesh, x - 5.12, floor, z + 2.18, 1.15);
+    planter(mesh, x + 5.12, floor, z - 2.4, 1.15);
   }
 
   function drawToiletLobbyBesideCheckIn(mesh) {
