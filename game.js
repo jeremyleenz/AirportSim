@@ -1919,9 +1919,13 @@
     if (!upgradeType) {
       upgradeOffersList.innerHTML = Object.entries(upgradeOffers).map(([type, offer]) => {
         const site = airportLayouts.upgradeSite(type, nextOpening.upgrades[type]);
-        return '<button type="button" class="upgrade-offer" data-upgrade="' + type + '"' + (site ? ' disabled' : '') +
-          '><span class="detail-stat"><strong>' + offer.name + '</strong><b>' + (site ? 'Purchased' : currency.format(offer.price)) +
-          '</b></span><span class="detail-copy">' + (site ? site.name : offer.description) + '</span></button>';
+        const shortfall = Math.max(0, offer.price - nextOpening.cash);
+        const status = site ? "confirmed" : shortfall ? "unaffordable" : "available";
+        const description = site ? site.name : offer.description + (shortfall ? " · " + currency.format(shortfall) + " short" : "");
+        return '<button type="button" class="upgrade-offer" data-upgrade="' + type + '" data-offer-status="' + status + '"' +
+          (site ? ' disabled' : '') + '><span class="detail-stat"><strong>' + offer.name +
+          '</strong><b class="offer-badge"><span class="offer-badge-icon" aria-hidden="true"></span>' +
+          (site ? "Purchased" : currency.format(offer.price)) + '</b></span><span class="detail-copy">' + description + '</span></button>';
       }).join("");
       return;
     }
@@ -2005,9 +2009,9 @@
     if (!selectedContract) {
       contractOffers.innerHTML = Object.entries(routeContracts).map(([id, {airline, destination, services}]) => {
         const active = contracts.includes(id);
-        return '<button type="button" class="upgrade-offer contract-offer" data-contract="' + id +
-          '" data-contract-state="' + (active ? "active" : "available") + '"><span class="detail-stat"><strong>' + destination +
-          '</strong><b class="contract-badge"><span class="contract-badge-icon" aria-hidden="true"></span>' +
+        return '<button type="button" class="upgrade-offer" data-contract="' + id +
+          '" data-offer-status="' + (active ? "confirmed" : "available") + '"><span class="detail-stat"><strong>' + destination +
+          '</strong><b class="offer-badge"><span class="offer-badge-icon" aria-hidden="true"></span>' +
           (active ? "Active" : "Available") + '</b></span><span class="detail-copy">' +
           airlines[airline].name + " · " + services.length + (services.length === 1 ? " daily flight" : " daily flights") + '</span></button>';
       }).join("");
@@ -2016,7 +2020,7 @@
     const {airline, destination, incomingPassengers, passengers, services} = routeContracts[selectedContract];
     const {code, name} = airlines[airline];
     const active = contracts.includes(selectedContract);
-    contractDetail.dataset.contractState = active ? "active" : "available";
+    contractDetail.dataset.offerStatus = active ? "confirmed" : "available";
     $("#contract-route").textContent = destination;
     $("#contract-airline").textContent = name;
     $("#contract-status").textContent = active ? "Active next shift" : "Available";

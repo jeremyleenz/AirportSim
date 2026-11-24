@@ -333,17 +333,9 @@ button.flight-alert:hover { background: #584933; }
 .upgrade-offer:hover:not(:disabled) { border-color: #7fb39a; background: #243a3d; }
 .upgrade-offer strong { color: var(--light); font-size: .92rem; }
 .upgrade-offer .detail-copy { margin: 0; }
-.upgrade-offer:disabled b { color: var(--mint); }
-#upgrade-placement { display: grid; gap: 10px; }
-#upgrade-location { margin: 3px 0 0; }
-#upgrade-preview { width: 100%; height: clamp(150px, 29dvh, 240px); border-radius: 8px; }
-#upgrade-note { margin: 0; }
-#upgrade-note:empty { display: none; }
-#flight-airline { margin-bottom: 7px; }
-.schedule-airline { display: block; color: var(--muted); font-size: .72rem; }
-.contract-offer[data-contract-state="active"] { border-color: #4c7564; background: #203934; }
-.contract-offer[data-contract-state="active"]:hover { background: #29483f; }
-.detail-stat .contract-badge {
+.upgrade-offer[data-offer-status="confirmed"] { border-color: #4c7564; background: #203934; }
+.upgrade-offer[data-offer-status="confirmed"]:hover:not(:disabled) { background: #29483f; }
+.detail-stat .offer-badge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -353,9 +345,17 @@ button.flight-alert:hover { background: #584933; }
   color: var(--amber);
   background: #302a20;
 }
-.contract-badge-icon::before { content: "+"; }
-[data-contract-state="active"] .contract-badge { color: #102b23; background: var(--mint); border-color: var(--mint); }
-[data-contract-state="active"] .contract-badge-icon::before { content: "✓"; }
+[data-offer-status="available"] .offer-badge-icon::before { content: "+"; }
+[data-offer-status="confirmed"] .offer-badge { color: #102b23; background: var(--mint); border-color: var(--mint); }
+[data-offer-status="confirmed"] .offer-badge-icon::before { content: "✓"; }
+[data-offer-status="unaffordable"] .offer-badge { gap: 0; color: var(--muted); background: var(--panel); border-color: #4a6066; }
+#upgrade-placement { display: grid; gap: 10px; }
+#upgrade-location { margin: 3px 0 0; }
+#upgrade-preview { width: 100%; height: clamp(150px, 29dvh, 240px); border-radius: 8px; }
+#upgrade-note { margin: 0; }
+#upgrade-note:empty { display: none; }
+#flight-airline { margin-bottom: 7px; }
+.schedule-airline { display: block; color: var(--muted); font-size: .72rem; }
 #contract-detail { display: grid; gap: 12px; }
 #contract-airline { margin-top: -8px; }
 #contract-note:empty { display: none; }
