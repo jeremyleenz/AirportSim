@@ -56,9 +56,10 @@
   // Times are minutes after opening. Overnight aircraft operate the first departures.
   const scheduleSlots = [
     [0, 0, 214, 4, 74], [1, 1, 507, 10, 119], [2, 2, 318, 86, 155],
-    [3, 3, 126, 132, 199], [5, 1, 201, 162, 236], [0, 2, 216, 211, 281],
-    [1, 3, 509, 248, 320], [2, 0, 320, 290, 365], [3, 1, 128, 332, 404],
-    [4, 2, 437, 374, 449], [5, 3, 203, 419, 493], [0, 0, 218, 463, 533]
+    // Closer turnarounds build from late morning through the mid-afternoon peak.
+    [3, 3, 126, 129, 193], [5, 1, 201, 159, 223], [0, 2, 216, 188, 253],
+    [1, 3, 509, 222, 286], [2, 0, 320, 255, 321], [3, 1, 128, 290, 356],
+    [4, 2, 437, 324, 391], [5, 3, 203, 360, 428], [0, 0, 218, 399, 469]
   ];
   const overnightArrivalCounts = [2, 1, 0, 1];
   const overnightArrivalSlots = [[5, 0, 702, 28], [4, 2, 704, 14]];
