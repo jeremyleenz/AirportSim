@@ -8,6 +8,7 @@
   const startingCash = 60000;
   const startingAircraft = [{gate: 0, aircraft: {airline: 0}}];
   const progressKey = "airport-ops-opening-v1";
+  const autosaveInterval = 10;
   const baseOperatingRate = 8;
   const staffingRates = {checkIn: 10, security: 15};
   const counterNames = {checkIn: "Check-in station", security: "Security lane"};
@@ -133,6 +134,74 @@
       movements: new Map(), taxiQueue: [], nextDeparture: null, luggage: baggage.create(baggageWaitGraceMinutes * secondsPerMinute)};
   }
 
+  // Queues, movements and baggage share objects with the flight manifests. Save those references together.
+  function encodeShift(shift) {
+    const objects = [];
+    const indices = new Map();
+    function encode(value) {
+      if (value === undefined) return [-1];
+      if (value === Infinity) return [-2];
+      if (value === -Infinity) return [-3];
+      if (Number.isNaN(value)) return [-4];
+      if (value === null || typeof value !== "object") return value;
+      if (!indices.has(value)) {
+        indices.set(value, objects.length);
+        objects.push(value);
+      }
+      return [indices.get(value)];
+    }
+    encode(shift);
+    const nodes = [];
+    for (const object of objects) {
+      if (Array.isArray(object)) nodes.push(["array", object.map(encode)]);
+      else if (object instanceof Map) nodes.push(["map", Array.from(object, ([key, value]) => [encode(key), encode(value)])]);
+      else nodes.push(["object", Object.entries(object).map(([key, value]) => [key, encode(value)])]);
+    }
+    return {version: 1, nodes};
+  }
+
+  function decodeShift(saved, day, openingCash) {
+    if (saved?.version !== 1 || !Array.isArray(saved.nodes)) return null;
+    try {
+      const objects = saved.nodes.map(([type]) => {
+        if (type === "array") return [];
+        if (type === "map") return new Map();
+        if (type === "object") return {};
+        throw new Error("Unknown shift save node");
+      });
+      const specialValues = [undefined, Infinity, -Infinity, NaN];
+      function decode(value) {
+        if (!Array.isArray(value)) return value;
+        const [index] = value;
+        if (!Number.isInteger(index) || index < -specialValues.length || index >= objects.length) {
+          throw new Error("Invalid shift save reference");
+        }
+        return index < 0 ? specialValues[-index - 1] : objects[index];
+      }
+      saved.nodes.forEach(([type, entries], index) => {
+        const object = objects[index];
+        if (type === "array") {
+          for (const entry of entries) object.push(decode(entry));
+        } else if (type === "map") {
+          for (const [key, value] of entries) object.set(decode(key), decode(value));
+        } else {
+          for (const [key, value] of entries) {
+            Object.defineProperty(object, key, {value: decode(value), writable: true, enumerable: true, configurable: true});
+          }
+        }
+      });
+      const {state, flow} = objects[0];
+      if (state?.day !== day || state.openingCash !== openingCash || !Number.isFinite(state.now) ||
+          state.now < 0 || state.now >= curfewAt || typeof state.paused !== "boolean" ||
+          !Array.isArray(state.flights) || !(state.movements instanceof Map) ||
+          !(state.luggage?.nextFeedAt instanceof Map) || !Array.isArray(flow?.boarding) ||
+          !(flow.claimSpots instanceof Map)) return null;
+      return {state, flow};
+    } catch {
+      return null;
+    }
+  }
+
   let savedOpeningText = null;
   function loadOpening() {
     try {
@@ -150,19 +219,20 @@
           new Set(overnightAircraft.map(({gate}) => gate)).size !== overnightAircraft.length) return null;
       const purchased = Object.fromEntries(Object.keys(airportLayouts.upgrades).flatMap(type =>
         airportLayouts.upgradeSite(type, upgrades?.[type]) ? [[type, upgrades[type]]] : []));
-      return {day, cash, seed, overnightAircraft, upgrades: purchased};
+      return {day, cash, seed, overnightAircraft, upgrades: purchased, shift: decodeShift(saved.shift, day, cash)};
     } catch {
       return null;
     }
   }
 
-  function saveOpening({day, cash, seed, overnightAircraft, upgrades}) {
+  function saveOpening({day, cash, seed, overnightAircraft, upgrades}, activeShift) {
     const parked = overnightAircraft.map(({gate, aircraft}) => ({gate: gates[gate].name, airline: airlines[aircraft.airline].code}));
     try {
       const storage = window.localStorage;
       // A shift in an older tab must not overwrite progress saved since it opened.
       if (storage.getItem(progressKey) !== savedOpeningText) return false;
-      const checkpoint = JSON.stringify({day, cash, seed, parked, upgrades});
+      const shift = activeShift && encodeShift(activeShift);
+      const checkpoint = JSON.stringify({day, cash, seed, parked, upgrades, shift});
       storage.setItem(progressKey, checkpoint);
       savedOpeningText = checkpoint;
       return true;
@@ -172,27 +242,39 @@
   }
 
   const savedOpening = loadOpening();
+  const {shift: restoredShift, ...opening} = savedOpening ??
+    {day: 1, cash: startingCash, seed: newShiftSeed(), overnightAircraft: startingAircraft, upgrades: {}};
+  let currentOpening = opening;
   const upgradeOffers = airportLayouts.upgrades;
-  let purchasedUpgrades = savedOpening?.upgrades ?? {};
+  let purchasedUpgrades = opening.upgrades;
   let airport = createAirport(airportLayouts.withUpgrades(purchasedUpgrades));
   let passengerFlow = createPassengerFlow(airport);
   let baggage = createBaggage(airport);
   const {gates, runwayZ, taxiwayZ, floor} = airport;
   const holdingPosition = {x: 44, z: taxiwayZ, angle: -Math.PI / 2};
-  let state = savedOpening
-    ? createShift(savedOpening.day, savedOpening.overnightAircraft, savedOpening.cash, savedOpening.seed)
-    : createShift(1, startingAircraft);
+  let state = restoredShift?.state ?? createShift(opening.day, opening.overnightAircraft, opening.cash, opening.seed);
   let nextOpening = null;
   let openingSaved = false;
+  let lastAutosave = state.playTime;
+  let saveWarning = false;
+  let resettingProgress = false;
   let mapAction = null;
   const statusText = {
     scheduled: "Expected",
     parked: "At gate", deplaning: "Deplaning", boarding: "Boarding", closing: "Boarding closed", ready: "Ready", holding: "Holding",
     reserved: "Gate reserved", inbound: "Taxiing in", outbound: "Departing", overnight: "Parked overnight"
   };
-  let flow = passengerFlow.create();
+  let flow = restoredShift?.flow ?? passengerFlow.create();
   let occupancy = passengerFlow.snapshot(state.flights, flow);
   let occupancyDirty = false;
+
+  function saveShift() {
+    lastAutosave = state.playTime;
+    if (resettingProgress || shiftComplete()) return;
+    const saved = saveOpening(currentOpening, {state, flow});
+    if (!saved && !saveWarning) announce("Progress could not be saved. Check browser storage and keep this tab open.");
+    saveWarning = !saved;
+  }
 
   let renderer, scene;
   let planes, counterMarkers;
@@ -1356,6 +1438,7 @@
     }
     returnToMapAfter("flight", flight.id);
     paint();
+    saveShift();
   }
 
   function assignGate(gate) {
@@ -1373,6 +1456,7 @@
     returnToMapAfter("flight", flight.id);
     paint();
     if (!mobileLayout.matches || game.dataset.mobileView === "operations") revealFlight();
+    saveShift();
   }
 
   function closeSelectedBoarding() {
@@ -1386,6 +1470,7 @@
     announce(flight.id + " boarding closed. " + missed + " missed the flight.");
     returnToMapAfter("flight", flight.id);
     paint();
+    saveShift();
   }
 
   function finishDeparture({flight, start, liftoff}) {
@@ -1500,7 +1585,7 @@
   }
 
   function update(dt) {
-    if (state.paused || resetDialog.open) return;
+    if (state.paused || document.hidden || resetDialog.open) return;
     state.playTime += dt;
     let remaining = dt * state.speed;
     // Keep queue processing and walking on small steps at accelerated speeds.
@@ -1527,6 +1612,7 @@
       resetError.textContent = "Couldn’t reset progress. Reload the game and try again. Make sure browser storage is available.";
       return;
     }
+    resettingProgress = true;
     window.location.reload();
   });
 
@@ -1865,6 +1951,7 @@
     if (shiftComplete()) return;
     state.paused = !state.paused;
     paint();
+    saveShift();
   }
 
   $("#flights-tab").addEventListener("click", () => notifyTab("flights"));
@@ -1883,6 +1970,7 @@
       announce(claimFlight + " baggage assigned to Carousel " + number + ".");
       returnToMapAfter("claim");
       paint();
+      saveShift();
     }
   });
   $("#all-staffing").addEventListener("click", () => {
@@ -1910,6 +1998,7 @@
     if (!nextOpening) return;
     const {day, cash, seed, overnightAircraft, upgrades} = nextOpening;
     if (!openingSaved) openingSaved = saveOpening(nextOpening);
+    currentOpening = nextOpening;
     nextOpening = null;
     if (purchasedUpgrades !== upgrades) {
       purchasedUpgrades = upgrades;
@@ -1925,6 +2014,8 @@
       }
     }
     state = createShift(day, overnightAircraft, cash, seed);
+    lastAutosave = state.playTime;
+    saveWarning = false;
     scheduleRows = buildScheduleRows();
     flow = passengerFlow.create();
     buildStaffingIndicators();
@@ -1957,6 +2048,7 @@
     if (fromFlight) returnToMapAfter("flight", state.selected);
     else returnToMapAfter("staffing", type);
     paint();
+    saveShift();
   }
   function buildStaffingIndicators() {
     for (const type of Object.keys(staffingRates)) {
@@ -1977,6 +2069,7 @@
   $("#fast-forward-toggle").addEventListener("click", () => {
     state.speed = state.speed === fastForwardSpeed ? 1 : fastForwardSpeed;
     paint();
+    saveShift();
   });
   function zoom(factor, anchor) {
     if (!renderer) return;
@@ -2115,6 +2208,7 @@
   function frame(timestamp) {
     update(Math.max(0, Math.min(.15, (timestamp - lastFrame) / 1000)));
     lastFrame = timestamp;
+    if (state.playTime - lastAutosave >= autosaveInterval) saveShift();
     const drawDue = requestDraw || (!shiftComplete() && !state.paused && timestamp - lastDraw >= 32);
     if ((drawDue || !renderer) && (occupancyDirty || (!state.paused && timestamp - lastPaint > 160))) {
       paint();
@@ -2129,8 +2223,11 @@
   }
   // Updating the scene once on paused commands keeps gate highlights and the checkpoint in sync.
   document.addEventListener("click", () => { requestDraw = true; });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) saveShift(); });
+  window.addEventListener("pagehide", saveShift);
   $("#objective-curfew").textContent = "Operating day · Curfew " + formatTime(curfewMinutes);
-  if (savedOpening) announce(formatDay(savedOpening.day) + " restored at opening.");
+  if (restoredShift) announce(formatDay(state.day) + " restored at " + formatTime(clockMinutes(state.now)) + ".");
+  else if (savedOpening) announce(formatDay(savedOpening.day) + " restored at opening.");
   fit();
   paint();
   requestAnimationFrame(frame);

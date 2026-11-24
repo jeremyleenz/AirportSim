@@ -14,7 +14,7 @@ In-game prompts guide players through gate assignment and dispatch as those acti
 
 The closing treasury carries into the next day after base operating costs, extra staffing, ground handling, and fines. The base rate covers one staffed check-in counter, one staffed security lane, and keeping the terminal open. The shift report shows the opening and closing balances, the cost breakdown, and the time spent waiting for a free baggage carousel. At airports with two carousels, it also shows time spent waiting for the player to assign an available carousel.
 
-At the end of each shift, the game saves the next day, treasury, timetable, and overnight aircraft in the browser. Reopening starts the simulation at the saved morning. Players can use **Reset progress** in the Terminal tab and confirm to start a fresh Day 1 with the starter airport and treasury.
+Progress saves in the browser during each shift, including when players pause or leave the tab. Reopening resumes at the saved time and preserves the pause state. At the end of each shift, the game saves the next day, treasury, timetable, and overnight aircraft. Players can use **Reset progress** in the Terminal tab and confirm to start a fresh Day 1 with the starter airport and treasury.
 
 The base schedule stays available after a loss so players can earn money back through operations.
 
