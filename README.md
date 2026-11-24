@@ -12,7 +12,7 @@ To start over, open **Operations → Terminal** and choose **Reset progress** at
 
 Between shifts, open **Airport upgrades** to buy a second baggage carousel, a third security lane, a third check-in desk, or Gate A03. You can buy several upgrades if the treasury covers them. The confirmation screen previews where each upgrade will go. The game saves the purchase and location together with the updated treasury. Purchased facilities are available the next morning.
 
-Open **Airline contracts** between shifts to sign or end routes to Christchurch, Canberra, and the Gold Coast. Christchurch adds one daily turnaround. Canberra and the Gold Coast each add two. With all three signed, the schedule has 17 daily departures. Contract changes start the next morning.
+Open **Airline contracts** between shifts to sign or end routes to Christchurch, Canberra, the Gold Coast, and Sydney. Christchurch and Sydney each add one daily turnaround. Canberra and the Gold Coast each add two. Sydney arrives at 14:35 during the afternoon peak. With all four signed, the schedule has 18 daily departures. Contract changes start the next morning.
 
 The base timetable cycles through a standard day, a lunchtime rush, and a late-afternoon rush. Use **Tomorrow’s schedule** between shifts to see the next day’s flight times. Open it from a contract to preview how that route fits before signing.
 

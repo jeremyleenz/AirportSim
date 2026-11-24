@@ -76,7 +76,9 @@
     canberra: {airline: 4, destination: "Canberra", passengers: 88, incomingPassengers: 54,
       services: [{number: 604, arrivalMinute: 336, takeoffMinute: 402}, {number: 606, arrivalMinute: 433, takeoffMinute: 499}]},
     "gold-coast": {airline: 2, destination: "Gold Coast", passengers: 92, incomingPassengers: 56,
-      services: [{number: 712, arrivalMinute: 409, takeoffMinute: 477}, {number: 714, arrivalMinute: 481, takeoffMinute: 548}]}
+      services: [{number: 712, arrivalMinute: 409, takeoffMinute: 477}, {number: 714, arrivalMinute: 481, takeoffMinute: 548}]},
+    sydney: {airline: 1, destination: "Sydney", passengers: 100, incomingPassengers: 61,
+      services: [{number: 246, arrivalMinute: 353, takeoffMinute: 419}]}
   };
 
   function timetablePattern(day) {

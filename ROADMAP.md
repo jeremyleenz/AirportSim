@@ -32,7 +32,7 @@ Each completed purchase saves the updated treasury and the facility’s placemen
 
 Gate A03 costs $140,000 and extends the concourse east. The upgrade preview shows the new stand and jet bridge. The 12-flight base timetable stays available, and players can buy A03 when they want more room for overlapping turnarounds.
 
-Players can sign routes independently between shifts. Pacific Link adds a late-morning Christchurch turnaround, Kōwhai Air adds two afternoon Canberra turnarounds, and Pacific Atlas adds two late-day Gold Coast turnarounds. Each preview shows flight times, daily passenger and baggage volumes, and potential earnings. Signing all three brings the schedule to 17 daily departures. Contracts are saved alongside purchases and can be ended between shifts.
+Players can sign routes independently between shifts. Pacific Link adds a late-morning Christchurch turnaround, Kōwhai Air adds two afternoon Canberra turnarounds, Pacific Atlas adds two late-day Gold Coast turnarounds, and Southern Arc adds a Sydney turnaround during the afternoon peak. Each preview shows flight times, daily passenger and baggage volumes, and potential earnings. Signing all four brings the schedule to 18 daily departures. Contracts are saved alongside purchases and can be ended between shifts.
 
 Tomorrow’s schedule shows the next day’s base pattern and active routes. Players can preview an unsigned route in that timetable before signing. Contract flights keep their advertised times across the three base timetable patterns.
 
