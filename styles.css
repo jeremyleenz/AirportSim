@@ -248,10 +248,10 @@ button, h1, h2, h3, p { margin: 0; }
 #claim-credits { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line); }
 #claim-instruction { margin: 10px 0 6px; }
 .claim-flight { display: grid; gap: 4px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; }
+.claim-flight[data-priority] { border-color: #659780; background: #203936; }
 .claim-flight strong { font-size: .85rem; }
 .claim-flight small { color: var(--muted); font-size: .75rem; }
-.claim-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 6px; margin-top: 3px; }
-.claim-actions button { margin: 0; }
+.claim-flight > button { margin-top: 3px; }
 .staffing-summary { display: grid; gap: 6px; }
 .staffing-summary .detail-stat b, .secondary .staffing-action-rate { color: var(--amber); }
 .staffing-summary p { color: var(--muted); font-size: .75rem; line-height: 1.4; }

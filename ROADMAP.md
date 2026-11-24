@@ -8,11 +8,11 @@ The compact starter terminal has two gates, one baggage carousel, two check-in c
 
 Day 1 starts with one overnight aircraft and a free gate for the first inbound. Early flights are staggered so players can handle an arrival and a departure before more turnarounds overlap. The base timetable cycles through a standard day, a lunchtime rush, and a late-afternoon rush. The first two takeoff times stay fixed.
 
-In-game prompts guide players through gate assignment and dispatch as those actions become relevant. The starter carousel is assigned automatically in arrival order.
+In-game prompts guide players through gate assignment and dispatch as those actions become relevant. Ready flights are automatically assigned to the next free carousel.
 
 ## 2. Carry the treasury and save progress (complete for MVP)
 
-The closing treasury carries into the next day after base operating costs, extra staffing, ground handling, and fines. The base rate covers one staffed check-in counter, one staffed security lane, and keeping the terminal open. The shift report shows the opening and closing balances, the cost breakdown, and the time spent waiting for a free baggage carousel. At airports with two carousels, it also shows time spent waiting for the player to assign an available carousel.
+The closing treasury carries into the next day after base operating costs, extra staffing, ground handling, fines, and baggage service credits. The base rate covers one staffed check-in counter, one staffed security lane, and keeping the terminal open. The shift report shows the opening and closing balances, the cost breakdown, and the time spent waiting for a free baggage carousel.
 
 Progress saves in the browser during each shift, including when players pause or leave the tab. Reopening resumes at the saved time and preserves the pause state. At the end of each shift, the game saves the next day, treasury, timetable, and overnight aircraft. Players can use **Reset progress** in the Terminal tab and confirm to start a fresh Day 1 with the starter airport and treasury.
 
@@ -22,7 +22,7 @@ The base schedule stays available after a loss so players can earn money back th
 
 Players can buy a second baggage carousel, a third security lane, or a third check-in desk between shifts. A decent first shift can fund one upgrade. Players choose what to buy based on the bottlenecks they encountered. The purchase confirmation previews the facility’s fixed placement.
 
-- **Second carousel** adds capacity near the arrivals exit so two flights can use baggage claim at once. Players then choose which carousel each arrival uses.
+- **Second carousel** adds capacity near the arrivals exit so two flights can use baggage claim at once. When more than one ready flight is waiting, players can change which flight gets the next free carousel.
 - **Third security lane** adds a screening lane beside the café that players can staff when queues build.
 - **Third check-in desk** adds a desk with its own queue and baggage belt. The second desk shifts toward baggage claim to make room.
 

@@ -16,7 +16,6 @@ function createBaggage(airport, carouselCreditGrace) {
   const claimSpeed = 2.5;
   const sortingDelay = 2.6;
   const {carousels} = airport.baggageClaim;
-  const automatic = carousels.length === 1;
   const carouselRoutes = new Map(carousels.map(({id, loop, feed}) => [id, {loop: timedPath(loop, 0, claimSpeed), feed}]));
   const atGate = new Set(["deplaning", "parked", "boarding", "closing", "ready", "overnight"]);
   const loaderRoutes = airport.gates.map((_, gate) => {
@@ -36,7 +35,7 @@ function createBaggage(airport, carouselCreditGrace) {
 
   function create(claimWaitGrace = Infinity) {
     return {items: [], arrivals: [], claims: [], claimBags: [], nextFeedAt: new Map(), trip: null,
-      claimWaitGrace, claimStats: {delayedPassengers: 0, fullBeltWaitSeconds: 0, unassignedBeltWaitSeconds: 0, creditWaitSeconds: 0},
+      claimPriority: null, claimWaitGrace, claimStats: {delayedPassengers: 0, fullBeltWaitSeconds: 0, creditWaitSeconds: 0},
       loaders: loaderRoutes.map(() => ({docked: 0, stayUntil: 0, direction: 0, offset: 0}))};
   }
 
@@ -92,34 +91,52 @@ function createBaggage(airport, carouselCreditGrace) {
     if (count) {
       const bags = [...byPassenger.values()];
       animation.arrivals.push({flight, bags: [...bags], firstTrip: true});
-      animation.claims.push({flight, bags, ready: false});
-      assignSingleCarousel(animation.claims);
+      animation.claims.push({flight, bags});
     }
     return byPassenger;
+  }
+
+  function waitingClaims({claims, claimPriority}) {
+    return claims.filter(({flight}) => flight.carousel === null).sort((a, b) =>
+      Number(b.flight.id === claimPriority) - Number(a.flight.id === claimPriority) ||
+      (a.readyAt ?? Infinity) - (b.readyAt ?? Infinity) || 0);
   }
 
   function claimBoard(animation, now = -Infinity) {
     const assigned = carousels.map(({id, number}) =>
       ({id, number, flight: animation.claims.find(({flight}) => flight.carousel === id)?.flight}));
-    const waiting = animation.claims.filter(({flight}) => flight.carousel === null);
-    const available = assigned.filter(({flight}) => !flight).length;
+    const waiting = waitingClaims(animation);
+    const canPrioritise = assigned.every(({flight}) => flight) && waiting.filter(({readyAt}) => readyAt !== undefined).length > 1;
     const creditsAccruing = waiting.some(({bags}) => bags.some(bag => creditsAccrueFor(bag, now)));
-    return {carousels: assigned, waiting, available, automatic, creditsAccruing};
+    return {carousels: assigned, waiting, canPrioritise, claimPriority: animation.claimPriority, creditsAccruing};
   }
 
-  function assignSingleCarousel(claims) {
-    if (!automatic || !claims.length || claims.some(({flight}) => flight.carousel !== null)) return;
-    claims[0].flight.carousel = carousels[0].id;
-  }
-
-  function assignCarousel(animation, id, carousel) {
-    if (automatic || !carouselRoutes.has(carousel)) return false;
-    const {carousels: assigned, waiting} = claimBoard(animation);
-    if (assigned.find(({id}) => id === carousel).flight) return false;
-    const claim = waiting.find(({flight}) => flight.id === id);
-    if (!claim) return false;
-    claim.flight.carousel = carousel;
+  function toggleClaimPriority(animation, id) {
+    if (animation.claimPriority === id) {
+      animation.claimPriority = null;
+      return true;
+    }
+    const {waiting, canPrioritise} = claimBoard(animation);
+    if (!canPrioritise || !waiting.some(({flight, readyAt}) => flight.id === id && readyAt !== undefined)) return false;
+    animation.claimPriority = id;
     return true;
+  }
+
+  function assignCarousels(animation, now) {
+    for (const claim of animation.claims) {
+      if (claim.flight.carousel !== null || claim.readyAt !== undefined) continue;
+      const readyAt = claim.bags.reduce((earliest, bag) => pending(bag) ? Math.min(earliest, readyForBeltAt(bag)) : earliest, Infinity);
+      if (readyAt <= now) claim.readyAt = readyAt;
+    }
+    const ready = waitingClaims(animation).filter(({readyAt}) => readyAt !== undefined);
+    if (!ready.some(({flight}) => flight.id === animation.claimPriority)) animation.claimPriority = null;
+    for (const {id} of carousels) {
+      if (animation.claims.some(({flight}) => flight.carousel === id)) continue;
+      const claim = ready.shift();
+      if (!claim) break;
+      claim.flight.carousel = id;
+      if (animation.claimPriority === claim.flight.id) animation.claimPriority = null;
+    }
   }
 
   function isActive(bag, now) {
@@ -227,7 +244,6 @@ function createBaggage(airport, carouselCreditGrace) {
   function measureClaimWaits(animation, now, dt) {
     const {claims, claimStats, claimWaitGrace} = animation;
     const beltsFull = claims.filter(({flight}) => flight.carousel !== null).length === carousels.length;
-    const waitCause = beltsFull ? "fullBeltWaitSeconds" : "unassignedBeltWaitSeconds";
     for (const {flight, bags} of claims) {
       for (const bag of bags) {
         if (bag.claimWaitAt === undefined) continue;
@@ -235,11 +251,11 @@ function createBaggage(airport, carouselCreditGrace) {
           bag.longWait = true;
           claimStats.delayedPassengers++;
         }
-        if (flight.carousel === null && pending(bag)) {
+        if (beltsFull && flight.carousel === null && pending(bag)) {
           const blockedSince = Math.max(now - dt, bag.claimWaitAt, readyForBeltAt(bag));
           const blocked = Math.max(0, now - blockedSince);
           if (blocked > 0) {
-            claimStats[waitCause] += blocked;
+            claimStats.fullBeltWaitSeconds += blocked;
             bag.carouselWaitSeconds = (bag.carouselWaitSeconds ?? 0) + blocked;
             // Charge only time in this step so loading an older shift never rebills past waits.
             const billable = Math.max(0, Math.min(blocked, bag.carouselWaitSeconds - carouselCreditGrace));
@@ -266,10 +282,7 @@ function createBaggage(airport, carouselCreditGrace) {
     measureClaimWaits(animation, now, dt);
     animation.claimBags = animation.claimBags.filter(pending);
     animation.claims = animation.claims.filter(({bags}) => bags.some(pending));
-    assignSingleCarousel(animation.claims);
-    for (const claim of animation.claims) {
-      claim.ready ||= claim.bags.some(bag => pending(bag) && now >= readyForBeltAt(bag));
-    }
+    assignCarousels(animation, now);
     for (const bag of animation.claimBags) {
       const {carousel} = bag.flight;
       if (carousel === null || bag.feedPath) continue;
@@ -409,5 +422,5 @@ function createBaggage(airport, carouselCreditGrace) {
     return moving;
   }
 
-  return {create, checkedIn, arrived, claimBoard, assignCarousel, advance, actors};
+  return {create, checkedIn, arrived, claimBoard, toggleClaimPriority, advance, actors};
 }
