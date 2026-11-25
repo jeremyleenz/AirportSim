@@ -34,7 +34,7 @@ Gate A03 costs $140,000 and extends the concourse east. The upgrade preview show
 
 Players can sign routes independently between shifts. Pacific Link adds a late-morning Christchurch turnaround, Kōwhai Air offers two flights each to Canberra and Queenstown, Pacific Atlas adds two late-day Gold Coast turnarounds, and Southern Arc adds a Sydney turnaround during the afternoon peak. Each preview shows flight times, daily passenger and baggage volumes, and potential earnings. Signing all five brings the schedule to 20 daily departures. Contracts are saved alongside purchases and can be ended between shifts.
 
-New Queenstown signings require at least 90% average passenger satisfaction across the last three completed shifts. The offer shows the requirement, the player's rolling average, and the reason when signing is locked.
+New Queenstown signings require at least 90% average passenger satisfaction across the last three completed shifts. The route pays a $750 premium per completed departure. The offer shows the requirement, the player's rolling average, and the reason when signing is locked.
 
 Tomorrow’s schedule shows the next day’s base pattern and active routes. Players can preview an unsigned route in that timetable before signing. Contract flights keep their advertised times across the three base timetable patterns.
 

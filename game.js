@@ -82,7 +82,7 @@
       services: [{number: 712, arrivalMinute: 409, takeoffMinute: 477}, {number: 714, arrivalMinute: 481, takeoffMinute: 548}]},
     sydney: {airline: 1, destination: "Sydney", passengers: 100, incomingPassengers: 61,
       services: [{number: 246, arrivalMinute: 353, takeoffMinute: 419}]},
-    queenstown: {airline: 4, destination: "Queenstown", passengers: 82, incomingPassengers: 48, minSatisfaction: 90,
+    queenstown: {airline: 4, destination: "Queenstown", passengers: 82, incomingPassengers: 48, minSatisfaction: 90, departurePremium: 750,
       services: [{number: 648, arrivalMinute: 174, takeoffMinute: 234}, {number: 650, arrivalMinute: 263, takeoffMinute: 323}]}
   };
 
@@ -1615,9 +1615,13 @@
     saveShift();
   }
 
+  function departureRevenue(boarded, premium = 0) {
+    return baseFlightRevenue + boarded * passengerFare + premium;
+  }
+
   function finishDeparture({flight, start, liftoff}) {
     const boarded = flight.manifest.filter(person => person.zone === "boarded").length;
-    const revenue = baseFlightRevenue + boarded * passengerFare;
+    const revenue = departureRevenue(boarded, routeContracts[flight.contract]?.departurePremium);
     const liftoffMinute = clockMinutes(start + liftoff);
     const due = clockMinutes(flight.takeoffAt);
     const lateMinutes = Math.max(0, liftoffMinute - due);
@@ -2060,7 +2064,7 @@
       }).join("");
       return;
     }
-    const {airline, destination, incomingPassengers, passengers, services, minSatisfaction} = routeContracts[selectedContract];
+    const {airline, destination, incomingPassengers, passengers, services, minSatisfaction, departurePremium = 0} = routeContracts[selectedContract];
     const {code, name} = airlines[airline];
     const status = contractOfferStatus(selectedContract, average);
     const active = status === "confirmed";
@@ -2084,7 +2088,8 @@
     $("#contract-traffic").innerHTML = stat("Arriving passengers per day", count * incomingPassengers) +
       stat("Departure seats per day", count * passengers) +
       stat("Estimated bags in / out", bagsIn + " / " + bagsOut) +
-      stat("Daily net at full boarding", currency.format(count * (baseFlightRevenue + passengers * passengerFare - handlingCost)));
+      (departurePremium ? stat("Premium per completed departure", currency.format(departurePremium)) : "") +
+      stat("Daily net at full boarding", currency.format(count * (departureRevenue(passengers, departurePremium) - handlingCost)));
     contractAction.textContent = active ? "End contract" : "Sign route contract";
     let lockMessage = "";
     if (locked) {
