@@ -359,6 +359,8 @@ button.flight-alert:hover { background: #584933; }
 #contract-detail { display: grid; gap: 12px; }
 #contract-airline { margin-top: -8px; }
 #contract-note:empty { display: none; }
+#contract-requirement, .report-actions .planning-lock-reason { grid-column: 1 / -1; }
+.report-actions .planning-lock-reason { margin: 0; color: var(--amber); font-weight: 650; }
 #preview-contract-schedule { margin: 0; }
 #tomorrow-note { margin-bottom: 10px; }
 .day-schedule tbody tr[data-proposed] { background: #234039; }

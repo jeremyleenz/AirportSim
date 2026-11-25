@@ -1840,10 +1840,8 @@
     const profitValue = $("#report-profit");
     profitValue.textContent = currency.format(profit);
     profitValue.toggleAttribute("data-loss", profit < 0);
-    const {satisfactionHistory} = nextOpening;
     $("#report-delays").innerHTML = stat("Total departure delay", state.delayMinutes + " min") +
-      stat("Final passenger satisfaction", satisfactionHistory.at(-1) + "%") +
-      stat("Rolling satisfaction average", satisfactionProgress(satisfactionHistory, averageSatisfaction(satisfactionHistory)));
+      stat("Final passenger satisfaction", nextOpening.satisfactionHistory.at(-1) + "%");
     const overnightArrivals = state.flights.filter(isOvernightArrival);
     const arrivalSummary = $("#report-overnight-arrivals");
     arrivalSummary.hidden = overnightArrivals.length === 0;
@@ -1960,12 +1958,18 @@
     const {name, price, site} = upgradeOffers[upgradeType];
     $("#upgrade-name").textContent = name;
     $("#upgrade-location").textContent = site.name;
-    const affordable = nextOpening.cash >= price;
-    purchaseUpgrade.disabled = !affordable;
+    const shortfall = price - nextOpening.cash;
     purchaseUpgrade.textContent = "Buy for " + currency.format(price);
-    upgradeNote.textContent = !affordable ? "You need " + currency.format(price - nextOpening.cash) + " more to buy this upgrade."
-      : site.note ?? "";
+    upgradeNote.textContent = site.note ?? "";
+    paintPlanningLock(purchaseUpgrade, $("#upgrade-lock-reason"),
+      shortfall > 0 ? "You need " + currency.format(shortfall) + " more to buy this upgrade." : "");
     previewUpgrade(site);
+  }
+
+  function paintPlanningLock(button, reason, message) {
+    button.disabled = Boolean(message);
+    reason.hidden = !message;
+    reason.textContent = message;
   }
 
   function buyUpgrade(type) {
@@ -2045,16 +2049,14 @@
     contractDetail.hidden = selectedContract === null;
     $("#contract-actions").hidden = selectedContract === null;
     if (!selectedContract) {
-      contractOffers.innerHTML = Object.entries(routeContracts).map(([id, {airline, destination, services, minSatisfaction}]) => {
+      contractOffers.innerHTML = Object.entries(routeContracts).map(([id, {airline, destination, services}]) => {
         const status = contractOfferStatus(id, average);
-        const requirement = status === "locked" ?
-          " · Requires " + minSatisfaction + "% average across " + satisfactionWindow + " shifts" : "";
         return '<button type="button" class="upgrade-offer" data-contract="' + id +
           '" data-offer-status="' + status + '"><span class="detail-stat"><strong>' + destination +
           '</strong><b class="offer-badge"><span class="offer-badge-icon" aria-hidden="true"></span>' +
           contractStatusLabels[status] + '</b></span><span class="detail-copy">' +
           airlines[airline].name + " · " + services.length + (services.length === 1 ? " daily flight" : " daily flights") +
-          requirement + '</span></button>';
+          '</span></button>';
       }).join("");
       return;
     }
@@ -2062,15 +2064,16 @@
     const {code, name} = airlines[airline];
     const status = contractOfferStatus(selectedContract, average);
     const active = status === "confirmed";
+    const locked = status === "locked";
     contractDetail.dataset.offerStatus = status;
     $("#contract-route").textContent = destination;
     $("#contract-airline").textContent = name;
     $("#contract-status").textContent = active ? "Active next shift" : contractStatusLabels[status];
     const requirement = $("#contract-requirement");
-    requirement.hidden = active || minSatisfaction === undefined;
+    requirement.hidden = minSatisfaction === undefined;
     if (!requirement.hidden) {
-      requirement.textContent = "Requires at least " + minSatisfaction + "% average satisfaction across your last " +
-        satisfactionWindow + " completed shifts. Your rolling average is " + satisfactionProgress(satisfactionHistory, average) + ".";
+      requirement.innerHTML = stat("Rolling satisfaction average", satisfactionProgress(satisfactionHistory, average)) +
+        (active ? "" : stat("Required average (last " + satisfactionWindow + " shifts)", minSatisfaction + "%"));
     }
     $("#contract-services").innerHTML = services.map(({number, arrivalMinute, takeoffMinute}) =>
       '<tr><th scope="row">' + code + number + '</th><td>' + scheduleTime(arrivalMinute * secondsPerMinute) +
@@ -2083,7 +2086,14 @@
       stat("Estimated bags in / out", bagsIn + " / " + bagsOut) +
       stat("Daily net at full boarding", currency.format(count * (baseFlightRevenue + passengers * passengerFare - handlingCost)));
     contractAction.textContent = active ? "End contract" : "Sign route contract";
-    contractAction.disabled = status === "locked";
+    let lockMessage = "";
+    if (locked) {
+      const remaining = satisfactionWindow - satisfactionHistory.length;
+      lockMessage = remaining > 0
+        ? "Complete " + remaining + (remaining === 1 ? " more shift" : " more shifts") + " to meet the three-shift requirement."
+        : "Your rolling average is below the signing requirement.";
+    }
+    paintPlanningLock(contractAction, $("#contract-lock-reason"), lockMessage);
   }
 
   function openContracts(event) {

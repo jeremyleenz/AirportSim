@@ -14,7 +14,7 @@ Between shifts, open **Airport upgrades** to buy a second baggage carousel, a th
 
 Open **Airline contracts** between shifts to sign or end routes to Christchurch, Canberra, the Gold Coast, Sydney, and Queenstown. Christchurch and Sydney each add one daily turnaround. Canberra, the Gold Coast, and Queenstown each add two. Sydney arrives at 14:35 during the afternoon peak, and Queenstown adds late-morning and early-afternoon traffic. With all five signed, the schedule has 20 daily departures. Contract changes start the next morning.
 
-New Queenstown signings require at least 90% average passenger satisfaction across your last three completed shifts. The shift report and the Queenstown offer show your rolling average and how many shifts have been recorded while you build up to three.
+New Queenstown signings require at least 90% average passenger satisfaction across your last three completed shifts. The Queenstown offer shows your rolling average, how many shifts have been recorded while you build up to three, and the reason when signing is locked.
 
 The base timetable cycles through a standard day, a lunchtime rush, and a late-afternoon rush. Use **Tomorrow’s schedule** between shifts to see the next day’s flight times. Open it from a contract to preview how that route fits before signing.
 
